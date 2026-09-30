@@ -44,6 +44,22 @@ def test_initial_headroom_matches_profile(profile: ChallengeProfile) -> None:
     assert rep.target_level == 110_000 and rep.can_open_new_positions
 
 
+def test_report_is_read_only_and_exposes_pnl_drawdowns_and_consistency(
+    profile: ChallengeProfile,
+) -> None:
+    wd = running(profile)
+    wd.update(snap(102_000), T0 + timedelta(hours=1))
+    before = wd.state.model_dump(mode="json")
+    rep = wd.report(snap(101_000, 99_000), T0 + timedelta(hours=2))
+    assert wd.state.model_dump(mode="json") == before
+    assert rep.daily_pnl == -1_000
+    assert rep.daily_drawdown_pct == pytest.approx(1.0)
+    assert rep.total_drawdown_pct == pytest.approx(1.0)
+    assert rep.max_drawdown_pct == 0
+    assert rep.daily_headroom == 4_000 and rep.total_headroom == 9_000
+    assert rep.best_day_share_pct == 0
+
+
 def test_daily_drawdown_violation_fails_the_run(profile: ChallengeProfile) -> None:
     wd = running(profile)
     rep = wd.update(snap(100_000, 94_900), T0 + timedelta(hours=1))  # 5,1 % sous le départ du jour

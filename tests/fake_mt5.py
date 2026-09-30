@@ -35,12 +35,14 @@ class FakeMT5:
         balance: float = 50_000.0,
         filling_mode: int = 2,
         send_retcode: int = 10009,
+        trade_allowed: bool = True,
     ) -> None:
         self.trade_mode, self.server, self.login = trade_mode, server, login
         self.init_ok, self._err = init_ok, init_error if not init_ok else (1, "Success")
         self.balance = balance
         self.filling_mode = filling_mode
         self.send_retcode = send_retcode
+        self.trade_allowed = trade_allowed
         self.init_kwargs: dict[str, Any] = {}
         self.order_send_calls: list[dict[str, Any]] = []
         self.order_check_calls: list[dict[str, Any]] = []
@@ -62,7 +64,7 @@ class FakeMT5:
         return self._err
 
     def terminal_info(self) -> SimpleNamespace:
-        return SimpleNamespace(connected=True, trade_allowed=True, tradeapi_disabled=False, build=5200,
+        return SimpleNamespace(connected=True, trade_allowed=self.trade_allowed, tradeapi_disabled=False, build=5200,
                                company="Acme Markets", name="MetaTrader 5", path="C:/MT5")  # fmt: skip
 
     def account_info(self) -> SimpleNamespace | None:
@@ -70,7 +72,7 @@ class FakeMT5:
             return None
         return SimpleNamespace(login=self.login, trade_mode=self.trade_mode, leverage=100, balance=self.balance,
                                equity=self.balance, margin=0.0, margin_free=self.balance, profit=0.0,
-                               currency="USD", server=self.server, trade_allowed=True)  # fmt: skip
+                               currency="USD", server=self.server, trade_allowed=self.trade_allowed)  # fmt: skip
 
     # -- symboles
     def _info(self, name: str) -> SimpleNamespace:

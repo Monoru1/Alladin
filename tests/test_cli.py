@@ -98,6 +98,16 @@ def test_test_order_refuses_unknown_account_type(cli_env: Settings, monkeypatch:
     )
 
 
+def test_test_order_stops_with_exit_6_when_algo_trading_is_off(
+    cli_env: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = use_fake(monkeypatch, FakeMT5(trade_allowed=False))
+    res = runner.invoke(cli.app, ["mt5", "test-order"], input="y\nEXECUTE\n")
+    assert res.exit_code == 6
+    assert "Activez Algo Trading" in res.output
+    assert fake.order_check_calls == [] and fake.order_send_calls == []
+
+
 @pytest.mark.parametrize("answer", ["", "yes", "execute", "oui", "n"])
 def test_test_order_sends_nothing_without_the_explicit_word(
     cli_env: Settings, monkeypatch: pytest.MonkeyPatch, answer: str
