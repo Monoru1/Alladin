@@ -16,6 +16,9 @@ class EventType(StrEnum):
     SCAN = "market.scan"
     ROUTING = "strategy.routing"
     SIGNAL = "strategy.signal"
+    STRATEGY_EVAL = "strategy.evaluation"
+    CYCLE_START = "cycle.start"
+    CYCLE_END = "cycle.end"
     AGENT_REQUEST = "agent.request"
     AGENT_RESPONSE = "agent.response"
     NO_TRADE = "decision.no_trade"
@@ -44,6 +47,7 @@ class JournalEvent(BaseModel):
     type: str
     payload: dict[str, Any]
     hash: str
+    cycle_id: str | None = None
 
 
 class RunRecord(BaseModel):
@@ -56,6 +60,7 @@ class RunRecord(BaseModel):
     broker: str
     account: str
     magic: int
+    kind: str = "RUN"
     created_at: datetime
     updated_at: datetime
     watchdog_state: dict[str, Any]
@@ -93,4 +98,5 @@ class TradeRecord(BaseModel):
     mae: float = 0.0  # pire perte flottante observée (<= 0), devise du compte
     mfe: float = 0.0  # meilleur gain flottant observé (>= 0)
     equity_after: float | None = None
+    cycle_id: str | None = None
     adopted: bool = False  # position retrouvée à la réconciliation sans enregistrement préalable

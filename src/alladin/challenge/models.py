@@ -70,6 +70,8 @@ class RiskRules(BaseModel):
 
 
 class UniverseRules(BaseModel):
+    id: str = "inline"
+    description: str = ""
     allowed_categories: list[AssetCategory] = [
         AssetCategory.FOREX_MAJOR,
         AssetCategory.FOREX_MINOR,
@@ -93,6 +95,7 @@ class ChallengeProfile(BaseModel):
     extra_rules: ExtraRules = ExtraRules()
     risk: RiskRules = RiskRules()
     universe: UniverseRules = UniverseRules()
+    universe_ref: str | None = None  # nom d'un fichier config/universes/<ref>.yaml (remplace `universe`)
 
     @model_validator(mode="after")
     def _check(self) -> ChallengeProfile:
@@ -145,6 +148,7 @@ class WatchdogState(BaseModel):
     lowest_equity: float = 0.0
     last_balance: float = 0.0
     last_equity: float = 0.0
+    max_drawdown_amount: float = 0.0  # plus grande chute observée depuis un plus-haut d'equity
     blocked_day: str | None = None  # jour (clé) jusqu'auquel les nouveaux ordres sont bloqués
     violations: list[RuleViolation] = []
     phase_results: list[PhaseResult] = []
@@ -165,6 +169,10 @@ class WatchdogReport(BaseModel):
     profit_pct: float  # (mesure - baseline) / baseline * 100, selon target_measured_on
     daily_floor: float
     daily_headroom: float
+    daily_pnl: float = 0.0  # equity - equity de début de journée
+    daily_drawdown_pct: float = 0.0  # % de la base (perte depuis la référence journalière)
+    total_drawdown_pct: float = 0.0  # % de la base depuis le solde de départ de la phase
+    max_drawdown_pct: float = 0.0  # plus grande chute depuis un plus-haut, en % de la base
     daily_loss_used_pct: float  # % de la limite journalière consommée
     total_floor: float
     total_headroom: float

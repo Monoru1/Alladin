@@ -9,10 +9,12 @@ from alladin.challenge.models import UniverseRules
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
 from alladin.market import indicators as ind
+from alladin.market.archive import MarketDataArchive
 from alladin.market.context import MarketContextProvider, NullContextProvider
 from alladin.market.models import ScanCandidate, ScanReport
 from alladin.market.regime import MIN_BARS, RegimeClassifier
 from alladin.market.universe import MarketUniverse
+from alladin.risk.sizing import loss_per_lot
 
 DEFAULT_TIMEFRAMES = (Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1)
 
@@ -49,6 +51,7 @@ class MarketScanner:
         timeframes: tuple[Timeframe, ...] = DEFAULT_TIMEFRAMES,
         bars_count: int = 300,
         max_tick_age_s: float | None = 1800,
+        archive: MarketDataArchive | None = None,
     ) -> None:
         self.broker = broker
         self.universe = universe
@@ -59,14 +62,18 @@ class MarketScanner:
         self.timeframes = tuple(dict.fromkeys((primary, *timeframes)))
         self.bars_count = bars_count
         self.max_tick_age_s = max_tick_age_s
+        self.archive = archive
 
-    def scan(self, *, limit: int | None = None) -> ScanReport:
+    def scan(
+        self, *, limit: int | None = None, cycle_id: str | None = None, max_trade_risk: float | None = None
+    ) -> ScanReport:
         now = self.broker.now()
         uni = self.universe.discover()
         rejected: dict[str, list[str]] = {s: [r] for s, r in uni.excluded.items()}
         notes: list[str] = []
         candidates: list[ScanCandidate] = []
         analysed = 0
+        archived = 0
         clock_suspect = 0
 
         for member in uni.members:
@@ -81,6 +88,14 @@ class MarketScanner:
                 if tick is None:
                     rejected[sym] = ["aucun tick"]
                     continue
+                if tick.bid <= 0 or tick.ask <= tick.bid:
+                    rejected[sym] = [f"tick de mauvaise qualité (bid {tick.bid}, ask {tick.ask})"]
+                    continue
+                if spec.point <= 0 or spec.loss_tick_value <= 0 or spec.trade_tick_size <= 0:
+                    rejected[sym] = [
+                        "spécifications broker inexploitables (tick value/size indisponible) : sizing impossible"
+                    ]
+                    continue
                 age = (now - tick.time).total_seconds()
                 if age < -600:
                     clock_suspect += 1
@@ -88,6 +103,8 @@ class MarketScanner:
                     rejected[sym] = [f"tick périmé ({age / 60:.0f} min) : marché fermé ?"]
                     continue
                 bars = {tf: self.broker.bars(sym, tf, self.bars_count) for tf in self.timeframes}
+                if self.archive is not None:
+                    archived += sum(self.archive.store(sym, tf, b, cycle_id) for tf, b in bars.items())
                 prim = bars[self.primary]
                 if len(prim) < MIN_BARS:
                     rejected[sym] = [f"historique insuffisant ({len(prim)} barres {self.primary.value})"]
@@ -101,6 +118,13 @@ class MarketScanner:
                 reasons: list[str] = []
                 if ratio > self.rules.max_spread_atr_ratio:
                     reasons.append(f"spread/ATR {ratio:.2f} > {self.rules.max_spread_atr_ratio}")
+                if max_trade_risk is not None and atr > 0:
+                    # contrainte de sizing : le plus petit lot doit tenir dans le plafond pour un SL de 1,5 ATR
+                    min_risk = loss_per_lot(spec, tick.ask, tick.ask - 1.5 * atr) * spec.volume_min
+                    if min_risk > max_trade_risk:
+                        reasons.append(
+                            f"sizing : volume minimum {spec.volume_min:g} risquerait {min_risk:.2f} > plafond {max_trade_risk:.2f} (SL 1,5 ATR)"
+                        )
                 if assess.regime in (MarketRegime.UNKNOWN, MarketRegime.NEWS_EVENT):
                     reasons.append(f"régime {assess.regime.value} : pas de setup exploitable")
                 if reasons:
@@ -146,6 +170,8 @@ class MarketScanner:
             rejected=rejected,
             regime_counts=regimes,
             notes=notes,
+            cycle_id=cycle_id,
+            archived_bars=archived,
         )
 
     @staticmethod

@@ -1,0 +1,10 @@
+# Univers LAB : DÉCOUVRIR largement, FILTRER strictement.
+# Être dans l'univers ne signifie JAMAIS être tradé : le scanner élimine ensuite selon spread, spread/ATR,
+# volatilité, données, fraîcheur des ticks, spécifications broker, contraintes de sizing et RiskEngine.
+id: lab
+description: Forex (majors, minors, JPY, exotiques) + métaux, si les specs broker permettent un traitement fiable.
+allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY, FOREX_EXOTIC, METAL]
+include_symbols: []
+exclude_symbols: []
+max_spread_atr_ratio: 0.15
+shortlist_size: 10

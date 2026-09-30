@@ -120,22 +120,28 @@ def test_test_order_full_pipeline_after_explicit_confirmation(
     fake = use_fake(monkeypatch, FakeMT5())
     res = runner.invoke(cli.app, ["mt5", "test-order", "--symbol", "EURUSD"], input="y\nEXECUTE\n")
     assert res.exit_code == 0, res.output
-    assert "ORDER ACCEPTED" in res.output and "retcode: 10009" in res.output and "ticket:" in res.output
+    assert (
+        "ORDER ACCEPTED" in res.output
+        and "retcode: 10009" in res.output
+        and "ticket/position:" in res.output
+        and "positions_get" in res.output
+    )
     (sent,) = fake.order_send_calls
     assert sent["volume"] == 0.01  # volume minimum, calculé par le PositionSizer
     assert (
         sent["sl"]
         and sent["tp"]
         and sent["magic"] > 26_000_000
-        and sent["comment"].startswith("ALLADIN|RUN-001|TEST-00")
+        and sent["comment"].startswith("ALLADIN|SYSTEM-TEST-001|TEST-00")
     )
     # l'ordre est enregistré dans ALLADIN
     from alladin.journal.repository import JournalRepository
 
     repo = JournalRepository.from_url(cli_env.db_url)
-    (trade,) = repo.trades_for_run("RUN-001", "OPEN")
+    (trade,) = repo.trades_for_run("SYSTEM-TEST-001", "OPEN")
     assert trade.symbol == "EURUSD" and trade.strategy_id == "TEST-00" and trade.volume == 0.01
-    assert repo.verify_chain("RUN-001")[0]
+    assert repo.verify_chain("SYSTEM-TEST-001")[0]
+    assert [r.kind for r in repo.list_runs()] == ["SYSTEM-TEST"]  # aucun RUN officiel pollué par le test
 
 
 def test_test_order_unknown_symbol(cli_env: Settings, monkeypatch: pytest.MonkeyPatch) -> None:

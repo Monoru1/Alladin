@@ -48,9 +48,5 @@ risk:
   headroom_buffer_pct_of_baseline: 0.25
   allow_hedging: false
 
-universe:
-  allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY]   # + FOREX_EXOTIC, METAL si autorisés
-  include_symbols: []
-  exclude_symbols: []
-  max_spread_atr_ratio: 0.15
-  shortlist_size: 10
+# Profil d'univers séparé (config/universes/*.yaml) : `lab` = découverte large, `conservative` = paires liquides.
+universe_ref: lab

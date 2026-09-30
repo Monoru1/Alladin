@@ -1,0 +1,8 @@
+# Univers prudent (ancien défaut) : paires liquides uniquement. Sélectionnable via `universe_ref: conservative`.
+id: conservative
+description: Majors, minors et paires JPY.
+allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY]
+include_symbols: []
+exclude_symbols: []
+max_spread_atr_ratio: 0.15
+shortlist_size: 10

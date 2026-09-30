@@ -41,17 +41,25 @@ def test_classification_uses_broker_currencies_not_names(base: str, quote: str, 
     assert classify_symbol(s) is cat
 
 
-def test_universe_is_discovered_from_the_broker_and_respects_profile(
+def test_lab_universe_discovers_widely_including_exotics_and_metals(
     broker: MockBroker, profile: ChallengeProfile
 ) -> None:
     rep = MarketUniverse(broker, profile.universe).discover()
     names = {m.symbol for m in rep.members}
-    assert rep.total_discovered == 16 and "EURUSD" in names and "GBPJPY" in names
-    assert "XAUUSD" not in names and rep.excluded["XAUUSD"].startswith(
-        "catégorie METAL"
-    )  # métaux non autorisés par défaut
-    assert rep.excluded["USDTRY"].startswith("catégorie FOREX_EXOTIC")
+    assert profile.universe.id == "lab" and rep.total_discovered == 16
+    assert {"EURUSD", "GBPJPY", "XAUUSD", "USDTRY"} <= names  # large découverte
+    assert rep.by_category["METAL"] == 1 and rep.by_category["FOREX_EXOTIC"] == 1
     assert sum(rep.by_category.values()) == len(rep.members)
+
+
+def test_conservative_universe_profile_is_still_available(settings) -> None:  # type: ignore[no-untyped-def]
+    from alladin.challenge.profiles import load_universe
+
+    rules = load_universe("conservative", settings.profiles_dir.parent / "universes")
+    rep = MarketUniverse(MockBroker(), rules).discover()
+    names = {m.symbol for m in rep.members}
+    assert "XAUUSD" not in names and rep.excluded["XAUUSD"].startswith("catégorie METAL")
+    assert rep.excluded["USDTRY"].startswith("catégorie FOREX_EXOTIC") and "EURUSD" in names
 
 
 def test_universe_follows_profile_and_broker_changes(profile: ChallengeProfile) -> None:
@@ -131,13 +139,15 @@ def test_scanner_produces_shortlist_without_sending_orders(
     broker: MockBroker, profile: ChallengeProfile
 ) -> None:
     rep = MarketScanner(broker, MarketUniverse(broker, profile.universe), profile.universe).scan()
-    assert rep.universe_size == 14 and rep.analysed == 14
+    assert rep.universe_size == 16 and rep.analysed == 16
     assert 0 < len(rep.candidates) <= profile.universe.shortlist_size
     scores = [c.score for c in rep.candidates]
     assert scores == sorted(scores, reverse=True) and all(0 <= s <= 1 for s in scores)
     assert all(c.regime not in (MarketRegime.UNKNOWN, MarketRegime.NEWS_EVENT) for c in rep.candidates)
     assert broker.sent_orders == [] and broker.positions() == []
-    assert set(rep.rejected) >= {"XAUUSD", "USDTRY"}  # exclus par le profil, avec raison
+    # large découverte, filtrage strict : l'exotique est entré dans l'univers mais éliminé par le scanner, avec raison
+    assert "USDTRY" in rep.rejected and "USDTRY" not in {c.symbol for c in rep.candidates}
+    assert any("spread/ATR" in r for r in rep.rejected["USDTRY"])
 
 
 def test_scanner_rejects_wide_spreads_and_reports_why(profile: ChallengeProfile) -> None:
@@ -159,7 +169,7 @@ def test_scanner_isolates_a_failing_symbol(
 
     monkeypatch.setattr(broker, "bars", flaky)
     rep = MarketScanner(broker, MarketUniverse(broker, profile.universe), profile.universe).scan()
-    assert "feed cassé" in rep.rejected["EURUSD"][0] and rep.analysed == 13
+    assert "feed cassé" in rep.rejected["EURUSD"][0] and rep.analysed == 15
 
 
 def test_session_labels() -> None:

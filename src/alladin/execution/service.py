@@ -217,6 +217,7 @@ class ExecutionService:
             risk_pct_of_wc=decision.risk_pct_of_working_capital,
             spread_at_entry=result.spread_at_fill,
             slippage=result.slippage,
+            cycle_id=self.journal.current_cycle,
             opened_at=result.executed_at,
             equity_after=account_after.equity,
         )

@@ -37,6 +37,7 @@ runs = Table(
     Column("created_at", String, nullable=False),
     Column("updated_at", String, nullable=False),
     Column("watchdog_state", Text, nullable=False, default="{}"),
+    Column("kind", String, nullable=False, default="RUN"),  # RUN | SYSTEM-TEST
 )
 
 journal_events = Table(
@@ -48,6 +49,7 @@ journal_events = Table(
     Column("ts", String, nullable=False),
     Column("type", String, nullable=False, index=True),
     Column("payload", Text, nullable=False),
+    Column("cycle_id", String, nullable=True, index=True),
     Column("prev_hash", String, nullable=False),
     Column("hash", String, nullable=False),
 )
@@ -60,7 +62,7 @@ _TRADE_COLS = [
     ("risk_pct_of_wc", Float), ("spread_at_entry", Float), ("slippage", Float), ("opened_at", String),
     ("closed_at", String), ("close_price", Float), ("close_reason", String), ("pnl_gross", Float),
     ("commission", Float), ("swap", Float), ("net_pnl", Float), ("r_multiple", Float),
-    ("mae", Float), ("mfe", Float), ("equity_after", Float), ("adopted", Integer),
+    ("mae", Float), ("mfe", Float), ("equity_after", Float), ("adopted", Integer), ("cycle_id", String),
 ]  # fmt: skip
 trades = Table(
     "trades",
@@ -99,6 +101,13 @@ def _canon(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
 
 
+def _hash(prev: str, run_id: str, seq: int, ts: str, type_: str, body: str, cycle_id: str | None) -> str:
+    base = f"{prev}|{run_id}|{seq}|{ts}|{type_}|{body}"
+    if cycle_id:  # le cycle_id est couvert par la chaîne (compatible avec les événements sans cycle)
+        base += f"|{cycle_id}"
+    return hashlib.sha256(base.encode()).hexdigest()
+
+
 def make_engine(url: str) -> Engine:
     if url.startswith("sqlite") and (":memory:" in url or url in ("sqlite://", "sqlite:///")):
         return create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -118,10 +127,25 @@ class JournalRepository:
                 cur.close()
 
         metadata.create_all(engine)
+        self._migrate()
         if engine.dialect.name == "sqlite":
             with engine.begin() as c:
                 for ddl in _TRIGGERS:
                     c.execute(text(ddl))
+
+    def _migrate(self) -> None:
+        """Migration légère : ajoute les colonnes apparues après la création d'une base existante."""
+        wanted = {"runs": "kind", "journal_events": "cycle_id", "trades": "cycle_id"}
+        with self.engine.begin() as c:
+            for table, col in wanted.items():
+                cols = (
+                    {r[1] for r in c.execute(text(f"PRAGMA table_info({table})"))}
+                    if self.engine.dialect.name == "sqlite"
+                    else {col}
+                )
+                if col not in cols:
+                    default = " DEFAULT 'RUN' NOT NULL" if col == "kind" else ""
+                    c.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR{default}"))
 
     @classmethod
     def from_url(cls, url: str) -> JournalRepository:
@@ -132,6 +156,11 @@ class JournalRepository:
     def next_run_seq(self) -> int:
         with self.engine.connect() as c:
             v = c.execute(text("SELECT COALESCE(MAX(seq), 0) FROM runs")).scalar_one()
+        return int(v) + 1
+
+    def next_label_no(self, kind: str) -> int:
+        with self.engine.connect() as c:
+            v = c.execute(text("SELECT COUNT(*) FROM runs WHERE kind=:k"), {"k": kind}).scalar_one()
         return int(v) + 1
 
     def create_run(self, rec: RunRecord) -> None:
@@ -147,6 +176,7 @@ class JournalRepository:
                     broker=rec.broker,
                     account=rec.account,
                     magic=rec.magic,
+                    kind=rec.kind,
                     created_at=_iso(rec.created_at),
                     updated_at=_iso(rec.updated_at),
                     watchdog_state=_canon(rec.watchdog_state),
@@ -175,6 +205,7 @@ class JournalRepository:
             broker=row.broker,
             account=row.account,
             magic=row.magic,
+            kind=row.kind or "RUN",
             created_at=_parse(row.created_at),
             updated_at=_parse(row.updated_at),
             watchdog_state=json.loads(row.watchdog_state),
@@ -193,7 +224,12 @@ class JournalRepository:
     # ------------------------------------------------------------------ événements (append-only)
 
     def append(
-        self, run_id: str, type_: str, payload: dict[str, Any], ts: datetime | None = None
+        self,
+        run_id: str,
+        type_: str,
+        payload: dict[str, Any],
+        ts: datetime | None = None,
+        cycle_id: str | None = None,
     ) -> JournalEvent:
         ts = ts or datetime.now(UTC)
         body = _canon(payload)
@@ -203,21 +239,42 @@ class JournalRepository:
                 {"r": run_id},
             ).first()
             seq, prev = (last.seq + 1, last.hash) if last else (1, GENESIS)
-            h = hashlib.sha256(f"{prev}|{run_id}|{seq}|{_iso(ts)}|{type_}|{body}".encode()).hexdigest()
+            h = _hash(prev, run_id, seq, _iso(ts), type_, body, cycle_id)
             res = c.execute(
                 journal_events.insert().values(
-                    run_id=run_id, seq=seq, ts=_iso(ts), type=type_, payload=body, prev_hash=prev, hash=h
+                    run_id=run_id,
+                    seq=seq,
+                    ts=_iso(ts),
+                    type=type_,
+                    payload=body,
+                    cycle_id=cycle_id,
+                    prev_hash=prev,
+                    hash=h,
                 )
             )
             eid = int(res.inserted_primary_key[0])  # type: ignore[index]
         return JournalEvent(
-            id=eid, run_id=run_id, seq=seq, ts=ts, type=type_, payload=json.loads(body), hash=h
+            id=eid,
+            run_id=run_id,
+            seq=seq,
+            ts=ts,
+            type=type_,
+            cycle_id=cycle_id,
+            payload=json.loads(body),
+            hash=h,
         )
 
     def events(
-        self, run_id: str, types: list[str] | None = None, limit: int | None = None, desc: bool = False
+        self,
+        run_id: str,
+        types: list[str] | None = None,
+        limit: int | None = None,
+        desc: bool = False,
+        cycle_id: str | None = None,
     ) -> list[JournalEvent]:
         q = journal_events.select().where(journal_events.c.run_id == run_id)
+        if cycle_id:
+            q = q.where(journal_events.c.cycle_id == cycle_id)
         if types:
             q = q.where(journal_events.c.type.in_(types))
         q = q.order_by(journal_events.c.seq.desc() if desc else journal_events.c.seq)
@@ -232,6 +289,7 @@ class JournalRepository:
                 seq=r.seq,
                 ts=_parse(r.ts),
                 type=r.type,
+                cycle_id=r.cycle_id,
                 payload=json.loads(r.payload),
                 hash=r.hash,
             )
@@ -250,13 +308,23 @@ class JournalRepository:
         for i, r in enumerate(rows, start=1):
             if r.seq != i:
                 return False, f"séquence rompue à {i} (trouvé {r.seq})"
-            expect = hashlib.sha256(
-                f"{prev}|{r.run_id}|{r.seq}|{r.ts}|{r.type}|{r.payload}".encode()
-            ).hexdigest()
+            expect = _hash(prev, r.run_id, r.seq, r.ts, r.type, r.payload, r.cycle_id)
             if r.prev_hash != prev or r.hash != expect:
                 return False, f"hash invalide à seq={r.seq}"
             prev = r.hash
         return True, f"{len(rows)} événements vérifiés"
+
+    def cycles(self, run_id: str) -> list[dict[str, Any]]:
+        """Liste des cycles d'un run (du plus récent au plus ancien)."""
+        with self.engine.connect() as c:
+            rows = c.execute(
+                text(
+                    "SELECT cycle_id, MIN(ts) AS started, MAX(ts) AS ended, COUNT(*) AS n FROM journal_events "
+                    "WHERE run_id=:r AND cycle_id IS NOT NULL GROUP BY cycle_id ORDER BY MIN(id) DESC"
+                ),
+                {"r": run_id},
+            ).all()
+        return [{"cycle_id": r.cycle_id, "started": r.started, "ended": r.ended, "events": r.n} for r in rows]
 
     # ------------------------------------------------------------------ trades
 

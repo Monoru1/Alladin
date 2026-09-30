@@ -42,7 +42,7 @@ def test_no_trade_cycle_is_journaled_with_everything_needed_for_later_analysis(s
     assert (
         p["candidates"]
         and p["instruments_studied"]
-        and "XAUUSD" in p["rejections"]
+        and "USDTRY" in p["rejections"]
         and p["strategies_evaluated"]
     )
     types = {e.type for e in svc.repo.events(svc.run.run_id)}
@@ -92,7 +92,8 @@ def test_agent_cannot_trade_outside_the_scanned_shortlist_or_with_an_unknown_str
     svc: Components,
 ) -> None:
     sym = shortlist(svc)[0]
-    bad_inst = draft_for(svc, "XAUUSD")  # scanné mais exclu par le profil => hors shortlist
+    outside = next(s.symbol for s in svc.broker.list_symbols() if s.symbol not in shortlist(svc))
+    bad_inst = draft_for(svc, outside)  # dans l'univers mais hors shortlist
     bad_strat = draft_for(svc, sym, strategy_id="GOD-MODE")
     bad_ver = draft_for(svc, sym, strategy_version="0.0.1")
     for d in (bad_inst, bad_strat, bad_ver):

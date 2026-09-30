@@ -24,6 +24,7 @@ from alladin.market.universe import MarketUniverse
 from alladin.orchestration.bootstrap import Components, build_services, make_agent, make_broker
 from alladin.report import money, status_block
 from alladin.risk import sizing
+from alladin.risk.exposure import compute_exposure
 
 for _stream in (sys.stdout, sys.stderr):  # Windows : évite les UnicodeEncodeError (pipes cp1252)
     with contextlib.suppress(AttributeError, ValueError, OSError):
@@ -151,6 +152,7 @@ def mt5_status() -> None:
     out(
         f"Algo Trading (terminal): {'ACTIVÉ' if term['trade_allowed'] else 'DÉSACTIVÉ — les ordres seront refusés'}"
     )
+    out(f"Trading autorisé (compte): {'OUI' if acct.trade_allowed else 'NON'}")
     out(f"Décalage horloge serveur/UTC: {broker.server_utc_offset_hours:+g} h ({broker.offset_source})")
     out(f"Account: {acct.login_masked}")
     out(f"Mode: {mode}")
@@ -160,6 +162,7 @@ def mt5_status() -> None:
     out("")
     out(f"Balance: {money(acct.balance, acct.currency)}")
     out(f"Equity: {money(acct.equity, acct.currency)}")
+    out(f"Margin (utilisée): {money(acct.margin, acct.currency)}")
     out(f"Free Margin: {money(acct.free_margin, acct.currency)}")
     out(f"Floating P&L: {money(acct.floating_pnl, acct.currency)}")
     out("")
@@ -175,11 +178,29 @@ def mt5_status() -> None:
             "ALLADIN STATUS: READY"
             + ("" if term["trade_allowed"] else " (lecture seule : Algo Trading désactivé)")
         )
+        if not term["trade_allowed"]:
+            out(ALGO_MSG)
     else:
         out(block_message(acct.account_type))
         out("ALLADIN STATUS: EXECUTION BLOCKED (lecture seule)")
         raise typer.Exit(3)
     broker.disconnect()
+
+
+ALGO_MSG = "Activez Algo Trading dans MetaTrader 5 puis relancez cette commande."
+
+
+def _require_algo_trading(broker: MT5Broker, account_trade_allowed: bool) -> None:
+    """ARRÊT avant tout order_send si Algo Trading est désactivé. Aucun contournement."""
+    term = broker.terminal_status()
+    if not term["trade_allowed"] or term["tradeapi_disabled"] or not account_trade_allowed:
+        out("\nALGO TRADING DÉSACTIVÉ — aucun ordre ne sera envoyé.")
+        if term["tradeapi_disabled"]:
+            out(
+                "(L'API de trading est désactivée dans les options du terminal : Outils > Options > Expert Advisors.)"
+            )
+        out(ALGO_MSG)
+        raise typer.Exit(6)
 
 
 @mt5_app.command("test-order")
@@ -194,11 +215,12 @@ def mt5_test_order(
     ] = None,
     run: RunOpt = None,
 ) -> None:
-    """Ordre DEMO contrôlé à travers TradeIntent -> RiskEngine -> PositionSizer -> ExecutionService -> MT5."""
+    """Ordre DEMO de TEST D'INTÉGRATION (run SYSTEM-TEST-nnn, jamais un RUN officiel), via tout le pipeline."""
     settings = get_settings()
     broker = make_broker("mt5", settings)
-    out("ALLADIN — MT5 TEST ORDER\n")
+    out("ALLADIN — MT5 TEST ORDER (test d'intégration, pas une expérience)\n")
     _connect(broker)
+    assert isinstance(broker, MT5Broker)
     acct = broker.account_info()
     out(f"Account: {acct.login_masked} | {acct.server} | {acct.currency} | Mode: {acct.account_type.value}")
     out(
@@ -207,17 +229,20 @@ def mt5_test_order(
     if acct.account_type is not AccountType.DEMO:
         out("\n" + block_message(acct.account_type))
         raise typer.Exit(3)
+    _require_algo_trading(broker, acct.trade_allowed)
     try:
         side_e = Side(side.upper())
     except ValueError as exc:
         raise die("--side : BUY ou SELL", 2) from exc
 
-    # run : le dernier run actif, sinon création (avec confirmation)
-    comps = build_services(settings, broker, run_id=run)
+    # run : SYSTEM-TEST (jamais RUN-00x officiel) ; le dernier ouvert, sinon création avec confirmation
+    comps = build_services(settings, broker, run_id=run, run_kind="SYSTEM-TEST")
     if comps is None:
-        if not typer.confirm("\nAucun run actif. Créer un nouveau run pour ce test ?", default=False):
+        if not typer.confirm(
+            "\nAucun run SYSTEM-TEST actif. En créer un (n'affecte pas les RUN officiels) ?", default=False
+        ):
             raise die("Annulé : aucun run.", 2)
-        comps = build_services(settings, broker, create_run=True)
+        comps = build_services(settings, broker, create_run=True, run_kind="SYSTEM-TEST")
         assert comps is not None
     if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
         comps.manager.start(comps.run, acct)
@@ -264,35 +289,57 @@ def mt5_test_order(
             take_profit=tp,
             requested_risk_pct_of_working_capital=pct,
             confidence=0.5,
-            reason="test-order manuel",
+            reason="test-order manuel (intégration)",
             created_at=now,
             expires_at=now + timedelta(minutes=5),
             sources=["cli:mt5 test-order"],
         )
 
-    # 1. pré-évaluation réelle (RiskEngine + sizing + données broker), sans rien envoyer
+    # 1. pré-évaluation réelle (DEMO, watchdog, RiskEngine, sizing, marge broker), sans rien envoyer
     pre = comps.execution.submit(build_intent(), dry_run=True)
-    out("\n--- RÉCAPITULATIF (rien n'est encore envoyé) ---")
     it = pre.intent
+    tick = broker.tick(symbol)
+    assert tick is not None
+    out("\n--- RÉCAPITULATIF (rien n'est encore envoyé) ---")
     out(
-        f"Symbol: {it.instrument} | Side: {it.side.value} | Entry(ref): {it.entry} | SL: {it.stop_loss} | TP: {it.take_profit}"
+        f"instrument: {it.instrument} | side: {it.side.value} | bid: {tick.bid} | ask: {tick.ask} | spread: {tick.spread:.{spec.digits}f} ({tick.spread / spec.point:.1f} pts)"
     )
     if not pre.decision or not pre.decision.approved:
+        out(f"entry(ref): {it.entry} | SL: {it.stop_loss} | TP: {it.take_profit}")
         out(f"RISK ENGINE: {pre.status.value}")
         for m in pre.messages:
             out(f"  - {m}")
         raise typer.Exit(4)
     d = pre.decision
-    out("RISK ENGINE: APPROVED")
-    out(f"Volume: {d.volume:g} lot(s) (calculé par le PositionSizer, pas par l'agent)")
+    assert d.entry_price is not None and d.stop_loss is not None and d.take_profit is not None
+    sl_dist = abs(d.entry_price - d.stop_loss)
+    wd_rep = comps.run.watchdog.report(broker.account_info(), broker.now())
+    mine = comps.execution.my_positions()
+    specs = {p.symbol: s for p in mine if (s := broker.symbol_spec(p.symbol))}
+    expo = compute_exposure(mine, specs)
+    ccy = acct.currency
+    out(f"entry: {d.entry_price} | SL: {d.stop_loss} | TP: {d.take_profit}")
     out(
-        f"Risk amount: {money(d.risk_amount, acct.currency)} = {d.risk_pct_of_equity:.3f}% equity = {d.risk_pct_of_working_capital:.2f}% du capital de travail"
+        f"distance SL: {sl_dist:.{spec.digits}f} ({sl_dist / (spec.point * 10):.1f} pips) | RR: {abs(d.take_profit - d.entry_price) / sl_dist:.2f}"
     )
     out(
-        f"Working capital: {money(d.working_capital, acct.currency)} | Max trade risk: {money(d.max_trade_risk, acct.currency)}"
+        f"risk requested: {it.requested_risk_pct_of_working_capital:g}% du capital de travail = {money(d.requested_risk_amount, ccy)}"
     )
+    out(
+        f"risk amount (approuvé): {money(d.risk_amount, ccy)} = {d.risk_pct_of_equity:.3f}% equity = {d.risk_pct_of_working_capital:.2f}% du capital de travail"
+    )
+    out(f"working capital: {money(d.working_capital, ccy)} | max trade risk: {money(d.max_trade_risk, ccy)}")
+    out(f"volume calculé: {d.volume:g} lot(s) (PositionSizer ; perte/lot au SL {money(d.loss_per_lot, ccy)})")
     if d.required_margin is not None:
-        out(f"Marge requise: {money(d.required_margin, acct.currency)}")
+        out(f"margin estimated: {money(d.required_margin, ccy)} (marge libre {money(acct.free_margin, ccy)})")
+    out(
+        f"FTMO headroom: journalier {money(wd_rep.daily_headroom, ccy)} | total {money(wd_rep.total_headroom, ccy)}"
+    )
+    nets = {k: round(v) for k, v in expo.currency_net_risk.items()} or "aucune"
+    out(
+        f"current exposure: {len(mine)} position(s) ALLADIN, risque ouvert {money(expo.total_open_risk, ccy)}, devises {nets}"
+    )
+    out("RISK ENGINE: APPROVED")
     for a in d.adjustments:
         out(f"  ajustement: {a}")
     out("\nCet ordre sera envoyé sur le compte DEMO ci-dessus.")
@@ -306,23 +353,34 @@ def mt5_test_order(
         raise typer.Exit(0)
 
     # 3. pipeline complet refait avec des prix frais (le marché a pu bouger)
+    _require_algo_trading(broker, broker.account_info().trade_allowed)
     res = comps.execution.submit(build_intent())
     out("")
+    if res.precheck:
+        out(
+            f"MT5 order_check: ok={res.precheck.ok} retcode={res.precheck.retcode} marge={res.precheck.margin}"
+        )
     if res.executed and res.order and res.decision:
         o, dd = res.order, res.decision
-        out("ORDER ACCEPTED")
-        out(f"ticket: {res.position_ticket} | order: {o.order} | deal: {o.deal}")
-        out(f"symbol: {res.intent.instrument} | side: {res.intent.side.value} | volume: {o.volume:g}")
+        # vérification INDÉPENDANTE chez MT5 : positions_get
+        live = next((p for p in broker.positions() if p.ticket == res.position_ticket), None)
+        if live is None:
+            out(
+                "ATTENTION : MT5 a accepté l'ordre mais positions_get ne retrouve pas la position. NON CONFIRMÉ."
+            )
+            raise typer.Exit(5)
+        out("ORDER ACCEPTED — position CONFIRMÉE par MT5 (positions_get)")
         out(
-            f"entry (demandé): {o.requested_price} | entry (exécuté): {o.executed_price} | slippage: {o.slippage}"
+            f"retcode: {o.retcode} ({o.retcode_name}) | order: {o.order} | deal: {o.deal} | ticket/position: {live.ticket}"
         )
-        out(f"SL: {dd.stop_loss} | TP: {dd.take_profit}")
+        out(f"symbol: {live.symbol} | side: {live.side.value} | volume: {live.volume:g}")
         out(
-            f"risk amount: {money(dd.risk_amount, acct.currency)} | risk %: {dd.risk_pct_of_equity:.3f}% equity"
+            f"entry demandé: {o.requested_price} | prix exécuté: {o.executed_price} (position: {live.price_open}) | slippage: {o.slippage}"
         )
-        out(
-            f"retcode: {o.retcode} ({o.retcode_name}) | trade journalisé: {res.trade_id} dans {comps.run.run_id}"
-        )
+        out(f"SL: {live.sl} | TP: {live.tp} | magic: {live.magic} | comment: {live.comment}")
+        out(f"risk amount: {money(dd.risk_amount, ccy)} | risk %: {dd.risk_pct_of_equity:.3f}% equity")
+        out(f"journalisé: trade {res.trade_id} dans {comps.run.run_id}")
+        out(f"Suite : python -m alladin challenge status --run {comps.run.run_id}")
     else:
         out("ORDER REJECTED")
         out(f"status: {res.status.value}")
@@ -331,9 +389,6 @@ def mt5_test_order(
         if res.order:
             out(f"retcode: {res.order.retcode} ({res.order.retcode_name})")
         raise typer.Exit(5)
-
-
-# ---------------------------------------------------------------------------- market
 
 
 @market_app.command("scan")
@@ -385,6 +440,33 @@ def market_scan(
 # ---------------------------------------------------------------------------- challenge & runs
 
 
+def _print_run_positions_and_journal(comps: Components) -> None:
+    rid = comps.run.run_id
+    mine = comps.execution.my_positions()
+    trades = comps.repo.trades_for_run(rid)
+    out("")
+    out(f"Positions ALLADIN ouvertes chez MT5 ({rid}): {len(mine)}")
+    by_ticket = {t.ticket: t for t in trades}
+    for p in mine:
+        t = by_ticket.get(p.ticket)
+        known = (
+            f"journal: trade {t.trade_id} [{t.strategy_id}@{t.strategy_version}]"
+            if t
+            else "JOURNAL: INCONNUE (lancer `sync`)"
+        )
+        out(
+            f"  #{p.ticket} {p.symbol} {p.side.value} {p.volume:g} @ {p.price_open} SL {p.sl} TP {p.tp} "
+            f"P&L {p.profit:+.2f} magic {p.magic} | {known}"
+        )
+    closed = [t for t in trades if t.status == "CLOSED"]
+    out(f"Trades journalisés: {len(trades)} (ouverts {len(trades) - len(closed)}, clôturés {len(closed)})")
+    ok, msg = comps.repo.verify_chain(rid)
+    events = comps.repo.events(rid)
+    out(f"Journal: {len(events)} événements | intégrité: {'OK' if ok else 'ALTÉRÉ'} ({msg})")
+    for e in events[-5:]:
+        out(f"  {e.ts:%H:%M:%S} {e.type}")
+
+
 @challenge_app.command("status")
 def challenge_status(broker_kind: BrokerOpt = "mt5", run: RunOpt = None) -> None:
     """Equity, capital de travail, risque max, drawdowns, objectif, phase et état du run."""
@@ -405,7 +487,7 @@ def challenge_status(broker_kind: BrokerOpt = "mt5", run: RunOpt = None) -> None
     else:
         acct = comps.broker.account_info()
         comps.monitor.sync()  # met aussi le watchdog à jour avec l'equity réelle
-        rep = comps.run.watchdog.update(acct, broker.now(), 0)
+        rep = comps.run.watchdog.report(acct, broker.now())
         risk, label = comps.profile.risk, comps.run.run_id
     out(
         status_block(
@@ -421,6 +503,8 @@ def challenge_status(broker_kind: BrokerOpt = "mt5", run: RunOpt = None) -> None
             title="ALLADIN — CHALLENGE STATUS",
         )
     )
+    if comps is not None:
+        _print_run_positions_and_journal(comps)
 
 
 @runs_app.command("new")
@@ -429,6 +513,9 @@ def runs_new(
     profile: Annotated[
         str | None, typer.Option(help="Profil de challenge (défaut : DEFAULT_PROFILE)")
     ] = None,
+    system_test: Annotated[
+        bool, typer.Option("--system-test", help="Crée un run SYSTEM-TEST-nnn (intégration technique)")
+    ] = False,
 ) -> None:
     """Crée un nouveau run (expérience indépendante) ; les anciens runs ne sont jamais modifiés."""
     settings = get_settings()
@@ -437,7 +524,13 @@ def runs_new(
     acct = broker.account_info()
     if acct.account_type is not AccountType.DEMO:
         raise die(block_message(acct.account_type), 3)
-    comps = build_services(settings, broker, create_run=True, profile_id=profile)
+    comps = build_services(
+        settings,
+        broker,
+        create_run=True,
+        profile_id=profile,
+        run_kind="SYSTEM-TEST" if system_test else "RUN",
+    )
     assert comps is not None
     out(
         f"Run créé : {comps.run.run_id} | profil {comps.profile.id} | solde de départ {money(acct.balance, acct.currency)} | magic {comps.run.magic} | état {comps.run.watchdog.run_state.value}"
@@ -473,6 +566,29 @@ def runs_verify(run_id: Annotated[str, typer.Argument()]) -> None:
 # ---------------------------------------------------------------------------- autonome
 
 
+@app.command("sync")
+def sync_cmd(
+    broker_kind: BrokerOpt = "mt5",
+    run: RunOpt = None,
+    system_test: Annotated[bool, typer.Option("--system-test", help="Cibler le dernier SYSTEM-TEST")] = False,
+) -> None:
+    """Réconcilie MT5 <-> base <-> journal (comme au redémarrage). Ne ferme JAMAIS rien."""
+    settings = get_settings()
+    broker = make_broker(broker_kind, settings)
+    _connect(broker)
+    comps = build_services(settings, broker, run_id=run, run_kind="SYSTEM-TEST" if system_test else "RUN")
+    if comps is None:
+        raise die("Aucun run actif à réconcilier.", 2)
+    rep = comps.monitor.reconcile()
+    out(f"Run: {comps.run.run_id} ({comps.run.watchdog.run_state.value}) | magic {comps.run.magic}")
+    out(
+        f"Réconciliation: {rep.open_positions} position(s) ALLADIN reconnue(s) par magic+commentaire, "
+        f"{len(rep.adopted)} adoptée(s), {len(rep.newly_closed)} clôturée(s) hors-ligne, "
+        f"{rep.foreign_ignored} étrangère(s) ignorée(s), {len(rep.unresolved_closed)} en attente d'historique"
+    )
+    _print_run_positions_and_journal(comps)
+
+
 @app.command("run")
 def run_cmd(
     broker_kind: BrokerOpt = "mt5",
@@ -493,6 +609,8 @@ def run_cmd(
     if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
         comps.manager.start(comps.run, acct)
     if execute:
+        assert isinstance(comps.broker, MT5Broker)
+        _require_algo_trading(comps.broker, acct.trade_allowed)
         out(f"MODE EXÉCUTION DEMO sur {acct.server} ({acct.login_masked}), run {comps.run.run_id}.")
         if (
             typer.prompt(

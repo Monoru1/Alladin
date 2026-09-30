@@ -27,8 +27,11 @@ class RunContext:
     broker_name: str
 
 
-def run_label(seq: int) -> str:
-    return f"RUN-{seq:03d}"
+RUN_KINDS = {"RUN": "RUN", "SYSTEM-TEST": "SYSTEM-TEST"}
+
+
+def run_label(kind: str, n: int) -> str:
+    return f"{RUN_KINDS[kind]}-{n:03d}"
 
 
 class RunManager:
@@ -46,10 +49,18 @@ class RunManager:
     # ------------------------------------------------------------------ création / chargement
 
     def create_run(
-        self, profile: ChallengeProfile, *, broker_name: str, account: str, initial_balance: float
+        self,
+        profile: ChallengeProfile,
+        *,
+        broker_name: str,
+        account: str,
+        initial_balance: float,
+        kind: str = "RUN",
     ) -> RunContext:
-        seq = self.repo.next_run_seq()
-        run_id = run_label(seq)
+        seq = (
+            self.repo.next_run_seq()
+        )  # global : garantit un magic number unique par run, tous types confondus
+        run_id = run_label(kind, self.repo.next_label_no(kind))
         wd = ChallengeWatchdog.create(profile, run_id, initial_balance)
         now = self.clock()
         self.repo.create_run(
@@ -63,6 +74,7 @@ class RunManager:
                 broker=broker_name,
                 account=account,
                 magic=self.magic_base + seq,
+                kind=kind,
                 created_at=now,
                 updated_at=now,
                 watchdog_state=wd.state.model_dump(mode="json"),
@@ -87,8 +99,11 @@ class RunManager:
         wd = ChallengeWatchdog(profile, WatchdogState.model_validate(rec.watchdog_state))
         return RunContext(rec.run_id, rec.seq, rec.magic, profile, wd, rec.broker)
 
-    def latest_run_id(self, *, only_open: bool = False) -> str | None:
+    def latest_run_id(self, *, only_open: bool = False, kind: str | None = "RUN") -> str | None:
+        """Dernier run (par défaut de type RUN : les SYSTEM-TEST ne polluent jamais les runs officiels)."""
         for rec in reversed(self.repo.list_runs()):
+            if kind is not None and rec.kind != kind:
+                continue
             if not only_open or RunState(rec.state) not in TERMINAL_STATES:
                 return rec.run_id
         return None

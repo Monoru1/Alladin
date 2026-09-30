@@ -39,13 +39,34 @@ class ScanReport(BaseModel):
     rejected: dict[str, list[str]] = {}  # symbole -> raisons
     regime_counts: dict[str, int] = {}
     notes: list[str] = []
+    cycle_id: str | None = None
+    archived_bars: int = 0
 
     def summary(self) -> dict[str, object]:
         return {
+            "cycle_id": self.cycle_id,
             "universe_size": self.universe_size,
             "analysed": self.analysed,
+            "rejected_count": len(self.rejected),
             "shortlist": [c.symbol for c in self.candidates],
+            "candidates": [
+                {
+                    "symbol": c.symbol,
+                    "category": c.category.value,
+                    "regime": c.regime.value,
+                    "bias": c.bias.value if c.bias else None,
+                    "score": c.score,
+                    "spread_points": round(c.spread_points, 2),
+                    "spread_atr_ratio": round(c.spread_atr_ratio, 4),
+                    "atr": c.metrics.get("atr"),
+                    "atr_pct_rank": c.metrics.get("atr_pct_rank"),
+                    "session": c.session,
+                    "reasons": c.regime_reasons,
+                }
+                for c in self.candidates
+            ],
             "rejected": self.rejected,
             "regime_counts": self.regime_counts,
+            "archived_bars": self.archived_bars,
             "notes": self.notes,
         }

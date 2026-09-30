@@ -36,8 +36,18 @@ class JournalService:
         self.repo = repo
         self.clock = clock or (lambda: datetime.now(UTC))
 
-    def log(self, run_id: str, type_: EventType | str, payload: dict[str, Any] | None = None) -> JournalEvent:
-        return self.repo.append(run_id, str(type_), payload or {}, self.clock())
+    current_cycle: str | None = None  # cycle_id appliqué automatiquement aux événements journalisés
+
+    def log(
+        self,
+        run_id: str,
+        type_: EventType | str,
+        payload: dict[str, Any] | None = None,
+        cycle_id: str | None = None,
+    ) -> JournalEvent:
+        return self.repo.append(
+            run_id, str(type_), payload or {}, self.clock(), cycle_id or self.current_cycle
+        )
 
     def no_trade(
         self,

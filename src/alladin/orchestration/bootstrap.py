@@ -22,6 +22,7 @@ from alladin.core.killswitch import KillSwitch
 from alladin.execution.service import ExecutionService
 from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
+from alladin.market.archive import MarketDataArchive
 from alladin.market.scanner import MarketScanner
 from alladin.market.universe import MarketUniverse
 from alladin.orchestration.engine import OrchestrationEngine
@@ -74,7 +75,9 @@ class Components:
     def engine(self, agent: AgentAdapter, *, execute: bool) -> OrchestrationEngine:
         registry = StrategyRegistry.from_config(self.settings.strategies_dir)
         universe = MarketUniverse(self.broker, self.profile.universe)
-        scanner = MarketScanner(self.broker, universe, self.profile.universe)
+        scanner = MarketScanner(
+            self.broker, universe, self.profile.universe, archive=MarketDataArchive(self.repo.engine)
+        )
         router = StrategyRouter(registry, performance=self.journal)
         return OrchestrationEngine(
             broker=self.broker,
@@ -100,6 +103,7 @@ def build_services(
     db_url: str | None = None,
     clock: Callable[[], datetime] | None = None,
     killswitch_path: Path | None = None,
+    run_kind: str = "RUN",
 ) -> Components | None:
     """Retourne None si aucun run n'existe et que `create_run` est faux."""
     repo = JournalRepository.from_url(db_url or settings.db_url)
@@ -108,7 +112,7 @@ def build_services(
     killswitch = KillSwitch(killswitch_path or settings.kill_switch_path)
     manager = RunManager(repo, journal, killswitch, settings.magic_base, clk)
 
-    existing = run_id or manager.latest_run_id(only_open=True)
+    existing = run_id or manager.latest_run_id(only_open=True, kind=run_kind)
     if existing and not create_run:
         rec = repo.get_run(existing)
         if rec is None:
@@ -123,6 +127,7 @@ def build_services(
             broker_name=broker.name,
             account=f"{account.login_masked}@{account.server}",
             initial_balance=account.balance,
+            kind=run_kind,
         )
         manager.mark_ready(run, account)
     else:

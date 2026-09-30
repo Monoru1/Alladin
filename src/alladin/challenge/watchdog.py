@@ -246,6 +246,7 @@ class ChallengeWatchdog:
         if st.run_state not in TERMINAL_STATES:
             st.last_balance, st.last_equity = snap.balance, snap.equity
             st.peak_equity = max(st.peak_equity, snap.equity)
+            st.max_drawdown_amount = max(st.max_drawdown_amount, st.peak_equity - snap.equity)
             st.lowest_equity = snap.equity if st.lowest_equity == 0 else min(st.lowest_equity, snap.equity)
 
     def _fail(self, violation: RuleViolation, events: list[WatchdogEvent]) -> None:
@@ -339,6 +340,10 @@ class ChallengeWatchdog:
                 )
         return blockers
 
+    def report(self, snap: AccountSnapshot, now: datetime) -> WatchdogReport:
+        """Vue de l'état pour un snapshot donné, SANS mise à jour ni règle évaluée (lecture seule)."""
+        return self._report(snap, now, [])
+
     def _report(self, snap: AccountSnapshot, now: datetime, events: list[WatchdogEvent]) -> WatchdogReport:
         st = self.state
         off = self.profile.official_rules
@@ -375,6 +380,10 @@ class ChallengeWatchdog:
             profit_pct=(measure - st.baseline_balance) / st.baseline_balance * 100,
             daily_floor=floor_d,
             daily_headroom=snap.equity - floor_d,
+            daily_pnl=snap.equity - st.day_start_equity,
+            daily_drawdown_pct=max(0.0, daily_ref - snap.equity) / st.baseline_balance * 100,
+            total_drawdown_pct=max(0.0, st.baseline_balance - snap.equity) / st.baseline_balance * 100,
+            max_drawdown_pct=st.max_drawdown_amount / st.baseline_balance * 100,
             daily_loss_used_pct=max(0.0, (daily_ref - snap.equity) / daily_limit * 100)
             if daily_limit
             else 0.0,

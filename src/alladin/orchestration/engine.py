@@ -10,6 +10,7 @@ import logging
 import time
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -42,6 +43,7 @@ class CycleOutcome(BaseModel):
     reason: str = ""
     shortlist: list[str] = []
     result: dict[str, Any] | None = None
+    cycle_id: str | None = None
 
 
 class OrchestrationEngine:
@@ -68,7 +70,33 @@ class OrchestrationEngine:
     # ------------------------------------------------------------------ un cycle
 
     def run_cycle(self) -> CycleOutcome:
+        """Un cycle complet, tracé de bout en bout par un `cycle_id` unique (tous les événements le portent)."""
         self._cycle += 1
+        cycle_id = f"CYC-{self.broker.now():%Y%m%d-%H%M%S}-{uuid4().hex[:4]}"
+        self.journal.current_cycle = cycle_id
+        try:
+            self.journal.log(
+                self.run.run_id,
+                EventType.CYCLE_START,
+                {"cycle": self._cycle, "agent": self.agent.name, "execute": self.execute},
+            )
+            outcome = self._run_cycle(cycle_id)
+            outcome.cycle_id = cycle_id
+            self.journal.log(
+                self.run.run_id,
+                EventType.CYCLE_END,
+                {
+                    "decision": outcome.decision,
+                    "reason": outcome.reason,
+                    "run_state": outcome.run_state,
+                    "shortlist": outcome.shortlist,
+                },
+            )
+            return outcome
+        finally:
+            self.journal.current_cycle = None
+
+    def _run_cycle(self, cycle_id: str) -> CycleOutcome:
         rid = self.run.run_id
 
         # 1. positions & watchdog d'abord
@@ -84,7 +112,12 @@ class OrchestrationEngine:
             return CycleOutcome(cycle=self._cycle, run_state=state.value, decision="HALTED", reason=why)
 
         # 2. marché
-        scan = self.scanner.scan()
+        acct = self.broker.account_info()
+        budget = sizing.max_trade_risk(
+            sizing.working_capital(acct.equity, self.run.profile.risk.working_capital_pct),
+            self.run.profile.risk.max_trade_risk_pct_of_working_capital,
+        )
+        scan = self.scanner.scan(cycle_id=cycle_id, max_trade_risk=budget)
         self.journal.log(rid, EventType.SCAN, scan.summary())
 
         # 3. régime -> routeur -> signaux de stratégies
@@ -172,8 +205,10 @@ class OrchestrationEngine:
             decision, strategies = self.router.route(cand)
             self.journal.log(self.run.run_id, EventType.ROUTING, decision.model_dump(mode="json"))
             evaluated[cand.symbol] = decision.selected
+            results: dict[str, str] = {}
             for strat in strategies:
                 sig = strat.evaluate(StrategyContext(run_id=self.run.run_id, now=now, candidate=cand))
+                results[f"{strat.id}@{strat.version}"] = "SIGNAL" if sig is not None else "NO_SETUP"
                 if sig is None:
                     continue
                 intent = strat.to_intent(
@@ -189,6 +224,16 @@ class OrchestrationEngine:
                     },
                 )
                 out.append((intent, cand.score))
+            self.journal.log(
+                self.run.run_id,
+                EventType.STRATEGY_EVAL,
+                {
+                    "symbol": cand.symbol,
+                    "regime": cand.regime.value,
+                    "results": results,
+                    "skipped": decision.skipped,
+                },
+            )
         return out, evaluated
 
     def _context(self, scan: ScanReport, signals: list[tuple[TradeIntent, float]]) -> dict[str, Any]:
