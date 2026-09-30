@@ -1,0 +1,96 @@
+"""Modèles du journal d'audit."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+from typing import Any
+
+from pydantic import BaseModel
+
+
+class EventType(StrEnum):
+    RUN_CREATED = "run.created"
+    RUN_STATE = "run.state"
+    UNIVERSE = "market.universe"
+    SCAN = "market.scan"
+    ROUTING = "strategy.routing"
+    SIGNAL = "strategy.signal"
+    AGENT_REQUEST = "agent.request"
+    AGENT_RESPONSE = "agent.response"
+    NO_TRADE = "decision.no_trade"
+    TRADE_INTENT = "decision.trade_intent"
+    INTENT_REJECTED_SCHEMA = "decision.intent_invalid"
+    RISK_DECISION = "risk.decision"
+    ORDER_PRECHECK = "order.precheck"
+    ORDER_SENT = "order.sent"
+    ORDER_RESULT = "order.result"
+    EXECUTION_BLOCKED = "execution.blocked"
+    POSITION_OPENED = "position.opened"
+    POSITION_UPDATE = "position.update"
+    POSITION_CLOSED = "position.closed"
+    WATCHDOG = "watchdog.event"
+    ACCOUNT_SNAPSHOT = "account.snapshot"
+    KILL_SWITCH = "kill_switch"
+    RECONCILE = "reconcile"
+    INFO = "info"
+
+
+class JournalEvent(BaseModel):
+    id: int
+    run_id: str
+    seq: int
+    ts: datetime
+    type: str
+    payload: dict[str, Any]
+    hash: str
+
+
+class RunRecord(BaseModel):
+    run_id: str
+    seq: int
+    profile_id: str
+    state: str
+    phase: int
+    initial_balance: float
+    broker: str
+    account: str
+    magic: int
+    created_at: datetime
+    updated_at: datetime
+    watchdog_state: dict[str, Any]
+
+
+class TradeRecord(BaseModel):
+    trade_id: str
+    run_id: str
+    symbol: str
+    side: str
+    strategy_id: str
+    strategy_version: str
+    regime: str
+    agent: str
+    status: str
+    ticket: int | None = None
+    volume: float
+    entry_requested: float | None = None
+    entry_executed: float | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    risk_amount: float
+    risk_pct_of_wc: float
+    spread_at_entry: float | None = None
+    slippage: float | None = None
+    opened_at: datetime
+    closed_at: datetime | None = None
+    close_price: float | None = None
+    close_reason: str | None = None
+    pnl_gross: float | None = None
+    commission: float | None = None
+    swap: float | None = None
+    net_pnl: float | None = None
+    r_multiple: float | None = None
+    mae: float = 0.0  # pire perte flottante observée (<= 0), devise du compte
+    mfe: float = 0.0  # meilleur gain flottant observé (>= 0)
+    equity_after: float | None = None
+    adopted: bool = False  # position retrouvée à la réconciliation sans enregistrement préalable

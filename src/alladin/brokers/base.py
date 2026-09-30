@@ -1,0 +1,122 @@
+"""BrokerAdapter : abstraction broker. `send_order` est un template method non surchargeable en pratique.
+
+Toute implémentation passe obligatoirement par :
+  1. vérification du jeton d'approbation du RiskEngine ;
+  2. vérification FRAÎCHE que le compte est DEMO (fail closed) ;
+  3. seulement ensuite `_send()`.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from datetime import datetime
+
+from alladin.core.approval import ApprovalToken, verify_token
+from alladin.core.enums import AccountType, Timeframe
+from alladin.core.errors import ExecutionBlockedError
+from alladin.core.models import (
+    AccountSnapshot,
+    Bar,
+    Deal,
+    InstrumentSpec,
+    OrderCheck,
+    OrderRequest,
+    OrderResult,
+    PendingOrder,
+    Position,
+    Tick,
+)
+
+RETCODE_DONE = 10009
+RETCODE_DONE_PARTIAL = 10010
+RETCODE_PLACED = 10008
+RETCODE_REJECT = 10006
+RETCODE_INVALID = 10013
+RETCODE_INVALID_VOLUME = 10014
+RETCODE_INVALID_STOPS = 10016
+RETCODE_NO_MONEY = 10019
+RETCODE_MARKET_CLOSED = 10018
+RETCODE_TRADE_DISABLED = 10017
+RETCODE_BLOCKED = -1  # blocage ALLADIN avant envoi (pas un retcode MT5)
+
+
+def block_message(account_type: AccountType) -> str:
+    if account_type is AccountType.LIVE:
+        return "LIVE ACCOUNT DETECTED — EXECUTION BLOCKED"
+    return "ACCOUNT TYPE UNKNOWN — EXECUTION BLOCKED"
+
+
+class BrokerAdapter(ABC):
+    name: str = "BROKER"
+
+    # ------------------------------------------------------------------ connexion / compte
+
+    @abstractmethod
+    def connect(self) -> None: ...
+
+    @abstractmethod
+    def disconnect(self) -> None: ...
+
+    @abstractmethod
+    def account_info(self) -> AccountSnapshot: ...
+
+    def assert_demo(self) -> AccountSnapshot:
+        """Lit le compte MAINTENANT et refuse tout sauf un compte DEMO identifié avec certitude."""
+        try:
+            acct = self.account_info()
+        except Exception as exc:  # fail closed : impossible de lire le compte => impossible d'exécuter
+            raise ExecutionBlockedError(f"ACCOUNT TYPE UNKNOWN — EXECUTION BLOCKED ({exc})") from exc
+        if acct.account_type is not AccountType.DEMO:
+            raise ExecutionBlockedError(block_message(acct.account_type))
+        return acct
+
+    # ------------------------------------------------------------------ marché
+
+    @abstractmethod
+    def list_symbols(self) -> list[InstrumentSpec]: ...
+
+    @abstractmethod
+    def symbol_spec(self, symbol: str) -> InstrumentSpec | None: ...
+
+    @abstractmethod
+    def select_symbol(self, symbol: str) -> bool: ...
+
+    @abstractmethod
+    def tick(self, symbol: str) -> Tick | None: ...
+
+    @abstractmethod
+    def bars(self, symbol: str, timeframe: Timeframe, count: int) -> list[Bar]: ...
+
+    @abstractmethod
+    def now(self) -> datetime:
+        """Heure UTC de référence (horloge simulée pour le mock)."""
+
+    # ------------------------------------------------------------------ positions / historique
+
+    @abstractmethod
+    def positions(self) -> list[Position]:
+        """TOUTES les positions du compte (le filtrage ALLADIN se fait par magic/comment)."""
+
+    @abstractmethod
+    def orders(self) -> list[PendingOrder]: ...
+
+    @abstractmethod
+    def history_deals(self, since: datetime, until: datetime) -> list[Deal]: ...
+
+    @abstractmethod
+    def calc_margin(self, symbol: str, side_buy: bool, volume: float, price: float) -> float | None: ...
+
+    # ------------------------------------------------------------------ exécution
+
+    @abstractmethod
+    def check_order(self, request: OrderRequest) -> OrderCheck:
+        """Pré-validation broker (ne trade pas)."""
+
+    @abstractmethod
+    def _send(self, request: OrderRequest) -> OrderResult:
+        """Envoi effectif. Jamais appelé directement : passer par send_order()."""
+
+    def send_order(self, request: OrderRequest, approval: ApprovalToken | None) -> OrderResult:
+        verify_token(request, approval)
+        self.assert_demo()
+        return self._send(request)

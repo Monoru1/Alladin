@@ -1,0 +1,56 @@
+# Profil ALLADIN — challenge FTMO 2 phases simulé sur compte DEMO.
+#
+# official_rules : règles du programme FTMO (source: official)
+# extra_rules    : règles expérimentales ALLADIN, NON FTMO (source: extra)
+# risk           : règles du RiskEngine ALLADIN (enveloppe de travail, plafonds, exposition)
+# Rien de ce fichier n'est codé en dur dans le code : modifier ici, pas dans src/.
+id: ftmo_2step_demo
+name: FTMO 2-Step (simulation DEMO)
+description: >
+  Phase 1 +10 %, Phase 2 +5 %. Perte journalière 5 %, perte totale 10 %, 4 jours de trading minimum.
+  Durée expérimentale ALLADIN : 14 jours max par phase.
+initial_balance: 100000
+
+phases:
+  - { name: "Phase 1", profit_target_pct: 10 }
+  - { name: "Phase 2", profit_target_pct: 5 }
+
+official_rules:
+  daily_loss_pct: 5
+  max_total_loss_pct: 10
+  min_trading_days: 4
+  daily_loss_reference: max_balance_equity   # max_balance_equity | start_equity | start_balance
+  reset_timezone: Europe/Prague
+  reset_hour: 0
+  target_measured_on: balance                # balance | equity
+
+extra_rules:
+  max_days_per_phase: 14        # expérimental ALLADIN
+  soft_daily_loss_pct: 3        # bloque les nouveaux ordres du jour (non éliminatoire)
+  consistency:
+    enabled: true               # règle ALLADIN : Best Day <= 50 % du profit total
+    max_best_day_share_pct: 50
+  require_flat_to_pass: true
+  close_positions_on_fail: false
+
+risk:
+  working_capital_pct: 10                        # 10 % de l'equity
+  max_trade_risk_pct_of_working_capital: 8       # plafond (0,8 % de l'equity), PAS un défaut
+  over_cap_policy: reject                        # reject | clip
+  max_open_positions: 5
+  max_total_open_risk_pct_of_wc: 30
+  max_currency_net_risk_pct_of_wc: 15
+  max_correlation: 0.85
+  max_spread_to_sl_ratio: 0.25
+  max_entry_deviation_to_sl_ratio: 0.15
+  min_risk_reward: 0
+  max_margin_usage_pct: 50
+  headroom_buffer_pct_of_baseline: 0.25
+  allow_hedging: false
+
+universe:
+  allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY]   # + FOREX_EXOTIC, METAL si autorisés
+  include_symbols: []
+  exclude_symbols: []
+  max_spread_atr_ratio: 0.15
+  shortlist_size: 10
