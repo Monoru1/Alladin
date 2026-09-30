@@ -40,11 +40,13 @@ market_app = typer.Typer(no_args_is_help=True, help="Marché : univers et scanne
 challenge_app = typer.Typer(no_args_is_help=True, help="Challenge : état du run.")
 runs_app = typer.Typer(no_args_is_help=True, help="Gestion des runs (RUN-001, RUN-002...).")
 positions_app = typer.Typer(no_args_is_help=True, help="Positions ALLADIN.")
+replay_app = typer.Typer(no_args_is_help=True, help="Replay read-only des décisions.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(market_app, name="market")
 app.add_typer(challenge_app, name="challenge")
 app.add_typer(runs_app, name="runs")
 app.add_typer(positions_app, name="positions")
+app.add_typer(replay_app, name="replay")
 
 console = Console(markup=False, highlight=False)
 BrokerOpt = Annotated[str, typer.Option("--broker", help="mt5 | mock")]
@@ -745,13 +747,36 @@ def stats(
         )
 
 
+@replay_app.command("cycle")
+def replay_cycle(cycle_id: str) -> None:
+    """Reconstruit un cycle depuis le journal et l'archive. N'envoie jamais d'ordre."""
+    from alladin.journal.repository import JournalRepository
+    from alladin.replay import ReplayContext
+
+    try:
+        replay = ReplayContext.from_cycle(JournalRepository.from_url(get_settings().db_url), cycle_id)
+    except ValueError as exc:
+        raise die(str(exc), 2) from exc
+    out(replay.model_dump_json(indent=2))
+
+
 @app.command()
-def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
-    """API FastAPI en LECTURE SEULE (runs, journal). Aucun endpoint de trading."""
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    broker_kind: BrokerOpt = "mock",
+) -> None:
+    """Mission Control en LECTURE SEULE. Aucun endpoint de trading."""
     import uvicorn
 
+    from alladin.api.app import create_app
+    from alladin.journal.repository import JournalRepository
+
     setup_logging()
-    uvicorn.run("alladin.api.app:create_app", factory=True, host=host, port=port)
+    settings = get_settings()
+    broker = make_broker(broker_kind, settings)
+    _connect(broker)
+    uvicorn.run(create_app(settings, JournalRepository.from_url(settings.db_url), broker), host=host, port=port)
 
 
 def main() -> None:
