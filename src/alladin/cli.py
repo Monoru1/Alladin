@@ -145,7 +145,7 @@ def mt5_status() -> None:
         pass
     profile = load_profile(settings.default_profile, settings.profiles_dir)
     uni = MarketUniverse(broker, profile.universe).discover()
-    alladin_pos = [p for p in positions if p.comment.startswith("ALLADIN|")]
+    alladin_pos = [p for p in positions if p.comment.startswith("ALD-")]
     mode = acct.account_type.value
     out("Terminal: CONNECTED")
     out(f"Terminal build: {term['build']}  ({term['company']})")

@@ -142,7 +142,7 @@ def test_test_order_full_pipeline_after_explicit_confirmation(
         sent["sl"]
         and sent["tp"]
         and sent["magic"] > 26_000_000
-        and sent["comment"].startswith("ALLADIN|SYSTEM-TEST-001|TEST-00")
+        and sent["comment"].startswith("ALD-S-")
     )
     # l'ordre est enregistré dans ALLADIN
     from alladin.journal.repository import JournalRepository

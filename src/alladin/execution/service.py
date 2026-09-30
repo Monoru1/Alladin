@@ -17,7 +17,7 @@ from alladin.core.enums import OrderAction, Side
 from alladin.core.errors import ExecutionBlockedError
 from alladin.core.killswitch import KillSwitch
 from alladin.core.models import AccountSnapshot, InstrumentSpec, OrderRequest, Position, TradeIntent
-from alladin.execution.models import ExecStatus, ExecutionResult, make_comment, parse_comment
+from alladin.execution.models import ExecStatus, ExecutionResult, comment_matches, make_comment
 from alladin.journal.models import EventType, TradeRecord
 from alladin.journal.service import JournalService
 from alladin.orchestration.state import RunContext, RunManager
@@ -52,8 +52,9 @@ class ExecutionService:
 
     def owns(self, pos: Position) -> bool:
         """Une position appartient à ce run seulement si magic ET commentaire concordent."""
-        parsed = parse_comment(pos.comment)
-        return pos.magic == self.run.magic and parsed is not None and parsed[0] == self.run.run_id
+        return pos.magic == self.run.magic and comment_matches(
+            pos.comment, self.run.run_id, self.run.magic
+        )
 
     def my_positions(self) -> list[Position]:
         return [p for p in self.broker.positions() if self.owns(p)]
@@ -128,7 +129,7 @@ class ExecutionService:
             take_profit=decision.take_profit,
             deviation_points=self.deviation,
             magic=self.run.magic,
-            comment=make_comment(rid, intent.strategy_id),
+            comment=make_comment(rid, self.run.magic),
         )
         check = self.broker.check_order(request)
         self.journal.log(

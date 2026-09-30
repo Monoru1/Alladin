@@ -446,7 +446,7 @@ class MT5Broker(b.BrokerAdapter):
             raise ExecutionBlockedError(f"aucun tick pour {req.symbol}")
         d: dict[str, Any] = {
             "symbol": req.symbol, "volume": float(req.volume), "deviation": int(req.deviation_points),
-            "magic": int(req.magic), "comment": req.comment[:31], "type_time": mt5.ORDER_TIME_GTC,
+            "magic": int(req.magic), "comment": req.comment, "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": self._filling(req.symbol),
         }  # fmt: skip
         if req.action is OrderAction.CLOSE:

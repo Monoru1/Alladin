@@ -13,6 +13,7 @@ from sqlalchemy.exc import DatabaseError
 from alladin.agents.mock import MockAgent
 from alladin.core.enums import Timeframe
 from alladin.core.models import Bar
+from alladin.execution.models import comment_matches, make_comment, parse_comment
 from alladin.journal.models import EventType
 from alladin.journal.repository import GENESIS, JournalRepository, _canon, _hash
 from alladin.market.archive import MarketDataArchive
@@ -130,3 +131,7 @@ def test_system_test_numbering_and_magic_are_isolated(svc: Components) -> None:
     assert system.magic != svc.run.magic
     assert manager.latest_run_id(kind="RUN") == svc.run.run_id
     assert manager.latest_run_id(kind="SYSTEM-TEST") == system.run_id
+    for record in svc.repo.list_runs():
+        comment = make_comment(record.run_id, record.magic)
+        assert parse_comment(comment) == (record.kind, record.magic)
+        assert comment_matches(comment, record.run_id, record.magic)

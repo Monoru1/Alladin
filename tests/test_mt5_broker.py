@@ -25,7 +25,7 @@ def make(fake: FakeMT5 | None = None, **kw: object) -> tuple[MT5Broker, FakeMT5]
 
 def open_req(volume: float = 0.1) -> OrderRequest:
     return OrderRequest(action=OrderAction.OPEN, symbol="EURUSD", side=Side.BUY, volume=volume, price=1.08506,
-                        stop_loss=1.08306, take_profit=1.09006, magic=26000001, comment="ALLADIN|RUN-001|TREND-01")  # fmt: skip
+                        stop_loss=1.08306, take_profit=1.09006, magic=26000001, comment="ALD-R-26000001")  # fmt: skip
 
 
 def test_connection_failure_is_explicit_and_actionable() -> None:
@@ -147,7 +147,7 @@ def test_demo_order_is_built_correctly_and_result_verified() -> None:
     sent = fake.order_send_calls[0]
     assert sent["symbol"] == "EURUSD" and sent["volume"] == 0.1 and sent["type"] == FakeMT5.ORDER_TYPE_BUY
     assert sent["sl"] == 1.08306 and sent["tp"] == 1.09006
-    assert sent["magic"] == 26000001 and sent["comment"] == "ALLADIN|RUN-001|TREND-01"
+    assert sent["magic"] == 26000001 and sent["comment"] == "ALD-R-26000001"
     assert (
         sent["type_filling"] == FakeMT5.ORDER_FILLING_IOC
     )  # choisi d'après le mode de remplissage du symbole
@@ -196,6 +196,15 @@ def test_precheck_uses_order_check() -> None:
     b, fake = make()
     chk = b.check_order(open_req())
     assert chk.ok and chk.margin == 1000.0 and fake.order_check_calls and not fake.order_send_calls
+
+
+def test_precheck_rejects_unsafe_comment_like_real_mt5_binding() -> None:
+    b, fake = make()
+    unsafe = open_req().model_copy(update={"comment": "ALLADIN|SYSTEM-TEST-001|TEST-00"})
+    chk = b.check_order(unsafe)
+    assert not chk.ok and chk.retcode == -1
+    assert 'Invalid "comment" argument' in chk.message
+    assert fake.order_check_calls and not fake.order_send_calls
 
 
 def test_mt5_broker_cannot_bypass_the_send_guard() -> None:

@@ -10,7 +10,7 @@ from alladin.core.approval import issue_open_token
 from alladin.core.enums import AccountType, OrderAction, Side
 from alladin.core.errors import ExecutionBlockedError
 from alladin.core.models import OrderRequest, OrderResult
-from alladin.execution.models import ExecStatus, make_comment, parse_comment, parse_intent
+from alladin.execution.models import ExecStatus, comment_matches, make_comment, parse_comment, parse_intent
 from alladin.journal.models import EventType
 from alladin.orchestration.bootstrap import Components, build_services
 from tests.conftest import make_intent
@@ -29,7 +29,7 @@ def test_full_pipeline_open_then_tp(svc: Components, broker: MockBroker) -> None
     sent = broker.sent_orders[0]
     assert sent.volume == res.decision.volume == 2.0  # volume du PositionSizer, jamais de l'agent
     assert sent.stop_loss is not None and sent.take_profit is not None
-    assert sent.magic == svc.run.magic and sent.comment == "ALLADIN|RUN-001|TREND-01"
+    assert sent.magic == svc.run.magic and sent.comment == "ALD-R-26000001"
     (trade,) = svc.repo.trades_for_run("RUN-001", "OPEN")
     assert (
         trade.ticket == res.position_ticket
@@ -164,9 +164,19 @@ def test_only_alladin_positions_of_this_run_are_managed(svc: Components, broker:
 
 
 def test_comment_roundtrip() -> None:
-    c = make_comment("RUN-001", "TREND-01")
-    assert c == "ALLADIN|RUN-001|TREND-01" and parse_comment(c) == ("RUN-001", "TREND-01")
-    assert parse_comment("manual") is None and len(make_comment("RUN-001", "X" * 50)) <= 31
+    run = make_comment("RUN-001", 26_000_001)
+    system = make_comment("SYSTEM-TEST-001", 26_000_002)
+    assert run == "ALD-R-26000001" and parse_comment(run) == ("RUN", 26_000_001)
+    assert system == "ALD-S-26000002" and parse_comment(system) == ("SYSTEM-TEST", 26_000_002)
+    assert len(run) <= 31 and len(system) <= 31
+    assert run.isascii() and system.isascii()
+    assert set(run + system) <= set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+    assert len(make_comment("RUN-001", 2**64 - 1)) <= 31
+    assert run != system and make_comment("RUN-999", 26_000_001) == run
+    assert comment_matches(run, "RUN-001", 26_000_001)
+    assert comment_matches(system, "SYSTEM-TEST-001", 26_000_002)
+    assert not comment_matches(run, "RUN-001", 26_000_002)
+    assert parse_comment("manual") is None
 
 
 def test_restart_reconciles_open_position_without_closing_it(settings, tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -191,13 +201,13 @@ def test_restart_reconciles_open_position_without_closing_it(settings, tmp_path)
 def test_orphan_alladin_position_is_adopted(svc: Components, broker: MockBroker) -> None:
     """Crash entre l'envoi et l'écriture en base : la position existe chez MT5 mais pas dans ALLADIN."""
     req = OrderRequest(action=OrderAction.OPEN, symbol="EURUSD", side=Side.BUY, volume=0.3, stop_loss=1.08,
-                       magic=svc.run.magic, comment=make_comment(svc.run.run_id, "TREND-01"))  # fmt: skip
+                       magic=svc.run.magic, comment=make_comment(svc.run.run_id, svc.run.magic))  # fmt: skip
     opened = broker.send_order(req, issue_open_token(svc.run.run_id, "orph", "EURUSD", 0.3))
     assert svc.repo.trades_for_run(svc.run.run_id) == []
     rep = svc.monitor.reconcile()
     assert rep.adopted == [opened.position_ticket]
     (t,) = svc.repo.trades_for_run(svc.run.run_id, "OPEN")
-    assert t.adopted and t.ticket == opened.position_ticket and t.strategy_id == "TREND-01"
+    assert t.adopted and t.ticket == opened.position_ticket and t.strategy_id == "UNKNOWN"
     assert svc.repo.events(svc.run.run_id, [EventType.RECONCILE])
 
 

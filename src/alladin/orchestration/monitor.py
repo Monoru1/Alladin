@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from alladin.brokers.base import BrokerAdapter
 from alladin.core.enums import DealEntry, Side
 from alladin.core.models import Deal, Position
-from alladin.execution.models import parse_comment
+from alladin.execution.models import comment_matches
 from alladin.journal.models import EventType, TradeRecord
 from alladin.journal.service import JournalService
 from alladin.orchestration.state import RunContext, RunManager
@@ -38,8 +38,9 @@ class PositionMonitor:
     def _mine(self, positions: list[Position]) -> tuple[list[Position], int]:
         mine = []
         for p in positions:
-            parsed = parse_comment(p.comment)
-            if p.magic == self.run.magic and parsed is not None and parsed[0] == self.run.run_id:
+            if p.magic == self.run.magic and comment_matches(
+                p.comment, self.run.run_id, self.run.magic
+            ):
                 mine.append(p)
         return mine, len(positions) - len(mine)
 
@@ -155,15 +156,13 @@ class PositionMonitor:
 
     def _adopt(self, pos: Position, now: datetime) -> None:
         """Position ALLADIN retrouvée sans enregistrement (crash entre envoi et écriture) : on la rattache."""
-        parsed = parse_comment(pos.comment)
-        strategy = parsed[1] if parsed else "UNKNOWN"
         risk = 0.0
         trade = TradeRecord(
             trade_id=f"adopted-{pos.ticket}",
             run_id=self.run.run_id,
             symbol=pos.symbol,
             side=pos.side.value,
-            strategy_id=strategy,
+            strategy_id="UNKNOWN",
             strategy_version="?",
             regime="UNKNOWN",
             agent="unknown",

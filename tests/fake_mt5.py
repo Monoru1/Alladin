@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -132,6 +133,10 @@ class FakeMT5:
     # -- ordres
     def order_check(self, req: dict[str, Any]) -> SimpleNamespace:
         self.order_check_calls.append(req)
+        comment = req.get("comment", "")
+        if len(comment) > 31 or re.fullmatch(r"[A-Za-z0-9_-]*", comment) is None:
+            self._err = (-2, 'Invalid "comment" argument')
+            return None  # type: ignore[return-value]
         return SimpleNamespace(retcode=0, comment="Done", margin=1000.0, margin_free=self.balance - 1000.0)
 
     def order_send(self, req: dict[str, Any]) -> SimpleNamespace:

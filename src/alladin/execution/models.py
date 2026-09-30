@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from enum import StrEnum
 from typing import Any
 
@@ -11,20 +12,33 @@ from pydantic import BaseModel, ValidationError
 from alladin.core.models import OrderCheck, OrderResult, TradeIntent
 from alladin.risk.models import RiskDecision
 
-COMMENT_PREFIX = "ALLADIN"
+COMMENT_PREFIX = "ALD"
 MT5_COMMENT_MAX = 31
+_COMMENT_RE = re.compile(r"^ALD-([RS])-([0-9]{1,20})$")
 
 
-def make_comment(run_id: str, strategy_id: str) -> str:
-    """Ex. 'ALLADIN|RUN-001|TREND-01' (31 caractères max côté MT5)."""
-    return f"{COMMENT_PREFIX}|{run_id}|{strategy_id}"[:MT5_COMMENT_MAX]
+def make_comment(run_id: str, magic: int) -> str:
+    """Identifiant MT5 court : le magic est la clé, le commentaire confirme le type de run."""
+    kind = "S" if run_id.startswith("SYSTEM-TEST-") else "R" if run_id.startswith("RUN-") else None
+    if kind is None or not 0 <= magic < 2**64:
+        raise ValueError("run_id ou magic invalide pour le commentaire MT5")
+    comment = f"{COMMENT_PREFIX}-{kind}-{magic}"
+    if len(comment) > MT5_COMMENT_MAX or not comment.isascii():
+        raise ValueError("commentaire MT5 trop long ou non ASCII")
+    return comment
 
 
-def parse_comment(comment: str) -> tuple[str, str] | None:
-    parts = comment.split("|")
-    if len(parts) >= 2 and parts[0] == COMMENT_PREFIX:
-        return parts[1], parts[2] if len(parts) > 2 else ""
-    return None
+def parse_comment(comment: str) -> tuple[str, int] | None:
+    match = _COMMENT_RE.fullmatch(comment)
+    if match is None:
+        return None
+    return ("SYSTEM-TEST" if match[1] == "S" else "RUN", int(match[2]))
+
+
+def comment_matches(comment: str, run_id: str, magic: int) -> bool:
+    parsed = parse_comment(comment)
+    expected_kind = "SYSTEM-TEST" if run_id.startswith("SYSTEM-TEST-") else "RUN"
+    return parsed == (expected_kind, magic)
 
 
 class ExecStatus(StrEnum):
