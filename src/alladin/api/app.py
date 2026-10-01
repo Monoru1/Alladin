@@ -49,8 +49,22 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
     @app.get("/health")
     def health() -> dict[str, Any]:
         acct = broker.account_info() if broker else None
-        return {"status": "ok", "broker_connected": broker is not None,
-                "demo": acct is None or acct.account_type is AccountType.DEMO}
+        # Last cycle: look for most recent cycle.end event across all runs
+        last_cycle_at: str | None = None
+        try:
+            runs = repo.list_runs()
+            if runs:
+                evts = repo.events(runs[0].run_id, ["cycle.end"], limit=1, desc=True)
+                if evts:
+                    last_cycle_at = evts[0].ts.isoformat()
+        except Exception:
+            pass
+        return {
+            "status": "ok",
+            "broker_connected": broker is not None,
+            "demo": acct is None or acct.account_type is AccountType.DEMO,
+            "last_cycle_at": last_cycle_at,
+        }
 
     @app.get("/api/overview")
     def overview(run_id: str | None = None) -> dict[str, Any]:
