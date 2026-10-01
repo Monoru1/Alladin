@@ -25,6 +25,7 @@ from alladin.execution.service import ExecutionService
 from alladin.journal.models import EventType
 from alladin.journal.service import JournalService
 from alladin.market.models import ScanReport
+from alladin.market.opportunity import Opportunity, OpportunityStatus
 from alladin.market.scanner import MarketScanner
 from alladin.orchestration.monitor import PositionMonitor
 from alladin.orchestration.state import RunContext, RunManager
@@ -127,10 +128,13 @@ class OrchestrationEngine:
         scan = self.scanner.scan(cycle_id=cycle_id, max_trade_risk=budget)
         self.journal.log(rid, EventType.SCAN, scan.summary())
 
-        # 3. régime -> routeur -> signaux de stratégies
+        # 3. créer les Opportunity objects à partir du scan
+        self._build_opportunities(scan, cycle_id)
+
+        # 4. régime -> routeur -> signaux de stratégies
         signals, evaluated = self._signals(scan)
 
-        # 4. agent
+        # 5. agent
         request = AgentRequest(run_id=rid, context=self._context(scan, signals))
         self.journal.log(rid, EventType.AGENT_REQUEST, {"agent": self.agent.name, "context": request.context})
         response = self.agent.propose(request)
@@ -151,7 +155,7 @@ class OrchestrationEngine:
                 scan, evaluated, response.agent, dec.reason or "l'agent ne propose aucun trade", shortlist
             )
 
-        # 5. validation de l'intention (rien de ce que dit l'agent n'est digne de confiance)
+        # 6. validation de l'intention (rien de ce que dit l'agent n'est digne de confiance)
         intent, problems = self._intent_from_draft(dec.intent, response.agent, shortlist)
         if intent is None:
             self.journal.log(
@@ -201,6 +205,56 @@ class OrchestrationEngine:
             reason=reason,
             shortlist=shortlist,
         )
+
+    def _build_opportunities(self, scan: ScanReport, cycle_id: str) -> list[Opportunity]:
+        """Convertit ScanCandidate -> Opportunity, journalise CREATED/REJECTED."""
+        opportunities: list[Opportunity] = []
+        rid = self.run.run_id
+
+        # Candidats rejetés -> FILTERED
+        for sym, reasons in scan.rejected.items():
+            opp = Opportunity(
+                opportunity_id=f"OPP-{uuid4().hex[:8]}",
+                cycle_id=cycle_id,
+                run_id=rid,
+                symbol=sym,
+                timeframe=self.scanner.primary,
+                timestamp=scan.scanned_at,
+                bid=0.0,
+                ask=0.0,
+                spread=0.0,
+                rejection_reasons=reasons,
+                status=OpportunityStatus.FILTERED,
+            )
+            self.journal.log(rid, EventType.OPPORTUNITY_REJECTED, opp.to_journal())
+            opportunities.append(opp)
+
+        # Candidats shortlistés -> QUALIFIED
+        for cand in scan.candidates:
+            opp = Opportunity(
+                opportunity_id=f"OPP-{uuid4().hex[:8]}",
+                cycle_id=cycle_id,
+                run_id=rid,
+                symbol=cand.symbol,
+                timeframe=self.scanner.primary,
+                timestamp=scan.scanned_at,
+                bid=cand.tick.bid if cand.tick else 0.0,
+                ask=cand.tick.ask if cand.tick else 0.0,
+                spread=cand.tick.spread if cand.tick else 0.0,
+                atr=cand.metrics.get("atr"),
+                spread_atr_ratio=cand.spread_atr_ratio,
+                regime=cand.regime,
+                regime_confidence=cand.regime_confidence,
+                session=cand.session,
+                direction=cand.bias,
+                strategy_candidates=list(cand.tf_trend.keys()) if cand.tf_trend else [],
+                setup_score=cand.score,
+                status=OpportunityStatus.QUALIFIED,
+            )
+            self.journal.log(rid, EventType.OPPORTUNITY_CREATED, opp.to_journal())
+            opportunities.append(opp)
+
+        return opportunities
 
     # ------------------------------------------------------------------ étapes
 

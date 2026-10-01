@@ -303,3 +303,50 @@ def test_approved_strategy_requires_explicit_lifecycle(rrepo: ResearchRepository
     # APPROVED n'est accessible que par update_status (progression du lifecycle)
     rrepo.update_status("FAKE-01", "1.0.0", StrategyStatus.APPROVED)
     assert rrepo.list_versions("FAKE-01")[0].status is StrategyStatus.APPROVED
+
+
+# ============================================================================
+# Opportunity pipeline integration
+# ============================================================================
+
+
+def test_opportunity_events_logged_in_run_cycle(svc: Components) -> None:
+    """run_cycle doit journaliser au moins un OPPORTUNITY_REJECTED ou OPPORTUNITY_CREATED."""
+    from alladin.journal.models import EventType
+
+    engine = svc.engine(MockAgent(), run_mode=RunMode.OBSERVE)
+    engine.run_cycle()
+    all_events = svc.repo.events(svc.run.run_id)
+    types = {e.type for e in all_events}
+    opp_types = {EventType.OPPORTUNITY_CREATED.value, EventType.OPPORTUNITY_REJECTED.value}
+    assert types & opp_types, f"Aucun event opportunity trouvé dans {types}"
+
+
+def test_opportunity_created_events_have_required_fields(svc: Components) -> None:
+    """Les events OPPORTUNITY_CREATED doivent contenir les champs attendus."""
+    from alladin.journal.models import EventType
+
+    engine = svc.engine(MockAgent(), run_mode=RunMode.OBSERVE)
+    engine.run_cycle()
+    created = svc.repo.events(svc.run.run_id, [EventType.OPPORTUNITY_CREATED.value])
+    for ev in created:
+        p = ev.payload
+        assert "opportunity_id" in p
+        assert "symbol" in p
+        assert p["status"] == "QUALIFIED"
+        assert "regime" in p
+        assert "setup_score" in p
+
+
+def test_opportunity_rejected_events_have_rejection_reasons(svc: Components) -> None:
+    """Les events OPPORTUNITY_REJECTED doivent avoir rejection_reasons non vide."""
+    from alladin.journal.models import EventType
+
+    engine = svc.engine(MockAgent(), run_mode=RunMode.OBSERVE)
+    engine.run_cycle()
+    rejected = svc.repo.events(svc.run.run_id, [EventType.OPPORTUNITY_REJECTED.value])
+    for ev in rejected:
+        p = ev.payload
+        assert "rejection_reasons" in p
+        assert isinstance(p["rejection_reasons"], list)
+        assert p["status"] == "FILTERED"
