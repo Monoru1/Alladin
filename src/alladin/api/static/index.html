@@ -7,10 +7,11 @@
 <style>
 :root{--bg:#071018;--panel:#0d1822;--panel2:#0a1520;--line:#1e3245;--text:#d9e6ec;--muted:#6a8595;--cyan:#5ec8d6;--amber:#f0b35a;--red:#e85555;--green:#52c97a;--blue:#4a9edd;--purple:#9b7fe8}
 *{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--text);font:13px/1.5 "Segoe UI",system-ui,sans-serif;min-height:100vh}
-header{position:sticky;top:0;z-index:10;background:#050e18ee;border-bottom:1px solid var(--line);padding:10px 18px;display:flex;gap:14px;align-items:center;backdrop-filter:blur(12px)}
+header{position:sticky;top:0;z-index:10;background:#050e18ee;border-bottom:1px solid var(--line);padding:10px 18px;display:flex;gap:14px;align-items:center;backdrop-filter:blur(12px);flex-wrap:wrap}
 .logo{font-size:16px;font-weight:700;letter-spacing:.08em;color:var(--cyan);white-space:nowrap}.logo small{font-size:10px;color:var(--muted);display:block;letter-spacing:.12em;font-weight:400}
 .badge{border:1px solid var(--line);padding:4px 9px;font:11px Consolas,monospace;border-radius:2px;white-space:nowrap}
 .demo{background:#f0b35a22;color:var(--amber);border-color:var(--amber)}.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}.muted{color:var(--muted)}
+.topbar-stats{display:flex;gap:8px;flex-wrap:wrap}
 nav{margin-left:auto;display:flex;gap:4px}nav button{background:transparent;color:var(--muted);border:1px solid var(--line);padding:6px 12px;cursor:pointer;font:12px inherit;border-radius:2px;transition:all .15s}nav button.active,nav button:hover{color:var(--text);border-color:var(--cyan);background:#0d1f2d}
 main{padding:12px;max-width:1900px;margin:auto}section{display:none}section.show{display:block}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px}.panel{background:var(--panel);border:1px solid var(--line);padding:13px;border-radius:3px;min-width:0}
@@ -28,18 +29,36 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
 .strat-status{display:inline-block;padding:2px 7px;border-radius:2px;font-size:10px;font-weight:600}.strat-ACTIVE{background:#52c97a22;color:var(--green)}.strat-INACTIVE{background:#1e3245;color:var(--muted)}
 .pipeline{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}.pip-step{padding:4px 10px;border:1px solid var(--line);border-radius:2px;font-size:11px;color:var(--muted)}
 .blocked-banner{background:#e8555522;border:1px solid var(--red);color:var(--red);padding:10px 14px;margin-bottom:10px;border-radius:3px;font-size:13px;display:none}
-@media(max-width:900px){.s3,.s4,.s6,.s8{grid-column:span 12}.metrics{grid-template-columns:repeat(2,1fr)}.ma-grid{grid-template-columns:repeat(2,1fr)}}
+/* BTC experiment cards */
+.btc-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.btc-card{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:12px}
+.btc-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.btc-name{font:13px/1 Consolas,monospace;font-weight:700;color:var(--cyan)}
+.btc-status{padding:2px 8px;border-radius:2px;font-size:10px;font-weight:600}
+.btc-OPEN{background:#52c97a22;color:var(--green);border:1px solid var(--green)}
+.btc-NO_ENTRY{background:#1e3245;color:var(--muted);border:1px solid var(--line)}
+.btc-REJECTED{background:#e8555522;color:var(--red);border:1px solid var(--red)}
+.btc-CLOSED_SL{background:#e8555522;color:var(--red);border:1px solid var(--red)}
+.btc-CLOSED_TP{background:#52c97a22;color:var(--green);border:1px solid var(--green)}
+.btc-PENDING{background:#f0b35a22;color:var(--amber);border:1px solid var(--amber)}
+.btc-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:1px solid #0d1a24}
+.btc-row:last-child{border-bottom:none}.btc-row .k{color:var(--muted)}.btc-row .v{font-family:Consolas,monospace}
+@media(max-width:900px){.s3,.s4,.s6,.s8{grid-column:span 12}.metrics{grid-template-columns:repeat(2,1fr)}.ma-grid{grid-template-columns:repeat(2,1fr)}.btc-cards{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">ALLADIN<small>MISSION CONTROL</small></div>
-  <span class="badge demo">DEMO</span>
-  <span id="h-mt5" class="badge muted">MT5</span>
-  <span id="h-algo" class="badge muted">ALGO</span>
-  <span id="h-mode" class="badge muted">OBSERVE</span>
-  <span id="h-run" class="badge muted">--</span>
-  <span id="h-updated" class="badge muted">--</span>
+  <div class="topbar-stats">
+    <span class="badge demo" id="h-mode-badge">DEMO</span>
+    <span id="h-mt5" class="badge muted">MT5</span>
+    <span id="h-algo" class="badge muted">ALGO</span>
+    <span id="h-mode" class="badge muted">OBSERVE</span>
+    <span id="h-run" class="badge muted">--</span>
+    <span id="h-heartbeat" class="badge muted">--</span>
+    <span id="h-cycle" class="badge muted">--</span>
+    <span id="h-updated" class="badge muted">--</span>
+  </div>
   <nav>
     <button class="active" data-page="control">Control</button>
     <button data-page="strategies">Strategy Lab</button>
@@ -50,32 +69,39 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
 <section id="control" class="show">
   <div id="blocked-banner" class="blocked-banner">EXECUTION BLOCKED - compte non DEMO</div>
   <div class="grid">
+    <!-- ROW 1: Account -->
     <article class="panel s8">
       <h2>Account / Equity envelope</h2>
       <div class="metrics">
-        <div class="metric"><div class="label">Balance</div><div class="value" id="m-balance">--</div></div>
-        <div class="metric"><div class="label">Equity</div><div class="value" id="m-equity">--</div></div>
-        <div class="metric"><div class="label">Floating P&amp;L</div><div class="value" id="m-fpnl">--</div></div>
-        <div class="metric"><div class="label">Free margin</div><div class="value" id="m-margin">--</div></div>
-        <div class="metric"><div class="label">Working capital</div><div class="value" id="m-wc">--</div></div>
-        <div class="metric"><div class="label">Max trade risk</div><div class="value" id="m-maxrisk">--</div></div>
-        <div class="metric"><div class="label">Open risk</div><div class="value" id="m-openrisk">--</div></div>
-        <div class="metric"><div class="label">Available risk</div><div class="value" id="m-availrisk">--</div></div>
-        <div class="metric"><div class="label">Leverage</div><div class="value" id="m-lev">--</div></div>
+        <div class="metric"><div class="label">Balance</div><div class="value" id="m-balance">N/A</div></div>
+        <div class="metric"><div class="label">Equity</div><div class="value" id="m-equity">N/A</div></div>
+        <div class="metric"><div class="label">Floating P&amp;L</div><div class="value" id="m-fpnl">N/A</div></div>
+        <div class="metric"><div class="label">Realized P&amp;L</div><div class="value" id="m-rpnl">N/A</div></div>
+        <div class="metric"><div class="label">Drawdown</div><div class="value" id="m-dd">N/A</div></div>
+        <div class="metric"><div class="label">Risk used</div><div class="value" id="m-riskused">N/A</div></div>
       </div>
     </article>
     <article class="panel s4">
       <h2>Challenge</h2>
-      <div class="ch-row"><span class="ch-label">Run</span><span class="ch-value" id="ch-run">--</span></div>
-      <div class="ch-row"><span class="ch-label">Phase</span><span class="ch-value" id="ch-phase">--</span></div>
-      <div class="ch-row"><span class="ch-label">State</span><span class="ch-value" id="ch-state">--</span></div>
-      <div class="ch-row"><span class="ch-label">Profit</span><span class="ch-value" id="ch-profit">--</span></div>
-      <div class="ch-row"><span class="ch-label">Target</span><span class="ch-value" id="ch-target">--</span></div>
-      <div class="ch-row"><span class="ch-label">Daily headroom</span><span class="ch-value" id="ch-daily">--</span></div>
-      <div class="ch-row"><span class="ch-label">Total headroom</span><span class="ch-value" id="ch-total">--</span></div>
-      <div class="ch-row"><span class="ch-label">Trading days</span><span class="ch-value" id="ch-days">--</span></div>
+      <div class="ch-row"><span class="ch-label">Phase</span><span class="ch-value" id="ch-phase">N/A</span></div>
+      <div class="ch-row"><span class="ch-label">State</span><span class="ch-value" id="ch-state">N/A</span></div>
+      <div class="ch-row"><span class="ch-label">Profit</span><span class="ch-value" id="ch-profit">N/A</span></div>
+      <div class="ch-row"><span class="ch-label">Target</span><span class="ch-value" id="ch-target">N/A</span></div>
+      <div class="ch-row"><span class="ch-label">Daily headroom</span><span class="ch-value" id="ch-daily">N/A</span></div>
+      <div class="ch-row"><span class="ch-label">Total headroom</span><span class="ch-value" id="ch-total">N/A</span></div>
+      <div class="ch-row"><span class="ch-label">Trading days</span><span class="ch-value" id="ch-days">N/A</span></div>
       <div class="bar"><div class="bar-fill" id="ch-bar" style="width:0%"></div></div>
     </article>
+
+    <!-- ROW 2: BTC THREE-WAY EXPERIMENT -->
+    <article class="panel s12">
+      <h2>BTC Three-Way Experiment</h2>
+      <div class="btc-cards" id="btc-cards">
+        <div class="btc-card"><p class="empty">Aucune experience BTC.</p></div>
+      </div>
+    </article>
+
+    <!-- ROW 3: Positions + Risk -->
     <article class="panel s6">
       <h2>Live positions</h2>
       <div id="positions-body"><p class="empty">Aucune position ALLADIN ouverte.</p></div>
@@ -84,15 +110,19 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
       <h2>Risk map - currency exposure</h2>
       <div id="risk-map-body"><p class="empty">Aucune exposition.</p></div>
     </article>
+
+    <!-- ROW 4: Opportunity Radar -->
     <article class="panel s12">
-      <h2>Opportunity Radar - candidats du dernier scan</h2>
+      <h2>Opportunity Radar</h2>
       <div style="overflow-x:auto">
       <table>
-        <thead><tr><th>Symbol</th><th>TF</th><th>Status</th><th>Regime</th><th>Side</th><th>Score</th><th>Spread/ATR</th><th>R:R</th><th>Strategies</th><th>Reason</th></tr></thead>
+        <thead><tr><th>Symbol</th><th>TF</th><th>Status</th><th>Regime</th><th>Side</th><th>Score</th><th>Spread/ATR</th><th>R:R</th><th>Strategies</th><th>Why / Why not</th></tr></thead>
         <tbody id="opp-rows"><tr><td colspan="10" class="empty">Aucun scan recent.</td></tr></tbody>
       </table>
       </div>
     </article>
+
+    <!-- ROW 5: Brain Trace -->
     <article class="panel s8">
       <h2>Brain - Decision trace</h2>
       <div id="brain-body" class="trace"><p class="empty">Aucun cycle.</p></div>
@@ -100,16 +130,16 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
     <article class="panel s4">
       <h2>Market activity</h2>
       <div class="ma-grid">
-        <div class="ma-item"><div class="ma-num" id="ma-eligible">--</div><div class="ma-lbl">Eligible</div></div>
-        <div class="ma-item"><div class="ma-num" id="ma-analysed">--</div><div class="ma-lbl">Analysed</div></div>
-        <div class="ma-item"><div class="ma-num" id="ma-short">--</div><div class="ma-lbl">Shortlist</div></div>
-        <div class="ma-item"><div class="ma-num" id="ma-opp">--</div><div class="ma-lbl">Opportunities</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-eligible">N/A</div><div class="ma-lbl">Eligible</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-analysed">N/A</div><div class="ma-lbl">Analysed</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-short">N/A</div><div class="ma-lbl">Shortlist</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-opp">N/A</div><div class="ma-lbl">Opportunities</div></div>
       </div>
       <div id="ma-regimes" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
     </article>
     <article class="panel s12">
       <h2>Journal integrity</h2>
-      <div id="jnl-integrity" class="muted">--</div>
+      <div id="jnl-integrity" class="muted">N/A</div>
     </article>
   </div>
 </section>
@@ -137,7 +167,6 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
       <h2>Experiences et resultats</h2>
       <table><thead><tr><th>ID</th><th>Strategie</th><th>Split</th><th>Dataset</th><th>Trades</th><th>Win rate</th><th>Expectancy</th><th>PF</th><th>Max DD</th><th>Passed</th></tr></thead>
       <tbody id="res-experiments"><tr><td colspan="10" class="empty">Aucune experience.</td></tr></tbody></table>
-      <p style="margin-top:10px;font-size:11px;color:var(--muted)">SOURCE -&gt; FINDING -&gt; HYPOTHESIS -&gt; FORMALIZATION -&gt; BACKTEST -&gt; OOS -&gt; DEMO -&gt; CANDIDATE -&gt; APPROVED. Aucun resultat n est invente.</p>
     </article>
   </div>
 </section>
@@ -145,9 +174,17 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
 <script>
 "use strict";
 const $id = id => document.getElementById(id);
+const safe = v => v == null ? "N/A" : v;
 const money = (v, c) => v == null ? "N/A" : new Intl.NumberFormat("fr-FR", {style:"currency",currency:c||"EUR",maximumFractionDigits:2}).format(v);
 const pct = v => v == null ? "N/A" : v.toFixed(2) + "%";
-async function api(u) { const r = await fetch(u); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+const rval = v => v == null ? "N/A" : v.toFixed(2) + "R";
+let _inflight = {};
+async function api(u) {
+  if (_inflight[u]) return _inflight[u];
+  const p = fetch(u).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); }).finally(() => delete _inflight[u]);
+  _inflight[u] = p;
+  return p;
+}
 const EVT = {
   "cycle.start":"CYCLE START","cycle.end":"CYCLE END","market.scan":"SCAN",
   "strategy.routing":"ROUTING","strategy.signal":"SIGNAL","strategy.evaluation":"STRATEGY",
@@ -156,13 +193,13 @@ const EVT = {
   "risk.decision":"RISK","order.precheck":"PRECHECK","order.sent":"ORDER","order.result":"ORDER RES",
   "position.opened":"POS OPEN","position.closed":"POS CLOSE","position.update":"POS UPD",
   "opportunity.created":"OPP","opportunity.rejected":"OPP REJECT",
-  "mode.change":"MODE","reconcile":"RECONCILE","info":"INFO"
+  "mode.change":"MODE","reconcile":"RECONCILE","info":"INFO","btc.experiment":"BTC EXP"
 };
 function humanMsg(t, p) {
   if (t === "market.scan") return (p.analysed ?? "N/A") + " analysed / " + (p.candidates?.length ?? 0) + " candidates | regimes: " + JSON.stringify(p.regime_counts || {});
   if (t === "cycle.start") return "cycle " + (p.cycle||"?") + " | mode " + (p.execute ? "DEMO":"OBSERVE") + " | agent " + (p.agent||"?");
   if (t === "cycle.end") return (p.decision||"?") + " | " + (p.reason||"") + " | [" + (p.shortlist||[]).join(", ") + "]";
-  if (t === "risk.decision") return (p.approved ? "APPROVED":"REJECTED") + " | vol " + (p.volume??"--") + " | risk " + (p.risk_amount != null ? money(p.risk_amount) : "N/A");
+  if (t === "risk.decision") return (p.approved ? "APPROVED":"REJECTED") + " | vol " + (p.volume??"N/A") + " | risk " + (p.risk_amount != null ? money(p.risk_amount) : "N/A");
   if (t === "decision.no_trade") return p.reason || "no trade";
   if (t === "decision.trade_intent") return (p.instrument||"?") + " " + (p.side||"?") + " SL " + (p.stop_loss??"?") + " TP " + (p.take_profit??"?");
   if (t === "order.result") return "retcode " + (p.retcode||"?") + " ticket " + (p.order||"?");
@@ -171,27 +208,48 @@ function humanMsg(t, p) {
   if (t === "mode.change") return "mode=" + (p.run_mode||"?") + " interval=" + (p.interval_s||"?") + "s";
   if (t === "strategy.evaluation") return (p.symbol||"?") + " | " + (p.regime||"?") + " | " + JSON.stringify(p.results||{});
   if (t === "info") return p.alert || JSON.stringify(p).slice(0,100);
+  if (t === "btc.experiment") return (p.name||"?") + " " + (p.hypothesis||"?") + " " + (p.status||"?");
   return Object.entries(p).slice(0,3).map(([k,v]) => k + "=" + JSON.stringify(v)).join(" | ");
+}
+function btcCard(exp) {
+  if (!exp) return '<div class="btc-card"><p class="empty">N/A</p></div>';
+  const st = exp.status || "PENDING";
+  const pos = exp.position;
+  let rows = '<div class="btc-row"><span class="k">Hypothesis</span><span class="v">' + (exp.hypothesis||"N/A") + '</span></div>';
+  rows += '<div class="btc-row"><span class="k">Regime</span><span class="v">' + (exp.regime||"N/A") + '</span></div>';
+  if (pos) {
+    rows += '<div class="btc-row"><span class="k">Side</span><span class="v ' + (pos.side==="BUY"?"pos-buy":"pos-sell") + '">' + (pos.side||"N/A") + '</span></div>';
+    rows += '<div class="btc-row"><span class="k">Entry</span><span class="v">' + safe(pos.entry_price) + '</span></div>';
+    rows += '<div class="btc-row"><span class="k">SL</span><span class="v">' + safe(pos.stop_loss) + '</span></div>';
+    rows += '<div class="btc-row"><span class="k">TP</span><span class="v">' + safe(pos.take_profit) + '</span></div>';
+    rows += '<div class="btc-row"><span class="k">P&L</span><span class="v ' + (pos.pnl_usdt>=0?"ok":"bad") + '">' + safe(pos.pnl_usdt) + ' USDT</span></div>';
+    rows += '<div class="btc-row"><span class="k">R</span><span class="v">' + rval(pos.pnl_r) + '</span></div>';
+    rows += '<div class="btc-row"><span class="k">MFE R</span><span class="v">' + rval(pos.mfe_r) + '</span></div>';
+    rows += '<div class="btc-row"><span class="k">MAE R</span><span class="v">' + rval(pos.mae_r) + '</span></div>';
+  } else if (exp.rejection_reason) {
+    rows += '<div class="btc-row"><span class="k">Reason</span><span class="v" style="color:var(--muted);font-size:11px;word-break:break-all">' + exp.rejection_reason + '</span></div>';
+  }
+  return '<div class="btc-card"><div class="btc-card-header"><span class="btc-name">' + (exp.name||"N/A") + '</span><span class="btc-status btc-' + st + '">' + st + '</span></div>' + rows + '</div>';
 }
 function oppRows(cands) {
   if (!cands?.length) return '<tr><td colspan="10" class="empty">Aucun candidat dans le dernier scan.</td></tr>';
   return cands.map(c => {
-    const st = c.status || "SEEN", dir = c.bias || c.direction || "--";
-    const rea = (c.rejection_reasons || []).join(", ") || "--";
-    return '<tr><td>' + (c.symbol||"?") + '</td><td>' + (c.timeframe||"--") + '</td>' +
-      '<td class="opp-' + st + '">' + st + '</td><td>' + (c.regime||"--") + '</td><td>' + dir + '</td>' +
-      '<td>' + (c.score != null ? c.score.toFixed(3) : "--") + '</td>' +
-      '<td>' + (c.spread_atr_ratio != null ? c.spread_atr_ratio.toFixed(3) : "--") + '</td>' +
-      '<td>' + (c.planned_rr != null ? c.planned_rr.toFixed(1) + "R" : "--") + '</td>' +
+    const st = c.status || "SEEN", dir = c.bias || c.direction || "N/A";
+    const rea = (c.rejection_reasons || []).join(", ") || "N/A";
+    return '<tr><td>' + (c.symbol||"?") + '</td><td>' + (c.timeframe||"N/A") + '</td>' +
+      '<td class="opp-' + st + '">' + st + '</td><td>' + (c.regime||"N/A") + '</td><td>' + dir + '</td>' +
+      '<td>' + (c.score != null ? c.score.toFixed(3) : "N/A") + '</td>' +
+      '<td>' + (c.spread_atr_ratio != null ? c.spread_atr_ratio.toFixed(3) : "N/A") + '</td>' +
+      '<td>' + (c.planned_rr != null ? c.planned_rr.toFixed(1) + "R" : "N/A") + '</td>' +
       '<td style="font-size:11px">' + (c.strategy_candidates||[]).join(", ") + '</td>' +
       '<td style="font-size:11px;color:var(--muted)">' + rea + '</td></tr>';
   }).join("");
 }
-async function refresh() {
+/* FAST polling: positions, BTC experiments, daemon, account (2s) */
+async function refreshFast() {
   try {
-    const [ov, pos, mkt, jnl, st] = await Promise.all([
-      api("/api/overview"), api("/api/positions"), api("/api/market"),
-      api("/api/journal?limit=60"), api("/api/strategies")
+    const [ov, pos, btc] = await Promise.all([
+      api("/api/overview"), api("/api/positions"), api("/api/btc/experiments")
     ]);
     const a = ov.account || {}, c = a.currency || "EUR", r = ov.risk || {}, ch = ov.challenge || {};
     const set = (id, t) => { const e = $id(id); if (e) e.textContent = t; };
@@ -200,26 +258,36 @@ async function refresh() {
     $id("h-mt5").className = "badge " + (a.server ? "ok" : "muted");
     $id("h-algo").textContent = "ALGO " + (a.trade_allowed ? "ON" : "OFF");
     $id("h-algo").className = "badge " + (a.trade_allowed ? "ok" : "warn");
-    $id("h-mode").textContent = ov.run?.kind || "--";
-    $id("h-run").textContent = ov.run?.run_id || "--";
-    $id("h-updated").textContent = new Date().toLocaleTimeString();
+    $id("h-mode").textContent = ov.run?.kind || "N/A";
+    $id("h-run").textContent = ov.run?.run_id?.slice(0,12) || "N/A";
+    $id("h-heartbeat").textContent = new Date().toLocaleTimeString();
+    $id("h-heartbeat").className = "badge ok";
     $id("blocked-banner").style.display = ov.execution_blocked ? "block" : "none";
     set("m-balance", money(a.balance, c)); set("m-equity", money(a.equity, c));
     const fp = a.floating_pnl;
     $id("m-fpnl").textContent = money(fp, c);
     $id("m-fpnl").className = "value " + (fp > 0 ? "pos" : fp < 0 ? "neg" : "");
-    set("m-margin", money(a.free_margin, c)); set("m-wc", money(r.working_capital, c));
-    set("m-maxrisk", money(r.max_trade_risk, c)); set("m-openrisk", money(r.open_risk, c));
-    set("m-availrisk", money(r.available_risk, c));
-    set("m-lev", a.leverage ? "1:" + a.leverage : "N/A");
-    set("ch-run", ov.run?.run_id || "--"); set("ch-phase", ch.phase_name || "--");
-    set("ch-state", ch.run_state || ov.run?.state || "--"); set("ch-profit", pct(ch.profit_pct));
-    set("ch-target", ch.target_pct != null ? ch.target_pct + "%" : "--");
+    set("m-rpnl", money(ch.realized_pnl, c));
+    const ddPct = ch.current_dd_pct;
+    set("m-dd", ddPct != null ? ddPct.toFixed(2) + "%" : "N/A");
+    const openRisk = r.open_risk, maxRisk = r.max_trade_risk;
+    set("m-riskused", openRisk != null ? money(openRisk, c) : "N/A");
+    set("ch-phase", ch.phase_name || "N/A");
+    set("ch-state", ch.run_state || ov.run?.state || "N/A");
+    set("ch-profit", pct(ch.profit_pct)); set("ch-target", ch.target_pct != null ? ch.target_pct + "%" : "N/A");
     set("ch-daily", money(ch.daily_headroom, c)); set("ch-total", money(ch.total_headroom, c));
     set("ch-days", (ch.trading_days ?? 0) + " / " + (ch.min_trading_days ?? "?"));
     const pp = Math.max(0, Math.min(100, ch.profit_pct || 0));
     const b = $id("ch-bar"); b.style.width = pp + "%";
     b.className = "bar-fill" + (pp > 80 ? " ok" : pp > 50 ? "" : " warn");
+    // BTC experiments
+    const exps = btc.experiments || [];
+    if (exps.length === 3) {
+      seth("btc-cards", exps.map(btcCard).join(""));
+    } else if (exps.length > 0) {
+      seth("btc-cards", exps.map(btcCard).join(""));
+    }
+    // Positions
     seth("positions-body", pos.length ? pos.map(x => {
       const s = x.side || "?", cls = s === "BUY" ? "" : "short", sc = s === "BUY" ? "pos-buy" : "pos-sell";
       return '<div class="pos-card ' + cls + '">' +
@@ -230,20 +298,30 @@ async function refresh() {
         '<span class="' + (x.profit >= 0 ? "ok" : "bad") + '">' + money(x.profit, c) + '</span>' +
         '<span class="pos-meta">R ' + (x.r_current != null ? x.r_current.toFixed(2) : "N/A") + '</span>' +
         '</div><div class="pos-row" style="margin-top:3px">' +
-        '<span class="pos-meta">Entry ' + x.price_open + ' SL ' + (x.sl ?? "--") + ' TP ' + (x.tp ?? "--") + ' Now ' + x.price_current + '</span></div>' +
-        (x.trade ? '<div class="pos-meta" style="margin-top:2px">' + x.trade.strategy_id + ' ' + x.trade.strategy_version + ' | ' + (x.trade.agent||"?") + ' | cycle ' + (x.trade.cycle_id||"N/A") + '</div>' : "") +
+        '<span class="pos-meta">Entry ' + x.price_open + ' SL ' + (x.sl ?? "N/A") + ' TP ' + (x.tp ?? "N/A") + ' Now ' + x.price_current + '</span></div>' +
+        (x.trade ? '<div class="pos-meta" style="margin-top:2px">' + x.trade.strategy_id + ' ' + x.trade.strategy_version + ' | ' + (x.trade.agent||"?") + '</div>' : "") +
         '</div>';
     }).join("") : '<p class="empty">Aucune position ALLADIN ouverte.</p>');
+    // Risk map
     const ex = r.exposure?.currency_net_risk || {};
     const ee = Object.entries(ex);
     seth("risk-map-body", ee.length ?
       ee.map(([cy, n]) => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0d1a24;font-size:12px">' +
         '<span style="color:var(--muted)">' + cy + '</span>' +
-        '<span class="' + (n > 0 ? "ok" : n < 0 ? "bad" : "") + '" style="font-family:Consolas,monospace">' + money(n, c) + " " + (n > 0 ? "LONG" : "SHORT") + "</span></div>").join("") +
-      '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;margin-top:4px">' +
-      '<span style="color:var(--muted)">Total open risk</span>' +
-      '<span style="font-family:Consolas,monospace">' + money(r.open_risk, c) + '</span></div>'
+        '<span class="' + (n > 0 ? "ok" : n < 0 ? "bad" : "") + '" style="font-family:Consolas,monospace">' + money(n, c) + " " + (n > 0 ? "LONG" : "SHORT") + "</span></div>").join("")
       : '<p class="empty">Aucune exposition.</p>');
+  } catch (err) {
+    $id("h-heartbeat").textContent = "ERR"; $id("h-heartbeat").className = "badge bad"; console.error(err);
+  }
+}
+/* MEDIUM polling: opportunities, cycles (8s) */
+async function refreshMedium() {
+  try {
+    const [mkt, jnl] = await Promise.all([
+      api("/api/market"), api("/api/journal?limit=40")
+    ]);
+    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    const set = (id, t) => { const e = $id(id); if (e) e.textContent = t; };
     seth("opp-rows", oppRows(mkt.candidates));
     set("ma-eligible", mkt.universe_size ?? "N/A"); set("ma-analysed", mkt.analysed ?? "N/A");
     set("ma-short", (mkt.candidates || []).length); set("ma-opp", mkt.opportunities ?? "N/A");
@@ -252,14 +330,18 @@ async function refresh() {
       const lbl = EVT[e.type] || e.type, msg = humanMsg(e.type, e.payload);
       const t = new Date(e.ts).toLocaleTimeString();
       const cy = e.cycle_id ? ' <span style="color:var(--muted);font-size:10px">[' + e.cycle_id + ']</span>' : "";
-      return '<div class="trace-line">' +
-        '<span class="trace-time">' + t + '</span>' +
-        '<span class="trace-event">' + lbl + cy + '</span>' +
-        '<div class="trace-msg">' + msg +
-        '<details class="trace-raw"><summary>raw</summary><pre>' + JSON.stringify(e.payload, null, 2) + '</pre></details>' +
-        '</div></div>';
+      return '<div class="trace-line"><span class="trace-time">' + t + '</span><span class="trace-event">' + lbl + cy + '</span><div class="trace-msg">' + msg + '<details class="trace-raw"><summary>raw</summary><pre>' + JSON.stringify(e.payload, null, 2) + '</pre></details></div></div>';
     }).join("") : '<p class="empty">Aucun cycle enregistre.</p>');
-    seth("jnl-integrity", "JOURNAL CHAIN <b class=\"" + (ov.journal?.ok ? "ok" : "bad") + "\">" + (ov.journal?.ok ? "OK" : "BROKEN") + "</b> -- " + (ov.journal?.detail || ""));
+    const health = await api("/health");
+    if (health.last_cycle_at) set("h-cycle", "Last: " + new Date(health.last_cycle_at).toLocaleTimeString());
+    seth("jnl-integrity", "N/A");
+  } catch (err) { console.error("medium", err); }
+}
+/* SLOW polling: research, strategy stats (30s) */
+async function refreshSlow() {
+  try {
+    const st = await api("/api/strategies");
+    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
     seth("strat-rows", st.length ? st.map(s => {
       const p = s.performance, sc = s.enabled ? "ACTIVE" : "INACTIVE";
       return '<tr><td>' + s.id + '</td><td>' + s.version + '</td>' +
@@ -272,25 +354,24 @@ async function refresh() {
         '<td>' + (p?.profit_factor != null ? p.profit_factor.toFixed(2) : "N/A") + '</td>' +
         '<td>' + (p?.max_drawdown != null ? (p.max_drawdown*100).toFixed(1)+"%" : "N/A") + '</td></tr>';
     }).join("") : '<tr><td colspan="10" class="empty">Aucune strategie.</td></tr>');
-  } catch (err) {
-    $id("h-mt5").textContent = "DISCONNECTED"; $id("h-mt5").className = "badge bad"; console.error(err);
-  }
+  } catch (err) { console.error("slow", err); }
 }
 async function refreshResearch() {
   try {
     const d = await api("/api/research");
-    $id("res-pipeline").innerHTML = (d.pipeline||[]).map(s => '<span class="pip-step">' + s + '</span>').join("");
-    $id("res-sources").innerHTML = d.sources?.length ?
+    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    seth("res-pipeline", (d.pipeline||[]).map(s => '<span class="pip-step">' + s + '</span>').join(""));
+    seth("res-sources", d.sources?.length ?
       d.sources.map(s => '<div style="padding:5px 0;border-bottom:1px solid var(--line);font-size:12px"><b>' + s.title + '</b><br><span style="color:var(--muted)">' + s.source_type + ' | ' + (s.retrieved_at?.split("T")[0]||"?") + '</span></div>').join("") :
-      '<p class="empty">Aucune source enregistree.</p>';
-    $id("res-findings").innerHTML = d.findings?.length ?
+      '<p class="empty">Aucune source enregistree.</p>');
+    seth("res-findings", d.findings?.length ?
       d.findings.map(f => '<div style="padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">' + f.claim + '<br><span style="color:var(--muted)">' + f.market + ' | ' + f.timeframe + '</span></div>').join("") :
-      '<p class="empty">Aucun finding.</p>';
-    $id("res-versions").innerHTML = d.versions?.length ?
+      '<p class="empty">Aucun finding.</p>');
+    seth("res-versions", d.versions?.length ?
       d.versions.map(v => '<tr><td>' + v.strategy_id + '</td><td>' + v.version + '</td><td style="color:var(--cyan)">' + v.status + '</td><td style="font-size:11px">' + (v.hypothesis_ids||[]).join(", ") + '</td></tr>').join("") :
-      '<tr><td colspan="4" class="empty">Aucune version.</td></tr>';
+      '<tr><td colspan="4" class="empty">Aucune version.</td></tr>');
     const res = {}; (d.results||[]).forEach(r => { res[r.experiment_id] = r; });
-    $id("res-experiments").innerHTML = d.experiments?.length ?
+    seth("res-experiments", d.experiments?.length ?
       d.experiments.map(e => {
         const r = res[e.experiment_id];
         return '<tr><td style="font-size:11px">' + e.experiment_id + '</td><td>' + e.strategy_id + '</td>' +
@@ -311,8 +392,10 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
   if (b.dataset.page === "research") refreshResearch();
 });
-refresh(); setInterval(refresh, 2000);
-refreshResearch(); setInterval(refreshResearch, 30000);
+/* Tiered polling */
+refreshFast(); setInterval(refreshFast, 2000);
+refreshMedium(); setInterval(refreshMedium, 8000);
+refreshSlow(); setInterval(refreshSlow, 30000);
 </script>
 </body>
 </html>

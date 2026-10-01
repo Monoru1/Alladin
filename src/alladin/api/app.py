@@ -195,4 +195,19 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             "total_filtered": len(filtered),
         }
 
+    @app.get("/api/btc/experiments")
+    def btc_experiments() -> dict[str, Any]:
+        """BTC Three-Way Experiment status (read-only)."""
+        # Look for BTC experiment data in journal
+        try:
+            runs = repo.list_runs()
+            if not runs:
+                return {"experiments": [], "active": 0, "total": 0}
+            rid = runs[0].run_id
+            btc_events = repo.events(rid, ["btc.experiment"], limit=10, desc=True)
+            experiments = [e.payload for e in btc_events] if btc_events else []
+            return {"experiments": experiments, "active": 0, "total": len(experiments)}
+        except Exception:
+            return {"experiments": [], "active": 0, "total": 0}
+
     return app
