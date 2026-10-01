@@ -38,6 +38,49 @@ def _tf_trend(bars: list[Bar]) -> int:
     return 0
 
 
+
+# Nombre minimum de cycles entre deux rafraîchissements par timeframe
+TF_CYCLE_INTERVAL: dict[str, int] = {
+    "M1": 1,
+    "M5": 1,
+    "M15": 2,
+    "M30": 3,
+    "H1": 4,
+    "H4": 12,
+    "D1": 48,
+    "W1": 240,
+}
+
+
+class TimeframeScheduler:
+    """Limite la fréquence de fetch des barres par timeframe.
+
+    Un timeframe rapide (M5) est rechargé à chaque cycle.
+    Un timeframe lent (D1) est rechargé seulement tous les N cycles.
+    Les barres en cache sont réutilisées entre les rechargements.
+
+    Le cache est indexé par (symbol, tf) pour éviter les croisements entre symboles.
+    """
+
+    def __init__(self, timeframes: tuple[Timeframe, ...], intervals: dict[str, int] | None = None) -> None:
+        self._intervals = intervals or TF_CYCLE_INTERVAL
+        self._tfs = timeframes
+        self._last_fetch: dict[tuple[str, str], int] = {}  # (symbol, tf.value) -> dernier cycle_number
+        self._cache: dict[tuple[str, str], list[Bar]] = {}  # (symbol, tf.value) -> barres
+
+    def due(self, symbol: str, tf: Timeframe, cycle_number: int) -> bool:
+        interval = self._intervals.get(tf.value, 1)
+        last = self._last_fetch.get((symbol, tf.value), -999)
+        return (cycle_number - last) >= interval
+
+    def mark_fetched(self, symbol: str, tf: Timeframe, cycle_number: int, bars: list[Bar]) -> None:
+        self._last_fetch[(symbol, tf.value)] = cycle_number
+        self._cache[(symbol, tf.value)] = bars
+
+    def cached(self, symbol: str, tf: Timeframe) -> list[Bar]:
+        return self._cache.get((symbol, tf.value), [])
+
+
 class MarketScanner:
     def __init__(
         self,
@@ -63,10 +106,13 @@ class MarketScanner:
         self.bars_count = bars_count
         self.max_tick_age_s = max_tick_age_s
         self.archive = archive
+        self._scheduler = TimeframeScheduler(self.timeframes)
+        self._cycle_number = 0
 
     def scan(
         self, *, limit: int | None = None, cycle_id: str | None = None, max_trade_risk: float | None = None
     ) -> ScanReport:
+        self._cycle_number += 1
         now = self.broker.now()
         uni = self.universe.discover()
         rejected: dict[str, list[str]] = {s: [r] for s, r in uni.excluded.items()}
@@ -102,7 +148,15 @@ class MarketScanner:
                 elif self.max_tick_age_s is not None and age > self.max_tick_age_s:
                     rejected[sym] = [f"tick périmé ({age / 60:.0f} min) : marché fermé ?"]
                     continue
-                bars = {tf: self.broker.bars(sym, tf, self.bars_count) for tf in self.timeframes}
+                bars = {}
+                for tf in self.timeframes:
+                    if self._scheduler.due(sym, tf, self._cycle_number):
+                        fetched = self.broker.bars(sym, tf, self.bars_count)
+                        self._scheduler.mark_fetched(sym, tf, self._cycle_number, fetched)
+                        bars[tf] = fetched
+                    else:
+                        cached = self._scheduler.cached(sym, tf)
+                        bars[tf] = cached if cached else self.broker.bars(sym, tf, self.bars_count)
                 if self.archive is not None:
                     archived += sum(self.archive.store(sym, tf, b, cycle_id) for tf, b in bars.items())
                 prim = bars[self.primary]
