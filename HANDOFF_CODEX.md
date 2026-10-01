@@ -1,5 +1,20 @@
 # HANDOFF CODEX — ALLADIN
 
+## Checkpoint Codex Phase 2 — 2026-10-01
+
+Commit de correction `ed311b4` pousse sur `origin/main` apres le HEAD Claude `c52113b`.
+Validation : 280 tests passes, 3 ignores ; Ruff et mypy propres ; JavaScript `node --check` OK ; `git diff --check` propre. Aucun ordre MT5 ni Binance envoye.
+
+- Backtest : signal a la cloture de i, fill a l'open de i+1 ; prix executables bid/ask ; gaps au prix d'ouverture ; politique intrabar explicite `CONSERVATIVE_STOP_FIRST` ou `EXCLUDE_AMBIGUOUS` ; pas de MFE/MAE apres une sortie intrabar.
+- R : `loss_per_lot` est une perte totale au stop pour un lot ; risque initial fige a l'ouverture ; commission, slippage et swap comptabilises une fois ; spread deja porte par les prix executables.
+- BTC : klines fermees seulement, decision H1 confirmee par M15/M5 clotures et recentes, identites/positions conservees entre evaluations, sizing borne par pas/minimum/notionnel/capital, short etiquete `SYNTHETIC_PAPER_SHORT`.
+- DEMO : seules les versions `APPROVED` passent le registre ; PAPER demande `research_paper: true` ou une approbation ; transitions Research sequentielles ; OOS exclu du classement automatique.
+- Mission Control : `/health` expose le dernier run officiel et son etat ; HTML externe filtre avant insertion ; polling par flux sans chevauchement. API toujours en lecture seule.
+- MT5 DEMO : `sync --system-test` a reconcilie ticket EURUSD BUY `58707143622`, trade `2924d4e184ca`, deal `58325810043` ; sortie SL `1.13113` le 2026-10-01 06:40:43 UTC ; commission 0, swap 0, P&L net -1,77 EUR, R journalise -1,003 ; aucune position ouverte.
+- BTC Three-Way PAPER sur donnees mock : exactement 3 definitions, toutes `NO_ENTRY` avec raison pour le snapshot teste (regime LOW_VOLATILITY / prix milieu de range). Aucune entree forcee.
+
+Limites restantes : experiment BTC conserve son etat dans une instance de moteur, sans persistance apres redemarrage du processus ; aucun essai Binance Testnet live ; provenance du modele de cout reste dans les parametres d'experience sans schema impose ; le controle de hash du code approuve n'est pas automatise. Les sections historiques ci-dessous decrivent l'etat Claude avant ce checkpoint et peuvent etre perimees.
+
 Lire d'abord `README.md`. Ne PAS reconstruire le projet : le MVP existe et est teste.
 Regle absolue : **DEMO uniquement, argent reel interdit, fail closed**. Ne jamais lancer RUN-001 officiel ni d'ordre sans confirmation explicite de l'utilisateur.
 
