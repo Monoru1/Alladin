@@ -41,12 +41,14 @@ challenge_app = typer.Typer(no_args_is_help=True, help="Challenge : état du run
 runs_app = typer.Typer(no_args_is_help=True, help="Gestion des runs (RUN-001, RUN-002...).")
 positions_app = typer.Typer(no_args_is_help=True, help="Positions ALLADIN.")
 replay_app = typer.Typer(no_args_is_help=True, help="Replay read-only des décisions.")
+archive_app = typer.Typer(no_args_is_help=True, help="Archive de barres OHLCV.")
 app.add_typer(mt5_app, name="mt5")
 app.add_typer(market_app, name="market")
 app.add_typer(challenge_app, name="challenge")
 app.add_typer(runs_app, name="runs")
 app.add_typer(positions_app, name="positions")
 app.add_typer(replay_app, name="replay")
+app.add_typer(archive_app, name="archive")
 
 console = Console(markup=False, highlight=False)
 BrokerOpt = Annotated[str, typer.Option("--broker", help="mt5 | mock")]
@@ -781,6 +783,39 @@ def replay_cycle(cycle_id: str) -> None:
     except ValueError as exc:
         raise die(str(exc), 2) from exc
     out(replay.model_dump_json(indent=2))
+
+
+@archive_app.command("stats")
+def archive_stats() -> None:
+    """Statistiques de l'archive de barres OHLCV."""
+    from alladin.journal.repository import JournalRepository
+    from alladin.market.archive import MarketDataArchive
+
+    repo = JournalRepository.from_url(get_settings().db_url)
+    arch = MarketDataArchive(repo.engine)
+    s = arch.stats()
+    out(f"Barres archivees : {s['bars']:,}")
+    out(f"Symboles         : {s['symbols']}")
+
+
+@archive_app.command("inspect")
+def archive_inspect(cycle_id: str) -> None:
+    """Inspecte les barres archivees pour un cycle donné."""
+    from alladin.journal.repository import JournalRepository
+    from alladin.market.archive import MarketDataArchive
+
+    repo = JournalRepository.from_url(get_settings().db_url)
+    arch = MarketDataArchive(repo.engine)
+    inputs = arch.cycle_inputs(cycle_id)
+    if not inputs:
+        out(f"Aucune donnée archivée pour le cycle {cycle_id}")
+        raise typer.Exit(1)
+    by_key: dict[str, int] = {}
+    for row in inputs:
+        key = f"{row['symbol']}@{row['timeframe']}"
+        by_key[key] = by_key.get(key, 0) + 1
+    for key, count in sorted(by_key.items()):
+        out(f"  {key}: {count} barres")
 
 
 @app.command()
