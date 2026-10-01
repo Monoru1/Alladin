@@ -8,6 +8,7 @@ from alladin.research.models import (
     StrategyStatus,
     StrategyVersion,
 )
+from alladin.research.repository import ResearchRepository
 
-__all__ = ["ExperimentResult", "ResearchFinding", "ResearchSource", "StrategyExperiment",
-           "StrategyHypothesis", "StrategyStatus", "StrategyVersion"]
+__all__ = ["ExperimentResult", "ResearchFinding", "ResearchSource", "ResearchRepository",
+           "StrategyExperiment", "StrategyHypothesis", "StrategyStatus", "StrategyVersion"]

@@ -1,20 +1,318 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ALLADIN Mission Control</title><style>
-:root{--bg:#071018;--panel:#0d1822;--line:#213342;--text:#d9e6ec;--muted:#8197a3;--cyan:#62c8d5;--amber:#f0b35a;--red:#ff5c5c;--green:#67d391}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px "Segoe UI",sans-serif}header{position:sticky;top:0;z-index:3;background:#08131ddd;border-bottom:1px solid var(--line);padding:14px 20px;display:flex;gap:18px;align-items:center;backdrop-filter:blur(10px)}h1{font-size:19px;margin:0;letter-spacing:.04em}.badge{border:1px solid var(--line);padding:5px 9px;font:12px Consolas,monospace}.demo{background:var(--amber);color:#111;border-color:var(--amber);font-weight:800}.ok{color:var(--green)}.bad{color:var(--red)}nav{margin-left:auto;display:flex;gap:6px}button{background:transparent;color:var(--muted);border:1px solid var(--line);padding:7px 10px;cursor:pointer}button.active,button:focus{color:var(--text);border-color:var(--cyan)}main{padding:14px;max-width:1800px;margin:auto}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px}.panel{background:var(--panel);border:1px solid var(--line);padding:13px;min-width:0}.span4{grid-column:span 4}.span6{grid-column:span 6}.span8{grid-column:span 8}.span12{grid-column:span 12}h2{font-size:13px;color:var(--cyan);margin:0 0 12px;font-weight:650}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line)}.metric{background:var(--panel);padding:10px}.label{color:var(--muted);font-size:11px}.value{font:18px Consolas,monospace;margin-top:4px}.mono,td{font-family:Consolas,monospace}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid var(--line);font-size:12px}th{color:var(--muted)}details{border-left:2px solid var(--line);padding:5px 9px;margin:4px 0}summary{cursor:pointer}.event-time{color:var(--muted);margin-right:10px}pre{white-space:pre-wrap;color:#a9bbc4;font-size:11px}.bar{height:7px;background:#172733;margin:7px 0}.bar i{display:block;height:100%;background:var(--cyan)}.position{border-left:3px solid var(--green)}.price-map{display:grid;grid-template-columns:70px 1fr;gap:6px;color:var(--muted)}.price-map b{color:var(--text)}.hidden{display:none}.empty{color:var(--muted);padding:15px 0}@media(max-width:900px){.span4,.span6,.span8{grid-column:span 12}.metrics{grid-template-columns:repeat(2,1fr)}nav{display:none}}
-</style></head><body><header><h1>ALLADIN<br><small>MISSION CONTROL</small></h1><span class="badge demo">DEMO</span><span id="connection" class="badge">MT5</span><span id="algo" class="badge">ALGO</span><span id="kind" class="badge">RUN</span><span id="updated" class="badge">LAST UPDATE</span><nav><button class="active" data-page="control">Control</button><button data-page="strategies">Strategy Lab</button><button data-page="research">Research Lab</button></nav></header>
-<main><section id="control"><div id="blocked" class="panel bad hidden">EXECUTION BLOCKED — compte non DEMO ou indéterminé</div><div class="grid">
-<article class="panel span8"><h2>Account / Risk envelope</h2><div id="metrics" class="metrics"></div></article>
-<article class="panel span4"><h2>Challenge</h2><div id="challenge"></div></article>
-<article class="panel span6 position"><h2>Live positions</h2><div id="positions"></div></article>
-<article class="panel span6"><h2>Risk map</h2><div id="riskmap"></div></article>
-<article class="panel span8"><h2>Brain / Decision trace</h2><div id="brain"></div></article>
-<article class="panel span4"><h2>Market radar</h2><div id="market"></div></article>
-<article class="panel span12"><h2>Journal</h2><div id="integrity"></div><div id="journal"></div></article>
-</div></section><section id="strategies" class="hidden"><article class="panel"><h2>Strategy Lab</h2><div id="strategy-table"></div></article></section><section id="research" class="hidden"><article class="panel"><h2>Research Lab</h2><p class="empty">DISCOVERED → FORMALIZED → BACKTESTING → BACKTEST_PASSED → OOS_TESTING → OOS_PASSED → DEMO_TESTING → CANDIDATE → APPROVED</p><p class="empty">Aucune expérience enregistrée. Aucun résultat n’est fabriqué.</p></article></section></main>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ALLADIN Mission Control</title>
+<style>
+:root{--bg:#071018;--panel:#0d1822;--panel2:#0a1520;--line:#1e3245;--text:#d9e6ec;--muted:#6a8595;--cyan:#5ec8d6;--amber:#f0b35a;--red:#e85555;--green:#52c97a;--blue:#4a9edd;--purple:#9b7fe8}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--text);font:13px/1.5 "Segoe UI",system-ui,sans-serif;min-height:100vh}
+header{position:sticky;top:0;z-index:10;background:#050e18ee;border-bottom:1px solid var(--line);padding:10px 18px;display:flex;gap:14px;align-items:center;backdrop-filter:blur(12px)}
+.logo{font-size:16px;font-weight:700;letter-spacing:.08em;color:var(--cyan);white-space:nowrap}.logo small{font-size:10px;color:var(--muted);display:block;letter-spacing:.12em;font-weight:400}
+.badge{border:1px solid var(--line);padding:4px 9px;font:11px Consolas,monospace;border-radius:2px;white-space:nowrap}
+.demo{background:#f0b35a22;color:var(--amber);border-color:var(--amber)}.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}.muted{color:var(--muted)}
+nav{margin-left:auto;display:flex;gap:4px}nav button{background:transparent;color:var(--muted);border:1px solid var(--line);padding:6px 12px;cursor:pointer;font:12px inherit;border-radius:2px;transition:all .15s}nav button.active,nav button:hover{color:var(--text);border-color:var(--cyan);background:#0d1f2d}
+main{padding:12px;max-width:1900px;margin:auto}section{display:none}section.show{display:block}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px}.panel{background:var(--panel);border:1px solid var(--line);padding:13px;border-radius:3px;min-width:0}
+.s3{grid-column:span 3}.s4{grid-column:span 4}.s6{grid-column:span 6}.s8{grid-column:span 8}.s12{grid-column:span 12}
+h2{font-size:11px;color:var(--cyan);margin-bottom:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-radius:2px;overflow:hidden}.metric{background:var(--panel);padding:10px 12px}.metric .label{color:var(--muted);font-size:10px;letter-spacing:.04em}.metric .value{font:17px Consolas,monospace;margin-top:3px;color:var(--text)}.metric .value.pos{color:var(--green)}.metric .value.neg{color:var(--red)}
+table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);font-weight:500;font-size:11px}td{padding:6px 8px;border-bottom:1px solid #0d1e2d;font-family:Consolas,monospace}tr:hover td{background:#0d1e2d}
+.empty{color:var(--muted);padding:14px 0;font-style:italic;font-size:12px}
+.pos-card{border-left:3px solid var(--green);padding:10px 12px;margin-bottom:8px;background:var(--panel2);border-radius:0 3px 3px 0}.pos-card.short{border-left-color:var(--red)}.pos-row{display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}.pos-symbol{font:15px/1 Consolas,monospace;font-weight:700}.pos-buy{color:var(--green)}.pos-sell{color:var(--red)}.pos-meta{color:var(--muted);font-size:11px}
+.bar{height:6px;background:#0d1e2d;border-radius:3px;overflow:hidden;margin:6px 0}.bar-fill{height:100%;background:var(--cyan);border-radius:3px}.bar-fill.warn{background:var(--amber)}.bar-fill.bad{background:var(--red)}
+.trace{font-size:12px;font-family:Consolas,monospace}.trace-line{display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #0d1a24;align-items:flex-start}.trace-line:last-child{border-bottom:none}.trace-time{color:var(--muted);min-width:62px;flex-shrink:0}.trace-event{color:var(--cyan);min-width:110px;flex-shrink:0;font-size:11px}.trace-msg{color:var(--text);flex:1;word-break:break-word}details.trace-raw summary{color:var(--muted);font-size:10px;cursor:pointer}details.trace-raw pre{color:#7a98a6;font-size:10px;white-space:pre-wrap;max-height:160px;overflow-y:auto;background:#060f18;padding:6px;border-radius:2px;margin-top:3px}
+.opp-SEEN{color:var(--muted)}.opp-FILTERED{color:#4a6a7a}.opp-WATCH{color:var(--amber)}.opp-QUALIFIED{color:var(--blue)}.opp-AGENT_REVIEW{color:var(--purple)}.opp-RISK_REVIEW{color:var(--cyan)}.opp-EXECUTED{color:var(--green)}.opp-REJECTED{color:var(--red)}.opp-PAPER{color:#7a98a6}.opp-EXPIRED{color:var(--muted)}
+.ch-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0d1a24;font-size:12px}.ch-row:last-child{border-bottom:none}.ch-label{color:var(--muted)}.ch-value{font-family:Consolas,monospace}
+.ma-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.ma-item{text-align:center;padding:8px}.ma-num{font:22px Consolas,monospace;color:var(--cyan)}.ma-lbl{color:var(--muted);font-size:10px;margin-top:2px}
+.strat-status{display:inline-block;padding:2px 7px;border-radius:2px;font-size:10px;font-weight:600}.strat-ACTIVE{background:#52c97a22;color:var(--green)}.strat-INACTIVE{background:#1e3245;color:var(--muted)}
+.pipeline{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}.pip-step{padding:4px 10px;border:1px solid var(--line);border-radius:2px;font-size:11px;color:var(--muted)}
+.blocked-banner{background:#e8555522;border:1px solid var(--red);color:var(--red);padding:10px 14px;margin-bottom:10px;border-radius:3px;font-size:13px;display:none}
+@media(max-width:900px){.s3,.s4,.s6,.s8{grid-column:span 12}.metrics{grid-template-columns:repeat(2,1fr)}.ma-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">ALLADIN<small>MISSION CONTROL</small></div>
+  <span class="badge demo">DEMO</span>
+  <span id="h-mt5" class="badge muted">MT5</span>
+  <span id="h-algo" class="badge muted">ALGO</span>
+  <span id="h-mode" class="badge muted">OBSERVE</span>
+  <span id="h-run" class="badge muted">--</span>
+  <span id="h-updated" class="badge muted">--</span>
+  <nav>
+    <button class="active" data-page="control">Control</button>
+    <button data-page="strategies">Strategy Lab</button>
+    <button data-page="research">Research Lab</button>
+  </nav>
+</header>
+<main>
+<section id="control" class="show">
+  <div id="blocked-banner" class="blocked-banner">EXECUTION BLOCKED - compte non DEMO</div>
+  <div class="grid">
+    <article class="panel s8">
+      <h2>Account / Equity envelope</h2>
+      <div class="metrics">
+        <div class="metric"><div class="label">Balance</div><div class="value" id="m-balance">--</div></div>
+        <div class="metric"><div class="label">Equity</div><div class="value" id="m-equity">--</div></div>
+        <div class="metric"><div class="label">Floating P&amp;L</div><div class="value" id="m-fpnl">--</div></div>
+        <div class="metric"><div class="label">Free margin</div><div class="value" id="m-margin">--</div></div>
+        <div class="metric"><div class="label">Working capital</div><div class="value" id="m-wc">--</div></div>
+        <div class="metric"><div class="label">Max trade risk</div><div class="value" id="m-maxrisk">--</div></div>
+        <div class="metric"><div class="label">Open risk</div><div class="value" id="m-openrisk">--</div></div>
+        <div class="metric"><div class="label">Available risk</div><div class="value" id="m-availrisk">--</div></div>
+        <div class="metric"><div class="label">Leverage</div><div class="value" id="m-lev">--</div></div>
+      </div>
+    </article>
+    <article class="panel s4">
+      <h2>Challenge</h2>
+      <div class="ch-row"><span class="ch-label">Run</span><span class="ch-value" id="ch-run">--</span></div>
+      <div class="ch-row"><span class="ch-label">Phase</span><span class="ch-value" id="ch-phase">--</span></div>
+      <div class="ch-row"><span class="ch-label">State</span><span class="ch-value" id="ch-state">--</span></div>
+      <div class="ch-row"><span class="ch-label">Profit</span><span class="ch-value" id="ch-profit">--</span></div>
+      <div class="ch-row"><span class="ch-label">Target</span><span class="ch-value" id="ch-target">--</span></div>
+      <div class="ch-row"><span class="ch-label">Daily headroom</span><span class="ch-value" id="ch-daily">--</span></div>
+      <div class="ch-row"><span class="ch-label">Total headroom</span><span class="ch-value" id="ch-total">--</span></div>
+      <div class="ch-row"><span class="ch-label">Trading days</span><span class="ch-value" id="ch-days">--</span></div>
+      <div class="bar"><div class="bar-fill" id="ch-bar" style="width:0%"></div></div>
+    </article>
+    <article class="panel s6">
+      <h2>Live positions</h2>
+      <div id="positions-body"><p class="empty">Aucune position ALLADIN ouverte.</p></div>
+    </article>
+    <article class="panel s6">
+      <h2>Risk map - currency exposure</h2>
+      <div id="risk-map-body"><p class="empty">Aucune exposition.</p></div>
+    </article>
+    <article class="panel s12">
+      <h2>Opportunity Radar - candidats du dernier scan</h2>
+      <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Symbol</th><th>TF</th><th>Status</th><th>Regime</th><th>Side</th><th>Score</th><th>Spread/ATR</th><th>R:R</th><th>Strategies</th><th>Reason</th></tr></thead>
+        <tbody id="opp-rows"><tr><td colspan="10" class="empty">Aucun scan recent.</td></tr></tbody>
+      </table>
+      </div>
+    </article>
+    <article class="panel s8">
+      <h2>Brain - Decision trace</h2>
+      <div id="brain-body" class="trace"><p class="empty">Aucun cycle.</p></div>
+    </article>
+    <article class="panel s4">
+      <h2>Market activity</h2>
+      <div class="ma-grid">
+        <div class="ma-item"><div class="ma-num" id="ma-eligible">--</div><div class="ma-lbl">Eligible</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-analysed">--</div><div class="ma-lbl">Analysed</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-short">--</div><div class="ma-lbl">Shortlist</div></div>
+        <div class="ma-item"><div class="ma-num" id="ma-opp">--</div><div class="ma-lbl">Opportunities</div></div>
+      </div>
+      <div id="ma-regimes" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
+    </article>
+    <article class="panel s12">
+      <h2>Journal integrity</h2>
+      <div id="jnl-integrity" class="muted">--</div>
+    </article>
+  </div>
+</section>
+<section id="strategies">
+  <div class="panel">
+    <h2>Strategy Lab</h2>
+    <table>
+      <thead><tr><th>ID</th><th>Version</th><th>Status</th><th>Regimes</th><th>Timeframes</th><th>Trades</th><th>Win rate</th><th>Avg R</th><th>Profit factor</th><th>Max DD</th></tr></thead>
+      <tbody id="strat-rows"><tr><td colspan="10" class="empty">Chargement...</td></tr></tbody>
+    </table>
+    <p style="margin-top:12px;font-size:11px;color:var(--muted)">Seules les strategies APPROVED peuvent etre utilisees en execution reelle. N/A = aucune donnee.</p>
+  </div>
+</section>
+<section id="research">
+  <div class="grid">
+    <article class="panel s12"><h2>Pipeline de validation</h2><div id="res-pipeline" class="pipeline"></div></article>
+    <article class="panel s3"><h2>Sources</h2><div id="res-sources"><p class="empty">Aucune source.</p></div></article>
+    <article class="panel s3"><h2>Findings</h2><div id="res-findings"><p class="empty">Aucun finding.</p></div></article>
+    <article class="panel s6">
+      <h2>Strategy versions</h2>
+      <table><thead><tr><th>ID</th><th>Version</th><th>Status</th><th>Hypotheses</th></tr></thead>
+      <tbody id="res-versions"><tr><td colspan="4" class="empty">Aucune version.</td></tr></tbody></table>
+    </article>
+    <article class="panel s12">
+      <h2>Experiences et resultats</h2>
+      <table><thead><tr><th>ID</th><th>Strategie</th><th>Split</th><th>Dataset</th><th>Trades</th><th>Win rate</th><th>Expectancy</th><th>PF</th><th>Max DD</th><th>Passed</th></tr></thead>
+      <tbody id="res-experiments"><tr><td colspan="10" class="empty">Aucune experience.</td></tr></tbody></table>
+      <p style="margin-top:10px;font-size:11px;color:var(--muted)">SOURCE -&gt; FINDING -&gt; HYPOTHESIS -&gt; FORMALIZATION -&gt; BACKTEST -&gt; OOS -&gt; DEMO -&gt; CANDIDATE -&gt; APPROVED. Aucun resultat n est invente.</p>
+    </article>
+  </div>
+</section>
+</main>
 <script>
-const $=s=>document.querySelector(s), money=(v,c='EUR')=>v==null?'N/A':new Intl.NumberFormat('fr-FR',{style:'currency',currency:c}).format(v), val=(k,v)=>`<div class="metric"><div class="label">${k}</div><div class="value">${v??'N/A'}</div></div>`;
-async function get(u){let r=await fetch(u);if(!r.ok)throw Error(await r.text());return r.json()}
-function rows(items,cols){if(!items?.length)return'<p class="empty">Aucune donnée enregistrée.</p>';return`<table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${items.map(x=>`<tr>${cols.map(c=>`<td>${c[1](x)??'N/A'}</td>`).join('')}</tr>`).join('')}</tbody></table>`}
-async function refresh(){try{const [o,p,m,j,s]=await Promise.all([get('/api/overview'),get('/api/positions'),get('/api/market'),get('/api/journal?limit=80'),get('/api/strategies')]);let a=o.account||{},c=a.currency||'EUR',r=o.risk,ch=o.challenge||{};$('#connection').textContent=a.server?'MT5 CONNECTED':'JOURNAL ONLY';$('#connection').className='badge '+(a.server?'ok':'');$('#algo').textContent='ALGO '+(a.trade_allowed?'ON':'OFF');$('#kind').textContent=o.run.kind;$('#updated').textContent='UPDATED '+new Date().toLocaleTimeString();$('#blocked').classList.toggle('hidden',!o.execution_blocked);$('#metrics').innerHTML=val('Balance',money(a.balance,c))+val('Equity',money(a.equity,c))+val('Floating P&L',money(a.floating_pnl,c))+val('Free margin',money(a.free_margin,c))+val('Used margin',money(a.margin,c))+val('Leverage',a.leverage?`1:${a.leverage}`:'N/A')+val('Working capital',money(r.working_capital,c))+val('Max trade risk',money(r.max_trade_risk,c))+val('Open / Available risk',`${money(r.open_risk,c)} / ${money(r.available_risk,c)}`);let pct=Math.max(0,Math.min(100,ch.profit_pct||0));$('#challenge').innerHTML=`<b>${o.run.run_id}</b> · ${o.run.kind}<p>${ch.phase_name||'N/A'} · ${ch.run_state||o.run.state}</p><div class="bar"><i style="width:${pct}%"></i></div><p>Profit ${ch.profit_pct?.toFixed(2)??'N/A'}% / cible ${ch.target_pct??'N/A'}%</p><p>Daily remaining ${money(ch.daily_headroom,c)}<br>Total remaining ${money(ch.total_headroom,c)}<br>Trading days ${ch.trading_days??0}/${ch.min_trading_days??'N/A'}</p>`;$('#positions').innerHTML=p.length?p.map(x=>`<div><b>${x.symbol} ${x.side} · ${x.volume} lot</b><p class="mono">ticket ${x.ticket} · magic ${x.magic}<br>P&L ${money(x.profit,c)} · R ${x.r_current?.toFixed(2)??'N/A'}</p><div class="price-map"><span>TP</span><b>${x.tp??'N/A'}</b><span>Current</span><b>${x.price_current}</b><span>Entry</span><b>${x.price_open}</b><span>SL</span><b>${x.sl??'N/A'}</b></div><p>${x.trade?`${x.trade.strategy_id} ${x.trade.strategy_version} · ${x.trade.agent} · cycle ${x.trade.cycle_id||'N/A'}`:'Trade DB non trouvé'}</p></div>`).join(''):'<p class="empty">Aucune position ALLADIN ouverte.</p>';let ex=r.exposure.currency_net_risk||{};$('#riskmap').innerHTML=rows(Object.entries(ex).map(([currency,net])=>({currency,net})),[['Currency',x=>x.currency],['Net risk',x=>money(x.net,c)],['Bias',x=>x.net>0?'LONG':'SHORT']]);$('#integrity').innerHTML=`JOURNAL CHAIN <b class="${o.journal.ok?'ok':'bad'}">${o.journal.ok?'OK':'BROKEN'}</b> · ${o.journal.detail}`;let eventHtml=j.map(e=>`<details><summary><span class="event-time">${new Date(e.ts).toLocaleTimeString()}</span>${e.type} ${e.cycle_id?`· ${e.cycle_id}`:''}</summary><pre>${JSON.stringify(e.payload,null,2)}</pre></details>`).join('');$('#brain').innerHTML=eventHtml||'<p class="empty">Aucun cycle.</p>';$('#journal').innerHTML=eventHtml;let candidates=m.candidates||[];$('#market').innerHTML=`<p>${m.universe_size??'N/A'} eligible · ${m.analysed??'N/A'} analysed · ${candidates.length} shortlisted</p>`+rows(candidates,[['Symbol',x=>x.symbol],['Regime',x=>x.regime],['Score',x=>x.score],['Spread/ATR',x=>x.spread_atr_ratio]]);$('#strategy-table').innerHTML=rows(s,[['Strategy',x=>x.id],['Version',x=>x.version],['Status',x=>x.enabled?'ACTIVE':'INACTIVE'],['Regimes',x=>x.regimes?.join(', ')],['Trades',x=>x.performance?.trades],['Win rate',x=>x.performance?.win_rate]]);}catch(e){$('#connection').textContent='DISCONNECTED';$('#connection').className='badge bad';console.error(e)}}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('main>section').forEach(s=>s.classList.add('hidden'));$('#'+b.dataset.page).classList.remove('hidden');document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b))});refresh();setInterval(refresh,2000);
-</script></body></html>
+"use strict";
+const $id = id => document.getElementById(id);
+const money = (v, c) => v == null ? "N/A" : new Intl.NumberFormat("fr-FR", {style:"currency",currency:c||"EUR",maximumFractionDigits:2}).format(v);
+const pct = v => v == null ? "N/A" : v.toFixed(2) + "%";
+async function api(u) { const r = await fetch(u); if (!r.ok) throw new Error(await r.text()); return r.json(); }
+const EVT = {
+  "cycle.start":"CYCLE START","cycle.end":"CYCLE END","market.scan":"SCAN",
+  "strategy.routing":"ROUTING","strategy.signal":"SIGNAL","strategy.evaluation":"STRATEGY",
+  "agent.request":"AGENT REQ","agent.response":"AGENT RES",
+  "decision.trade_intent":"INTENT","decision.no_trade":"NO TRADE","decision.intent_invalid":"INTENT ERR",
+  "risk.decision":"RISK","order.precheck":"PRECHECK","order.sent":"ORDER","order.result":"ORDER RES",
+  "position.opened":"POS OPEN","position.closed":"POS CLOSE","position.update":"POS UPD",
+  "opportunity.created":"OPP","opportunity.rejected":"OPP REJECT",
+  "mode.change":"MODE","reconcile":"RECONCILE","info":"INFO"
+};
+function humanMsg(t, p) {
+  if (t === "market.scan") return (p.analysed ?? "N/A") + " analysed / " + (p.candidates?.length ?? 0) + " candidates | regimes: " + JSON.stringify(p.regime_counts || {});
+  if (t === "cycle.start") return "cycle " + (p.cycle||"?") + " | mode " + (p.execute ? "DEMO":"OBSERVE") + " | agent " + (p.agent||"?");
+  if (t === "cycle.end") return (p.decision||"?") + " | " + (p.reason||"") + " | [" + (p.shortlist||[]).join(", ") + "]";
+  if (t === "risk.decision") return (p.approved ? "APPROVED":"REJECTED") + " | vol " + (p.volume??"--") + " | risk " + (p.risk_amount != null ? money(p.risk_amount) : "N/A");
+  if (t === "decision.no_trade") return p.reason || "no trade";
+  if (t === "decision.trade_intent") return (p.instrument||"?") + " " + (p.side||"?") + " SL " + (p.stop_loss??"?") + " TP " + (p.take_profit??"?");
+  if (t === "order.result") return "retcode " + (p.retcode||"?") + " ticket " + (p.order||"?");
+  if (t === "position.opened") return (p.symbol||"?") + " ticket " + (p.ticket||"?");
+  if (t === "agent.response") { const d = p.decision; return d ? (d.decision||"?") + " | " + (d.reason||"") : (p.errors||[]).join("; ") || "ok"; }
+  if (t === "mode.change") return "mode=" + (p.run_mode||"?") + " interval=" + (p.interval_s||"?") + "s";
+  if (t === "strategy.evaluation") return (p.symbol||"?") + " | " + (p.regime||"?") + " | " + JSON.stringify(p.results||{});
+  if (t === "info") return p.alert || JSON.stringify(p).slice(0,100);
+  return Object.entries(p).slice(0,3).map(([k,v]) => k + "=" + JSON.stringify(v)).join(" | ");
+}
+function oppRows(cands) {
+  if (!cands?.length) return '<tr><td colspan="10" class="empty">Aucun candidat dans le dernier scan.</td></tr>';
+  return cands.map(c => {
+    const st = c.status || "SEEN", dir = c.bias || c.direction || "--";
+    const rea = (c.rejection_reasons || []).join(", ") || "--";
+    return '<tr><td>' + (c.symbol||"?") + '</td><td>' + (c.timeframe||"--") + '</td>' +
+      '<td class="opp-' + st + '">' + st + '</td><td>' + (c.regime||"--") + '</td><td>' + dir + '</td>' +
+      '<td>' + (c.score != null ? c.score.toFixed(3) : "--") + '</td>' +
+      '<td>' + (c.spread_atr_ratio != null ? c.spread_atr_ratio.toFixed(3) : "--") + '</td>' +
+      '<td>' + (c.planned_rr != null ? c.planned_rr.toFixed(1) + "R" : "--") + '</td>' +
+      '<td style="font-size:11px">' + (c.strategy_candidates||[]).join(", ") + '</td>' +
+      '<td style="font-size:11px;color:var(--muted)">' + rea + '</td></tr>';
+  }).join("");
+}
+async function refresh() {
+  try {
+    const [ov, pos, mkt, jnl, st] = await Promise.all([
+      api("/api/overview"), api("/api/positions"), api("/api/market"),
+      api("/api/journal?limit=60"), api("/api/strategies")
+    ]);
+    const a = ov.account || {}, c = a.currency || "EUR", r = ov.risk || {}, ch = ov.challenge || {};
+    const set = (id, t) => { const e = $id(id); if (e) e.textContent = t; };
+    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    $id("h-mt5").textContent = a.server ? "MT5 OK" : "JOURNAL";
+    $id("h-mt5").className = "badge " + (a.server ? "ok" : "muted");
+    $id("h-algo").textContent = "ALGO " + (a.trade_allowed ? "ON" : "OFF");
+    $id("h-algo").className = "badge " + (a.trade_allowed ? "ok" : "warn");
+    $id("h-mode").textContent = ov.run?.kind || "--";
+    $id("h-run").textContent = ov.run?.run_id || "--";
+    $id("h-updated").textContent = new Date().toLocaleTimeString();
+    $id("blocked-banner").style.display = ov.execution_blocked ? "block" : "none";
+    set("m-balance", money(a.balance, c)); set("m-equity", money(a.equity, c));
+    const fp = a.floating_pnl;
+    $id("m-fpnl").textContent = money(fp, c);
+    $id("m-fpnl").className = "value " + (fp > 0 ? "pos" : fp < 0 ? "neg" : "");
+    set("m-margin", money(a.free_margin, c)); set("m-wc", money(r.working_capital, c));
+    set("m-maxrisk", money(r.max_trade_risk, c)); set("m-openrisk", money(r.open_risk, c));
+    set("m-availrisk", money(r.available_risk, c));
+    set("m-lev", a.leverage ? "1:" + a.leverage : "N/A");
+    set("ch-run", ov.run?.run_id || "--"); set("ch-phase", ch.phase_name || "--");
+    set("ch-state", ch.run_state || ov.run?.state || "--"); set("ch-profit", pct(ch.profit_pct));
+    set("ch-target", ch.target_pct != null ? ch.target_pct + "%" : "--");
+    set("ch-daily", money(ch.daily_headroom, c)); set("ch-total", money(ch.total_headroom, c));
+    set("ch-days", (ch.trading_days ?? 0) + " / " + (ch.min_trading_days ?? "?"));
+    const pp = Math.max(0, Math.min(100, ch.profit_pct || 0));
+    const b = $id("ch-bar"); b.style.width = pp + "%";
+    b.className = "bar-fill" + (pp > 80 ? " ok" : pp > 50 ? "" : " warn");
+    seth("positions-body", pos.length ? pos.map(x => {
+      const s = x.side || "?", cls = s === "BUY" ? "" : "short", sc = s === "BUY" ? "pos-buy" : "pos-sell";
+      return '<div class="pos-card ' + cls + '">' +
+        '<div class="pos-row">' +
+        '<span class="pos-symbol">' + x.symbol + '</span>' +
+        '<span class="' + sc + '">' + s + '</span>' +
+        '<span class="pos-meta">' + x.volume + ' lot tk:' + x.ticket + '</span>' +
+        '<span class="' + (x.profit >= 0 ? "ok" : "bad") + '">' + money(x.profit, c) + '</span>' +
+        '<span class="pos-meta">R ' + (x.r_current != null ? x.r_current.toFixed(2) : "N/A") + '</span>' +
+        '</div><div class="pos-row" style="margin-top:3px">' +
+        '<span class="pos-meta">Entry ' + x.price_open + ' SL ' + (x.sl ?? "--") + ' TP ' + (x.tp ?? "--") + ' Now ' + x.price_current + '</span></div>' +
+        (x.trade ? '<div class="pos-meta" style="margin-top:2px">' + x.trade.strategy_id + ' ' + x.trade.strategy_version + ' | ' + (x.trade.agent||"?") + ' | cycle ' + (x.trade.cycle_id||"N/A") + '</div>' : "") +
+        '</div>';
+    }).join("") : '<p class="empty">Aucune position ALLADIN ouverte.</p>');
+    const ex = r.exposure?.currency_net_risk || {};
+    const ee = Object.entries(ex);
+    seth("risk-map-body", ee.length ?
+      ee.map(([cy, n]) => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #0d1a24;font-size:12px">' +
+        '<span style="color:var(--muted)">' + cy + '</span>' +
+        '<span class="' + (n > 0 ? "ok" : n < 0 ? "bad" : "") + '" style="font-family:Consolas,monospace">' + money(n, c) + " " + (n > 0 ? "LONG" : "SHORT") + "</span></div>").join("") +
+      '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;margin-top:4px">' +
+      '<span style="color:var(--muted)">Total open risk</span>' +
+      '<span style="font-family:Consolas,monospace">' + money(r.open_risk, c) + '</span></div>'
+      : '<p class="empty">Aucune exposition.</p>');
+    seth("opp-rows", oppRows(mkt.candidates));
+    set("ma-eligible", mkt.universe_size ?? "N/A"); set("ma-analysed", mkt.analysed ?? "N/A");
+    set("ma-short", (mkt.candidates || []).length); set("ma-opp", mkt.opportunities ?? "N/A");
+    if (mkt.regime_counts) $id("ma-regimes").textContent = Object.entries(mkt.regime_counts).map(([k,v]) => k + ":" + v).join(" | ");
+    seth("brain-body", jnl.length ? jnl.map(e => {
+      const lbl = EVT[e.type] || e.type, msg = humanMsg(e.type, e.payload);
+      const t = new Date(e.ts).toLocaleTimeString();
+      const cy = e.cycle_id ? ' <span style="color:var(--muted);font-size:10px">[' + e.cycle_id + ']</span>' : "";
+      return '<div class="trace-line">' +
+        '<span class="trace-time">' + t + '</span>' +
+        '<span class="trace-event">' + lbl + cy + '</span>' +
+        '<div class="trace-msg">' + msg +
+        '<details class="trace-raw"><summary>raw</summary><pre>' + JSON.stringify(e.payload, null, 2) + '</pre></details>' +
+        '</div></div>';
+    }).join("") : '<p class="empty">Aucun cycle enregistre.</p>');
+    seth("jnl-integrity", "JOURNAL CHAIN <b class=\"" + (ov.journal?.ok ? "ok" : "bad") + "\">" + (ov.journal?.ok ? "OK" : "BROKEN") + "</b> -- " + (ov.journal?.detail || ""));
+    seth("strat-rows", st.length ? st.map(s => {
+      const p = s.performance, sc = s.enabled ? "ACTIVE" : "INACTIVE";
+      return '<tr><td>' + s.id + '</td><td>' + s.version + '</td>' +
+        '<td><span class="strat-status strat-' + sc + '">' + sc + '</span></td>' +
+        '<td style="font-size:11px">' + (s.regimes||[]).join(", ") + '</td>' +
+        '<td style="font-size:11px">' + (s.timeframes||[]).join(", ") + '</td>' +
+        '<td>' + (p?.trades ?? "N/A") + '</td>' +
+        '<td>' + (p?.win_rate != null ? (p.win_rate*100).toFixed(1)+"%" : "N/A") + '</td>' +
+        '<td>' + (p?.avg_r != null ? p.avg_r.toFixed(2) : "N/A") + '</td>' +
+        '<td>' + (p?.profit_factor != null ? p.profit_factor.toFixed(2) : "N/A") + '</td>' +
+        '<td>' + (p?.max_drawdown != null ? (p.max_drawdown*100).toFixed(1)+"%" : "N/A") + '</td></tr>';
+    }).join("") : '<tr><td colspan="10" class="empty">Aucune strategie.</td></tr>');
+  } catch (err) {
+    $id("h-mt5").textContent = "DISCONNECTED"; $id("h-mt5").className = "badge bad"; console.error(err);
+  }
+}
+async function refreshResearch() {
+  try {
+    const d = await api("/api/research");
+    $id("res-pipeline").innerHTML = (d.pipeline||[]).map(s => '<span class="pip-step">' + s + '</span>').join("");
+    $id("res-sources").innerHTML = d.sources?.length ?
+      d.sources.map(s => '<div style="padding:5px 0;border-bottom:1px solid var(--line);font-size:12px"><b>' + s.title + '</b><br><span style="color:var(--muted)">' + s.source_type + ' | ' + (s.retrieved_at?.split("T")[0]||"?") + '</span></div>').join("") :
+      '<p class="empty">Aucune source enregistree.</p>';
+    $id("res-findings").innerHTML = d.findings?.length ?
+      d.findings.map(f => '<div style="padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">' + f.claim + '<br><span style="color:var(--muted)">' + f.market + ' | ' + f.timeframe + '</span></div>').join("") :
+      '<p class="empty">Aucun finding.</p>';
+    $id("res-versions").innerHTML = d.versions?.length ?
+      d.versions.map(v => '<tr><td>' + v.strategy_id + '</td><td>' + v.version + '</td><td style="color:var(--cyan)">' + v.status + '</td><td style="font-size:11px">' + (v.hypothesis_ids||[]).join(", ") + '</td></tr>').join("") :
+      '<tr><td colspan="4" class="empty">Aucune version.</td></tr>';
+    const res = {}; (d.results||[]).forEach(r => { res[r.experiment_id] = r; });
+    $id("res-experiments").innerHTML = d.experiments?.length ?
+      d.experiments.map(e => {
+        const r = res[e.experiment_id];
+        return '<tr><td style="font-size:11px">' + e.experiment_id + '</td><td>' + e.strategy_id + '</td>' +
+          '<td style="color:var(--muted)">' + e.split + '</td><td style="font-size:11px">' + e.dataset + '</td>' +
+          '<td>' + (r?.trades ?? "N/A") + '</td>' +
+          '<td>' + (r?.win_rate != null ? (r.win_rate*100).toFixed(1)+"%" : "N/A") + '</td>' +
+          '<td>' + (r?.expectancy != null ? r.expectancy.toFixed(2) : "N/A") + '</td>' +
+          '<td>' + (r?.profit_factor != null ? r.profit_factor.toFixed(2) : "N/A") + '</td>' +
+          '<td>' + (r?.max_drawdown != null ? (r.max_drawdown*100).toFixed(1)+"%" : "N/A") + '</td>' +
+          '<td>' + (r ? '<b class="' + (r.passed ? "ok" : "bad") + '">' + (r.passed ? "PASS" : "FAIL") + '</b>' : "N/A") + '</td></tr>';
+      }).join("") :
+      '<tr><td colspan="10" class="empty">Aucune experience enregistree.</td></tr>';
+  } catch (err) { console.error("research", err); }
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("main>section").forEach(s => s.classList.remove("show"));
+  document.getElementById(b.dataset.page).classList.add("show");
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
+  if (b.dataset.page === "research") refreshResearch();
+});
+refresh(); setInterval(refresh, 2000);
+refreshResearch(); setInterval(refreshResearch, 30000);
+</script>
+</body>
+</html>

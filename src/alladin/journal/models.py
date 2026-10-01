@@ -37,6 +37,9 @@ class EventType(StrEnum):
     KILL_SWITCH = "kill_switch"
     RECONCILE = "reconcile"
     INFO = "info"
+    OPPORTUNITY_CREATED = "opportunity.created"
+    OPPORTUNITY_REJECTED = "opportunity.rejected"
+    MODE_CHANGE = "mode.change"
 
 
 class JournalEvent(BaseModel):

@@ -19,6 +19,7 @@ from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
 from alladin.market.universe import MarketUniverse
 from alladin.research.models import StrategyStatus
+from alladin.research.repository import ResearchRepository
 from alladin.risk import sizing
 from alladin.risk.exposure import compute_exposure
 from alladin.strategies.registry import StrategyRegistry
@@ -139,7 +140,26 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
 
     @app.get("/api/research")
     def research() -> dict[str, Any]:
-        return {"pipeline": [status.value for status in StrategyStatus], "sources": [],
-                "hypotheses": [], "experiments": [], "versions": [], "results": []}
+        rr = ResearchRepository.from_engine(repo.engine)
+        sources = [s.model_dump(mode="json") for s in rr.list_sources()]
+        findings = [f.model_dump(mode="json") for f in rr.list_findings()]
+        hypotheses = [h.model_dump(mode="json") for h in rr.list_hypotheses()]
+        versions = [v.model_dump(mode="json") for v in rr.list_versions()]
+        experiments = [e.model_dump(mode="json") for e in rr.list_experiments()]
+        results: list[dict[str, Any]] = []
+        for exp in rr.list_experiments():
+            r = rr.get_result(exp.experiment_id)
+            if r:
+                results.append(r.model_dump(mode="json"))
+        return {
+            "pipeline": [status.value for status in StrategyStatus],
+            "sources": sources,
+            "findings": findings,
+            "hypotheses": hypotheses,
+            "versions": versions,
+            "experiments": experiments,
+            "results": results,
+            "stats": rr.stats(),
+        }
 
     return app

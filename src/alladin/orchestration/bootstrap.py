@@ -17,6 +17,7 @@ from alladin.brokers.mt5 import MT5Broker
 from alladin.challenge.models import ChallengeProfile
 from alladin.challenge.profiles import load_profile
 from alladin.core.config import Settings
+from alladin.core.enums import RunMode
 from alladin.core.errors import AlladinError
 from alladin.core.killswitch import KillSwitch
 from alladin.execution.service import ExecutionService
@@ -72,7 +73,13 @@ class Components:
     execution: ExecutionService
     monitor: PositionMonitor
 
-    def engine(self, agent: AgentAdapter, *, execute: bool) -> OrchestrationEngine:
+    def engine(
+        self,
+        agent: AgentAdapter,
+        *,
+        execute: bool = False,
+        run_mode: RunMode = RunMode.OBSERVE,
+    ) -> OrchestrationEngine:
         registry = StrategyRegistry.from_config(self.settings.strategies_dir)
         universe = MarketUniverse(self.broker, self.profile.universe)
         scanner = MarketScanner(
@@ -89,6 +96,7 @@ class Components:
             agent=agent,
             execution=self.execution,
             monitor=self.monitor,
+            run_mode=run_mode,
             execute=execute,
         )
 

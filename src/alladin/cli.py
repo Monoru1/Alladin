@@ -15,7 +15,7 @@ from alladin.brokers.base import BrokerAdapter, block_message
 from alladin.brokers.mt5 import MT5Broker
 from alladin.challenge.profiles import list_profiles, load_profile
 from alladin.core.config import Settings, get_settings
-from alladin.core.enums import AccountType, EntryType, MarketRegime, RunState, Side
+from alladin.core.enums import AccountType, EntryType, MarketRegime, RunMode, RunState, Side
 from alladin.core.errors import AlladinError, BrokerConnectionError
 from alladin.core.logging import setup_logging
 from alladin.core.models import TradeIntent
@@ -597,12 +597,27 @@ def run_cmd(
     agent: Annotated[str | None, typer.Option(help="mock | claude | codex (défaut : AGENT)")] = None,
     interval: Annotated[float, typer.Option(help="Secondes entre deux cycles")] = 300.0,
     cycles: Annotated[int | None, typer.Option(help="Nombre de cycles (défaut : illimité)")] = 1,
-    execute: Annotated[
-        bool, typer.Option("--execute", help="Envoyer réellement les ordres approuvés (DEMO). Sinon dry-run.")
-    ] = False,
+    mode: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "OBSERVE (défaut) : scan+analyse, aucun order_send. "
+                "PAPER : même pipeline + simulation interne. "
+                "DEMO : order_send sur compte DEMO (confirmation requise)."
+            )
+        ),
+    ] = "OBSERVE",
     run: RunOpt = None,
 ) -> None:
-    """Mode autonome : MT5 -> univers -> scanner -> régime -> routeur -> agent -> Risk -> exécution."""
+    """Mode autonome : MT5 -> univers -> scanner -> régime -> routeur -> agent -> Risk -> exécution.
+
+    Par défaut en mode OBSERVE (lecture seule). Utiliser --mode DEMO pour trader sur le compte DEMO.
+    """
+    try:
+        run_mode = RunMode(mode.upper())
+    except ValueError as exc:
+        raise die(f"--mode : OBSERVE | PAPER | DEMO (reçu '{mode}')", 2) from exc
+
     settings = get_settings()
     comps = _components(settings, broker_kind, run_id=run)
     acct = comps.broker.account_info()
@@ -610,10 +625,11 @@ def run_cmd(
         raise die(block_message(acct.account_type), 3)
     if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
         comps.manager.start(comps.run, acct)
-    if execute:
+
+    if run_mode is RunMode.DEMO:
         assert isinstance(comps.broker, MT5Broker)
         _require_algo_trading(comps.broker, acct.trade_allowed)
-        out(f"MODE EXÉCUTION DEMO sur {acct.server} ({acct.login_masked}), run {comps.run.run_id}.")
+        out(f"MODE DEMO — exécution réelle sur {acct.server} ({acct.login_masked}), run {comps.run.run_id}.")
         if (
             typer.prompt(
                 f"Tapez le nom du run ({comps.run.run_id}) pour autoriser l'envoi d'ordres",
@@ -623,15 +639,22 @@ def run_cmd(
             != comps.run.run_id
         ):
             raise die("Annulé : aucun ordre ne sera envoyé.", 0)
+    elif run_mode is RunMode.PAPER:
+        out(
+            "MODE PAPER : pipeline complet + simulation interne des trades. Aucun ordre broker envoyé."
+        )
     else:
         out(
-            "MODE DRY-RUN : le RiskEngine évalue, aucun ordre n'est envoyé (ajouter --execute pour trader sur le DEMO)."
+            "MODE OBSERVE : scan et analyse complets. RiskEngine actif. Aucun ordre envoyé. "
+            "(--mode DEMO pour trader sur le DEMO)"
         )
+
     agent_impl = make_agent(agent or settings.agent, settings)
-    engine = comps.engine(agent_impl, execute=execute)
+    engine = comps.engine(agent_impl, run_mode=run_mode)
     rec = comps.monitor.reconcile()
     out(
-        f"Réconciliation: {rec.open_positions} position(s) ALLADIN, {len(rec.adopted)} adoptée(s), {len(rec.newly_closed)} clôturée(s) hors-ligne, {rec.foreign_ignored} étrangère(s) ignorée(s)"
+        f"Réconciliation: {rec.open_positions} position(s) ALLADIN, {len(rec.adopted)} adoptée(s), "
+        f"{len(rec.newly_closed)} clôturée(s) hors-ligne, {rec.foreign_ignored} étrangère(s) ignorée(s)"
     )
     engine.run_loop(
         interval,

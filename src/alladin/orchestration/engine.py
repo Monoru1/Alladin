@@ -7,6 +7,7 @@ DEMO, watchdog, RiskEngine, sizing, pré-validation, vérification). NO TRADE es
 from __future__ import annotations
 
 import logging
+import signal
 import time
 from collections.abc import Callable
 from typing import Any
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 
 from alladin.agents.base import AgentAdapter, AgentIntentDraft, AgentRequest
 from alladin.brokers.base import BrokerAdapter
-from alladin.core.enums import DecisionKind, RunState
+from alladin.core.enums import DecisionKind, RunMode, RunState
 from alladin.core.errors import AlladinError
 from alladin.core.models import TradeIntent
 from alladin.execution.models import ExecStatus
@@ -59,13 +60,19 @@ class OrchestrationEngine:
         agent: AgentAdapter,
         execution: ExecutionService,
         monitor: PositionMonitor,
-        execute: bool = False,
+        run_mode: RunMode = RunMode.OBSERVE,
+        execute: bool = False,  # rétrocompatibilité : remplacé par run_mode
     ) -> None:
         self.broker, self.run, self.manager, self.journal = broker, run, manager, journal
         self.scanner, self.router, self.agent = scanner, router, agent
         self.execution, self.monitor = execution, monitor
-        self.execute = execute  # False => dry-run : le RiskEngine évalue, rien n'est envoyé
+        # run_mode prend le dessus sur le flag legacy execute
+        if execute and run_mode is RunMode.OBSERVE:
+            run_mode = RunMode.DEMO
+        self.run_mode = run_mode
+        self.execute = run_mode is RunMode.DEMO  # compatibilité interne
         self._cycle = 0
+        self._stop_requested = False
 
     # ------------------------------------------------------------------ un cycle
 
@@ -316,34 +323,68 @@ class OrchestrationEngine:
         max_cycles: int | None = None,
         on_cycle: Callable[[CycleOutcome], None] | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        *,
+        handle_signals: bool = True,
     ) -> None:
+        """Boucle principale du daemon.
+
+        handle_signals=True installe des gestionnaires SIGINT/SIGTERM qui
+        permettent un arrêt propre : le cycle en cours se termine, puis la boucle
+        s'arrête.  Ctrl+C depuis un cockpit séparé n'affecte pas le moteur.
+        """
+        self._stop_requested = False
+
+        if handle_signals:
+            _orig_int = signal.getsignal(signal.SIGINT)
+            _orig_term = signal.getsignal(signal.SIGTERM)
+
+            def _shutdown(signum: int, frame: object) -> None:
+                self._stop_requested = True
+                log.info("Signal %s reçu — arrêt propre après le cycle en cours.", signum)
+
+            signal.signal(signal.SIGINT, _shutdown)
+            signal.signal(signal.SIGTERM, _shutdown)
+
+        self.journal.log(
+            self.run.run_id,
+            EventType.MODE_CHANGE,
+            {"run_mode": self.run_mode.value, "interval_s": interval_s},
+        )
+
         failures = 0
         n = 0
-        while max_cycles is None or n < max_cycles:
-            n += 1
-            try:
-                outcome = self.run_cycle()
-                failures = 0
-            except AlladinError as exc:  # broker indisponible, etc.
-                failures += 1
-                self.journal.log(
-                    self.run.run_id,
-                    EventType.INFO,
-                    {"alert": "cycle en erreur", "error": str(exc), "consecutive": failures},
-                )
-                if failures >= 3 and self.run.watchdog.run_state is RunState.RUNNING:
-                    self.manager.pause(self.run, f"3 cycles en erreur consécutifs : {exc}")
-                outcome = CycleOutcome(
-                    cycle=self._cycle,
-                    run_state=self.run.watchdog.run_state.value,
-                    decision="HALTED",
-                    reason=str(exc),
-                )
-            if on_cycle:
-                on_cycle(outcome)
-            if self.run.watchdog.run_state.is_terminal or (
-                outcome.decision == "HALTED" and self.run.watchdog.run_state is RunState.PAUSED
-            ):
-                break
-            if max_cycles is None or n < max_cycles:
-                sleep(interval_s)
+        try:
+            while (max_cycles is None or n < max_cycles) and not self._stop_requested:
+                n += 1
+                try:
+                    outcome = self.run_cycle()
+                    failures = 0
+                except AlladinError as exc:  # broker indisponible, etc.
+                    failures += 1
+                    self.journal.log(
+                        self.run.run_id,
+                        EventType.INFO,
+                        {"alert": "cycle en erreur", "error": str(exc), "consecutive": failures},
+                    )
+                    if failures >= 3 and self.run.watchdog.run_state is RunState.RUNNING:
+                        self.manager.pause(self.run, f"3 cycles en erreur consécutifs : {exc}")
+                    outcome = CycleOutcome(
+                        cycle=self._cycle,
+                        run_state=self.run.watchdog.run_state.value,
+                        decision="HALTED",
+                        reason=str(exc),
+                    )
+                if on_cycle:
+                    on_cycle(outcome)
+                if self.run.watchdog.run_state.is_terminal or (
+                    outcome.decision == "HALTED" and self.run.watchdog.run_state is RunState.PAUSED
+                ):
+                    break
+                if (max_cycles is None or n < max_cycles) and not self._stop_requested:
+                    sleep(interval_s)
+        finally:
+            if handle_signals:
+                signal.signal(signal.SIGINT, _orig_int)
+                signal.signal(signal.SIGTERM, _orig_term)
+            if self._stop_requested:
+                log.info("Daemon arrêté proprement (signal).")

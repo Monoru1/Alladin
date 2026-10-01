@@ -125,3 +125,18 @@ class DealEntry(StrEnum):
 class DecisionKind(StrEnum):
     TRADE = "TRADE"
     NO_TRADE = "NO_TRADE"
+
+
+class RunMode(StrEnum):
+    """Mode d'exécution du daemon ALLADIN.
+
+    OBSERVE : scan réel, analyse complète, RiskEngine actif, AUCUN order_send.
+    PAPER   : même pipeline + simulation interne des trades (P&L calculé sans broker).
+    DEMO    : order_send autorisé uniquement si account_type == DEMO et toutes sécurités passent.
+
+    Le mode par défaut est OBSERVE.  L'utilisateur doit explicitement activer DEMO.
+    """
+
+    OBSERVE = "OBSERVE"
+    PAPER = "PAPER"
+    DEMO = "DEMO"
