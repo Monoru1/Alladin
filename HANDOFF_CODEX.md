@@ -7,8 +7,8 @@ Regle absolue : **DEMO uniquement, argent reel interdit, fail closed**. Ne jamai
 
 | | |
 |---|---|
-| HEAD de depart de cette session | `0fb2e91` docs: update HANDOFF_CODEX |
-| HEAD actuel | `0e58093` feat: enrich /health endpoint |
+| HEAD de depart de cette session | `496751b` docs: update HANDOFF_CODEX |
+| HEAD actuel | `0927045` test: add observability and robustness tests |
 | Branche | `main` (suit `origin/main`, pousse) |
 | Working tree | propre |
 | Non commite par conception | `.env`, `data/`, `.venv/`, `.claude/` |
@@ -22,7 +22,7 @@ Regle absolue : **DEMO uniquement, argent reel interdit, fail closed**. Ne jamai
 | C. Algo Trading guard | **DONE** | `_require_algo_trading()` |
 | D. test-order / SYSTEM-TEST | **PARTIAL** | Position EURUSD 58707143622 statut inconnu |
 | E. Reconciliation redemarrage | **DONE** | `sync` command |
-| F. Mission Control cockpit | **DONE** | `api/app.py` + `static/index.html` |
+| F. Mission Control cockpit | **DONE** | Dashboard complet avec BTC cards, tiered polling |
 | G. Research models | **DONE** | `research/models.py` + `research/repository.py` |
 | H. MarketDataArchive | **DONE** | `market/archive.py` avec stats CLI |
 | I. cycle_id / observabilite | **DONE** | Tests complets |
@@ -40,73 +40,112 @@ Regle absolue : **DEMO uniquement, argent reel interdit, fail closed**. Ne jamai
 | U. Strategy Lifecycle | **DONE** | `check_lifecycle()` dans StrategyRegistry |
 | V. /api/opportunities endpoint | **DONE** | Retourne qualified + filtered par run/cycle |
 | W. /health enrichi | **DONE** | `last_cycle_at` ajoute |
+| X. BacktestRunner | **DONE** | `research/backtest.py` anti-lookahead strict |
+| Y. R Analytics | **DONE** | `research/r_analytics.py` normalize en R-multiple |
+| Z. Dataset Splits | **DONE** | `research/splits.py` TRAIN/VAL/OOS/DEMO + purge/embargo |
+| AA. Strategy Scorecard | **DONE** | `research/scorecard.py` 20+ metriques par config |
+| AB. Strategy Router perf | **DONE** | `strategies/performance.py` OOS/DEMO only, jamais TRAIN |
+| AC. BTC Adapter | **DONE** | `brokers/crypto.py` CryptoDataProvider + Mock + Binance testnet |
+| AD. Three-Way Experiment | **DONE** | `research/btc_experiment.py` 3 hypotheses, NO_ENTRY ok |
+| AE. SNN BTC Research | **DONE** | `docs/SNN_BTC_RESEARCH.md` protocole 9 niveaux |
+| AF. Mission Control v2 | **DONE** | BTC cards, tiered polling, N/A safe, read-only |
+| AG. Observability tests | **DONE** | 5 nouveaux tests robustesse API |
 
 ### Items restants (prochaine session)
 
 | Item | Statut | Detail |
 |---|---|---|
-| MQL5 Research | **NOT STARTED** | Extraire hypotheses depuis mql5.com/fr/code/mt5 |
-| Strategy Research Matrix | **NOT STARTED** | StrategyHypothesis x Symbol x TF x Regime |
-| Anti-overfitting splits | **NOT STARTED** | TRAIN/VAL/OOS/DEMO |
-| Regime Engine confidence | **NOT STARTED** | Multi-indicateur, pas mono-classif |
-| Position analytics R | **PARTIAL** | MAE/MFE en pips existe, pas en R-multiple |
-| Research Lab drill-down | **NOT STARTED** | SOURCE->FINDING->HYPOTHESIS->RESULT chain |
 | SYSTEM-TEST reconciliation | **PENDING** | `python -m alladin sync --system-test` |
-| Backtest runner | **NOT STARTED** | `research/backtest.py` sur MarketDataArchive |
+| MQL5 Research | **NOT STARTED** | Extraire hypotheses depuis mql5.com/fr/code/mt5 |
+| Research Lab drill-down | **NOT STARTED** | SOURCE->FINDING->HYPOTHESIS->RESULT chain |
+| Regime Engine confidence | **NOT STARTED** | Multi-indicateur, pas mono-classif |
+| BTC live data integration | **NOT STARTED** | Connecter BinancePublicProvider a l'engine |
+| SNN Phase A baselines | **NOT STARTED** | Ridge/RF/LSTM sur BTCUSDT (voir SNN_BTC_RESEARCH.md) |
 
-## 3. Commits de cette session
+## 3. Commits de cette session (iteration 3)
 
 ```
-0e58093  feat: enrich /health endpoint with last_cycle_at
-8e7d6df  feat: add /api/opportunities endpoint
-5a85d32  feat: strategy lifecycle enforcement via check_lifecycle()
-d806d28  feat: PaperExperimentEngine - simulate trades without real orders
-c09be30  feat: add MarketQualityEngine with machine-readable RejectCodes
-ce2113c  feat: add TimeframeScheduler for multi-timeframe caching
-3c620e9  feat: add archive stats/inspect CLI commands
-555648a  feat: branch Opportunity model into real pipeline
+0927045  test: add observability and robustness tests for Mission Control API
+e44d715  feat: Mission Control dashboard with BTC Three-Way cards and tiered polling
+c7f3784  docs: add SNN BTC research protocol
+19902b0  feat: BTC adapter, Three-Way Experiment, ResearchPerformanceProvider
+85364ee  feat: BacktestRunner, R Analytics, dataset splits, Strategy Scorecard
 ```
 
-## 4. Architecture ajoutee
+## 4. Architecture ajoutee (iteration 3)
 
-### `market/opportunity.py`
-- `OpportunityStatus` + `Opportunity` Pydantic model
-- `to_journal()` excluant les champs lourds
+### `research/r_analytics.py` (nouveau)
+- `RMetrics` dataclass : realized_r, planned_rr, mfe_r, mae_r, spread_cost_r, holding_time
+- `compute_r()` : 1R = |entry - SL| * loss_per_lot * volume
+- Gestion complete des couts (spread, commission, swap)
 
-### `orchestration/engine.py`
-- `_build_opportunities()` : ScanCandidate -> Opportunity, journalise CREATED/REJECTED
+### `research/splits.py` (nouveau)
+- `SplitName = Literal["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO"]`
+- `split_bars()` : purge/embargo pre-reserve, JAMAIS de random shuffle
+- `DatasetSplitConfig` : proportions + purge_bars + embargo_bars configurables
 
-### `market/scanner.py`
-- `TimeframeScheduler` : cache par (symbol, tf), intervalles configurables
-- M5=1, M15=2, H1=4, H4=12, D1=48 cycles entre rechargements
+### `research/backtest.py` (nouveau)
+- `BacktestRunner.run()` : anti-lookahead strict (`bars[:i+1]` only)
+- `VirtualPosition` : MFE/MAE tracking, SL/TP exit detection
+- `BacktestResult` : win_rate, expectancy_r, profit_factor, max_drawdown_r
+- `run_splits()` : backtest par segment independant
+- `to_experiment_result()` : conversion vers ExperimentResult
 
-### `market/quality.py` (nouveau)
-- `RejectCode` StrEnum machine-readable (15 codes)
-- `QualityReport` avec codes + raisons humaines separees
-- `MarketQualityEngine.evaluate()` pipeline de pre-filtres
+### `research/scorecard.py` (nouveau)
+- `ScorecardEntry` : 20+ metriques per strategy/version/symbol/tf/regime/split
+- `MINIMUM_TRADES = 30` : en dessous = INSUFFICIENT_SAMPLE
+- `build_scorecard()` + `build_scorecards_by_regime()`
 
-### `market/paper.py` (nouveau)
-- `PaperPosition` avec MFE/MAE, detection SL/TP, close()
-- `PaperExperimentEngine` : open, tick_all, stats
+### `strategies/performance.py` (nouveau)
+- `ResearchPerformanceProvider` implements `PerformanceProvider` protocol
+- `_TRUSTED_SPLITS = ("DEMO", "OUT_OF_SAMPLE")` : TRAIN/VAL exclus
+- Priorite : DEMO > OOS. Absence = None (neutre, pas negatif)
 
-### `strategies/registry.py`
-- `check_lifecycle(approved_ids, strict=False)` : enforce APPROVED
+### `brokers/crypto.py` (nouveau)
+- `CryptoDataProvider` ABC : klines(), ticker(), instrument(), now()
+- `CryptoMockProvider` : mock deterministe, spread_bps configurable
+- `BinancePublicProvider` : REST public, testnet=True par defaut, urllib only
+- `CryptoTick.spread_bps` : spread en basis points (pas forex pips)
+- `CryptoInstrument` : tick_size, lot_size, min_notional
 
-### `api/app.py`
-- `/api/opportunities` : qualified + filtered par run/cycle
-- `/health` : ajoute `last_cycle_at`
+### `research/btc_experiment.py` (nouveau)
+- `BTCThreeWayEngine` : exactement 3 experiments (TREND/BREAKOUT/MEAN_REVERSION)
+- NO_ENTRY si le regime ne qualifie pas — pas de trades forces
+- `BTCExperimentPosition` : MFE/MAE en R, PnL en USDT et R
+- Position sizing : `risk_amount = notional * risk_pct / 100`, `size_btc = risk_amount / sl_dist`
+- Fee model : `FEE_BPS = 10.0` (0.1% par trade)
 
-### `cli.py`
-- `alladin archive stats`
-- `alladin archive inspect <cycle_id>`
+### `docs/SNN_BTC_RESEARCH.md` (nouveau)
+- Protocole scientifique : 9 niveaux (Ridge -> SNN + R-STDP + metabolic)
+- Hypothese falsifiable : le connectome peut ne rien apporter
+- Controls : degree-preserving rewired, ER random, small-world
+- Anti-overfitting : splits chrono, purge/embargo, 10+ seeds, report ALL
+
+### `api/app.py` (modifie)
+- `/api/btc/experiments` : endpoint read-only BTC experiment status
+
+### `api/static/index.html` (reecrit)
+- Top bar : MODE, broker, daemon, heartbeat badges
+- ROW 1 : Account metrics (Balance, Equity, Floating P&L, DD, Risk)
+- ROW 2 : BTC THREE-WAY EXPERIMENT (3 cartes)
+- ROW 3 : Live positions + Risk map
+- ROW 4 : Opportunity Radar (Why / Why not)
+- ROW 5 : Brain trace + Market activity
+- Tiered polling : FAST(2s) / MEDIUM(8s) / SLOW(30s)
+- In-flight dedup, N/A pour donnees manquantes
 
 ## 5. Etat des tests
 
 ```
-pytest:   209 passed, 3 skipped
+pytest:   256 passed, 3 skipped
 ruff:     All checks passed!
 mypy:     Success: no issues found
 ```
+
+Tests ajoutes cette session :
+- `tests/test_backtest.py` : 23 tests (R analytics, splits, backtest runner, scorecard)
+- `tests/test_btc_experiment.py` : 19 tests (crypto provider, 3-way engine, risk profile)
+- `tests/test_api.py` : +5 tests observabilite/robustesse
 
 ## 6. Etat MT5 / SYSTEM-TEST-001
 
@@ -126,7 +165,7 @@ mypy:     Success: no issues found
 
 ```bash
 cd ~/Alladin
-git log --oneline -5
+git log --oneline -10
 python -m pytest -o addopts="" tests
 python -m ruff check src tests && python -m mypy src
 python -m alladin mt5 status
@@ -144,28 +183,31 @@ python -m alladin serve --broker mt5 --port 8001
 python -m alladin sync --system-test
 ```
 
-**A2 — Backtest runner**
-Creer `research/backtest.py` avec runner sur `MarketDataArchive`.
-`StrategyExperiment` + `ExperimentResult` existent, il manque le moteur.
+**A2 — BTC live data**
+Connecter `BinancePublicProvider` (testnet) dans l'OrchestrationEngine pour alimenter les 3 experiments BTC en temps reel.
 
-**A3 — R-multiple analytics**
-Ajouter `realized_R`, `planned_RR`, `mfe_R`, `mae_R` dans les `TradeRecord`.
+**A3 — Research Lab drill-down**
+Chain SOURCE->FINDING->HYPOTHESIS->EXPERIMENT->RESULT dans l'UI.
 
 ### PRIORITE B
-**B1 — Research Lab drill-down**
-Chain SOURCE->FINDING->HYPOTHESIS->EXPERIMENT->RESULT dans l'UI.
+**B1 — SNN Phase A baselines**
+Implementer Ridge/RF/LSTM baselines sur BTCUSDT (voir `docs/SNN_BTC_RESEARCH.md`).
 
 **B2 — MQL5 research**
 Etudier mql5.com/fr/code/mt5, extraire hypotheses, creer ResearchSource entries.
 
-**B3 — Anti-overfitting**
-TRAIN/VALIDATION/OOS/DEMO splits dans ResearchExperiment.
+**B3 — Regime Engine v2**
+Multi-indicateur avec confidence, pas mono-classif.
 
 ## 9. Points d'attention pour Codex
 
-- `TimeframeScheduler` cache par `(symbol, tf)` — ne pas faire de cache global par `tf` seul
-- `PaperExperimentEngine` n'est pas integre dans l'OrchestrationEngine (il faut l'appeler manuellement)
-- `check_lifecycle()` ne bloque pas automatiquement : appeler avec `strict=True` pour enforcer
-- `/api/opportunities` lit les events journal, pas un store dedie
+- `BacktestRunner` passe `bars[:i+1]` a la strategie — anti-lookahead strict, teste explicitement
+- `ResearchPerformanceProvider` n'utilise JAMAIS TRAIN/VALIDATION — seulement DEMO et OOS
+- `BTCThreeWayEngine` cree exactement 3 experiments mais ne force PAS 3 trades — NO_ENTRY est valide
+- `BinancePublicProvider` default `testnet=True` — ne JAMAIS changer sans confirmation utilisateur
+- `CryptoDataProvider` est separe de `BrokerAdapter` — ne pas contaminer le core MT5
+- `split_bars()` pre-reserve le budget purge/embargo — jamais de random shuffle
+- `ScorecardEntry` requiert minimum 30 trades sinon INSUFFICIENT_SAMPLE
+- Tiered polling dans index.html : FAST(2s), MEDIUM(8s), SLOW(30s) — ne pas tout mettre en FAST
 - Les apostrophes dans les heredocs bash plantent sur ce systeme — utiliser Python pour ecrire des fichiers complexes
 - Fichiers CRLF sur Windows — toujours lire/ecrire en binaire avec replace
