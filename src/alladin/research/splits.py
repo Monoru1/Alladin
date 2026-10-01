@@ -15,7 +15,7 @@ from typing import Literal
 
 from alladin.core.models import Bar
 
-SplitName = Literal["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO_FORWARD"]
+SplitName = Literal["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO"]
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ def split_bars(
         ("TRAIN", cfg.train_pct),
         ("VALIDATION", cfg.validation_pct),
         ("OUT_OF_SAMPLE", cfg.oos_pct),
-        ("DEMO_FORWARD", cfg.demo_pct),
+        ("DEMO", cfg.demo_pct),
     ]
 
     boundaries: list[tuple[SplitName, int, int]] = []
@@ -103,7 +103,7 @@ def split_ranges(
     """Retourne les SplitRange avec timestamps pour chaque segment."""
     segments = split_bars(bars, config)
     ranges: list[SplitRange] = []
-    ordered: list[SplitName] = ["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO_FORWARD"]
+    ordered: list[SplitName] = ["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO"]
     for split_name in ordered:
         segment = segments.get(split_name, [])
         if segment:

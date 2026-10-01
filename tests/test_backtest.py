@@ -200,7 +200,7 @@ class TestSplits:
         assert "TRAIN" in segments
         assert "VALIDATION" in segments
         assert "OUT_OF_SAMPLE" in segments
-        assert "DEMO_FORWARD" in segments
+        assert "DEMO" in segments
         # All segments should be non-empty with enough bars
         for name, seg in segments.items():
             assert len(seg) > 0, f"{name} segment is empty"
@@ -209,7 +209,7 @@ class TestSplits:
         """Splits must be strictly chronological - no overlap."""
         bars = make_bars(300)
         segments = split_bars(bars)
-        names: list[SplitName] = ["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO_FORWARD"]
+        names: list[SplitName] = ["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO"]
         for i in range(len(names) - 1):
             current = segments[names[i]]
             nxt = segments[names[i + 1]]
