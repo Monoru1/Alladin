@@ -87,3 +87,25 @@ class StrategyRegistry:
         ]
         rows += [{"id": i, "enabled": False, "note": why} for i, why in self.unavailable.items()]
         return rows
+
+    def check_lifecycle(
+        self,
+        approved_ids: set[str],
+        *,
+        strict: bool = False,
+    ) -> dict[str, str]:
+        """Verifie que les strategies actives ont un statut APPROVED dans le Research repo.
+
+        Retourne un dict {strategy_id: raison} pour les strategies non-approuvees.
+        Si strict=True, retire les strategies non approuvees de _active.
+        """
+        violations: dict[str, str] = {}
+        for strat_id in list(self._active.keys()):
+            if strat_id not in approved_ids:
+                reason = f"strategie {strat_id} non approuvee (lifecycle enforcement)"
+                violations[strat_id] = reason
+                if strict:
+                    del self._active[strat_id]
+                    self.unavailable[strat_id] = reason
+        return violations
+
