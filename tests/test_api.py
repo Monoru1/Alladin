@@ -50,3 +50,73 @@ def test_live_or_unknown_account_is_visibly_blocked(svc: Components) -> None:
 def test_credentials_are_never_serialized(svc: Components) -> None:
     blob = client(svc).get("/api/overview").text.lower()
     assert "password" not in blob and "mt5_login" not in blob and "12345678" not in blob
+
+
+# ---------------------------------------------------------------------------
+# Phase 15-16: Observability & Robustness Tests
+# ---------------------------------------------------------------------------
+
+def test_btc_experiments_endpoint_returns_valid_structure(svc: Components) -> None:
+    """GET /api/btc/experiments must return a valid structure even with no data."""
+    api = client(svc)
+    resp = api.get("/api/btc/experiments")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "experiments" in data
+    assert "active" in data
+    assert "total" in data
+    assert isinstance(data["experiments"], list)
+    assert data["total"] >= 0
+
+
+def test_health_endpoint_structure(svc: Components) -> None:
+    """GET /health returns all expected fields."""
+    api = client(svc)
+    resp = api.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "broker_connected" in data
+    assert "demo" in data
+    assert "last_cycle_at" in data
+
+
+def test_all_get_endpoints_respond_without_crash(svc: Components) -> None:
+    """Every registered GET endpoint must respond without 500."""
+    result = svc.execution.submit(make_intent(svc))
+    assert result.executed
+    api = client(svc)
+    endpoints = ["/", "/health", "/api/overview", "/api/runs", "/api/positions",
+                 "/api/market", "/api/journal", "/api/strategies", "/api/research",
+                 "/api/opportunities", "/api/btc/experiments"]
+    for ep in endpoints:
+        resp = api.get(ep)
+        assert resp.status_code < 500, f"{ep} returned {resp.status_code}"
+
+
+def test_no_endpoint_allows_post_put_delete(svc: Components) -> None:
+    """Verify the API surface is strictly read-only: no POST, PUT, DELETE, PATCH."""
+    app = create_app(svc.settings, svc.repo, svc.broker)
+    for route in app.routes:
+        methods = getattr(route, "methods", set())
+        forbidden = methods & {"POST", "PUT", "DELETE", "PATCH"}
+        assert not forbidden, f"{getattr(route, 'path', '?')} allows {forbidden}"
+
+
+def test_missing_data_returns_empty_not_500() -> None:
+    """API with no broker and empty DB must still respond, not crash."""
+    from alladin.core.config import Settings
+    from alladin.journal.repository import JournalRepository
+    settings = Settings(ALLADIN_DATA_DIR="/tmp/alladin_test_empty", _env_file=None)  # type: ignore[call-arg]
+    repo = JournalRepository.from_url("sqlite://")
+    app = create_app(settings, repo, broker=None)
+    api = TestClient(app)
+    # Health must work even without broker
+    resp = api.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["broker_connected"] is False
+    # BTC experiments must work with no data
+    resp = api.get("/api/btc/experiments")
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
