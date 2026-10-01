@@ -162,4 +162,23 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             "stats": rr.stats(),
         }
 
+
+    @app.get("/api/opportunities")
+    def opportunities(run_id: str | None = None, cycle_id: str | None = None,
+                      limit: int = Query(200, ge=1, le=1000)) -> dict[str, Any]:
+        from alladin.journal.models import EventType
+        rid = latest(run_id).run_id
+        types = [EventType.OPPORTUNITY_CREATED.value, EventType.OPPORTUNITY_REJECTED.value]
+        events = repo.events(rid, types, limit=limit, desc=True, cycle_id=cycle_id)
+        qualified = [e.payload for e in events if e.type == EventType.OPPORTUNITY_CREATED.value]
+        filtered = [e.payload for e in events if e.type == EventType.OPPORTUNITY_REJECTED.value]
+        return {
+            "run_id": rid,
+            "cycle_id": cycle_id,
+            "qualified": qualified,
+            "filtered": filtered,
+            "total_qualified": len(qualified),
+            "total_filtered": len(filtered),
+        }
+
     return app
