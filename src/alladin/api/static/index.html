@@ -50,10 +50,10 @@ table{width:100%;border-collapse:collapse;font-size:12px}th{color:var(--muted);t
 <header>
   <div class="logo">ALLADIN<small>MISSION CONTROL</small></div>
   <div class="topbar-stats">
-    <span class="badge demo" id="h-mode-badge">DEMO</span>
+    <span class="badge muted" id="h-mode-badge">N/A</span>
     <span id="h-mt5" class="badge muted">MT5</span>
     <span id="h-algo" class="badge muted">ALGO</span>
-    <span id="h-mode" class="badge muted">OBSERVE</span>
+    <span id="h-mode" class="badge muted">N/A</span>
     <span id="h-run" class="badge muted">--</span>
     <span id="h-heartbeat" class="badge muted">--</span>
     <span id="h-cycle" class="badge muted">--</span>
@@ -179,6 +179,21 @@ const money = (v, c) => v == null ? "N/A" : new Intl.NumberFormat("fr-FR", {styl
 const pct = v => v == null ? "N/A" : v.toFixed(2) + "%";
 const rval = v => v == null ? "N/A" : v.toFixed(2) + "R";
 let _inflight = {};
+const _refreshing = {fast:false, medium:false, slow:false, research:false};
+function renderHTML(id, html) {
+  const target = $id(id);
+  if (!target) return;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const allowed = new Set(["DIV", "SPAN", "P", "B", "BR", "TR", "TD", "DETAILS", "SUMMARY", "PRE"]);
+  for (const el of [...template.content.querySelectorAll("*")]) {
+    if (!allowed.has(el.tagName)) { el.remove(); continue; }
+    for (const attr of [...el.attributes]) {
+      if (!(["class", "colspan"].includes(attr.name))) el.removeAttribute(attr.name);
+    }
+  }
+  target.replaceChildren(template.content);
+}
 async function api(u) {
   if (_inflight[u]) return _inflight[u];
   const p = fetch(u).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); }).finally(() => delete _inflight[u]);
@@ -247,18 +262,19 @@ function oppRows(cands) {
 }
 /* FAST polling: positions, BTC experiments, daemon, account (2s) */
 async function refreshFast() {
+  if (_refreshing.fast) return;
+  _refreshing.fast = true;
   try {
     const [ov, pos, btc] = await Promise.all([
       api("/api/overview"), api("/api/positions"), api("/api/btc/experiments")
     ]);
     const a = ov.account || {}, c = a.currency || "EUR", r = ov.risk || {}, ch = ov.challenge || {};
     const set = (id, t) => { const e = $id(id); if (e) e.textContent = t; };
-    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    const seth = renderHTML;
     $id("h-mt5").textContent = a.server ? "MT5 OK" : "JOURNAL";
     $id("h-mt5").className = "badge " + (a.server ? "ok" : "muted");
     $id("h-algo").textContent = "ALGO " + (a.trade_allowed ? "ON" : "OFF");
     $id("h-algo").className = "badge " + (a.trade_allowed ? "ok" : "warn");
-    $id("h-mode").textContent = ov.run?.kind || "N/A";
     $id("h-run").textContent = ov.run?.run_id?.slice(0,12) || "N/A";
     $id("h-heartbeat").textContent = new Date().toLocaleTimeString();
     $id("h-heartbeat").className = "badge ok";
@@ -312,15 +328,17 @@ async function refreshFast() {
       : '<p class="empty">Aucune exposition.</p>');
   } catch (err) {
     $id("h-heartbeat").textContent = "ERR"; $id("h-heartbeat").className = "badge bad"; console.error(err);
-  }
+  } finally { _refreshing.fast = false; }
 }
 /* MEDIUM polling: opportunities, cycles (8s) */
 async function refreshMedium() {
+  if (_refreshing.medium) return;
+  _refreshing.medium = true;
   try {
     const [mkt, jnl] = await Promise.all([
       api("/api/market"), api("/api/journal?limit=40")
     ]);
-    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    const seth = renderHTML;
     const set = (id, t) => { const e = $id(id); if (e) e.textContent = t; };
     seth("opp-rows", oppRows(mkt.candidates));
     set("ma-eligible", mkt.universe_size ?? "N/A"); set("ma-analysed", mkt.analysed ?? "N/A");
@@ -333,15 +351,21 @@ async function refreshMedium() {
       return '<div class="trace-line"><span class="trace-time">' + t + '</span><span class="trace-event">' + lbl + cy + '</span><div class="trace-msg">' + msg + '<details class="trace-raw"><summary>raw</summary><pre>' + JSON.stringify(e.payload, null, 2) + '</pre></details></div></div>';
     }).join("") : '<p class="empty">Aucun cycle enregistre.</p>');
     const health = await api("/health");
+    set("h-mode-badge", health.run_mode || "N/A");
+    $id("h-mode-badge").className = "badge " + (health.run_mode === "DEMO" ? "demo" : "muted");
+    set("h-mode", health.run_mode || "N/A");
     if (health.last_cycle_at) set("h-cycle", "Last: " + new Date(health.last_cycle_at).toLocaleTimeString());
     seth("jnl-integrity", "N/A");
   } catch (err) { console.error("medium", err); }
+  finally { _refreshing.medium = false; }
 }
 /* SLOW polling: research, strategy stats (30s) */
 async function refreshSlow() {
+  if (_refreshing.slow) return;
+  _refreshing.slow = true;
   try {
     const st = await api("/api/strategies");
-    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    const seth = renderHTML;
     seth("strat-rows", st.length ? st.map(s => {
       const p = s.performance, sc = s.enabled ? "ACTIVE" : "INACTIVE";
       return '<tr><td>' + s.id + '</td><td>' + s.version + '</td>' +
@@ -355,11 +379,14 @@ async function refreshSlow() {
         '<td>' + (p?.max_drawdown != null ? (p.max_drawdown*100).toFixed(1)+"%" : "N/A") + '</td></tr>';
     }).join("") : '<tr><td colspan="10" class="empty">Aucune strategie.</td></tr>');
   } catch (err) { console.error("slow", err); }
+  finally { _refreshing.slow = false; }
 }
 async function refreshResearch() {
+  if (_refreshing.research) return;
+  _refreshing.research = true;
   try {
     const d = await api("/api/research");
-    const seth = (id, h) => { const e = $id(id); if (e) e.innerHTML = h; };
+    const seth = renderHTML;
     seth("res-pipeline", (d.pipeline||[]).map(s => '<span class="pip-step">' + s + '</span>').join(""));
     seth("res-sources", d.sources?.length ?
       d.sources.map(s => '<div style="padding:5px 0;border-bottom:1px solid var(--line);font-size:12px"><b>' + s.title + '</b><br><span style="color:var(--muted)">' + s.source_type + ' | ' + (s.retrieved_at?.split("T")[0]||"?") + '</span></div>').join("") :
@@ -383,8 +410,9 @@ async function refreshResearch() {
           '<td>' + (r?.max_drawdown != null ? (r.max_drawdown*100).toFixed(1)+"%" : "N/A") + '</td>' +
           '<td>' + (r ? '<b class="' + (r.passed ? "ok" : "bad") + '">' + (r.passed ? "PASS" : "FAIL") + '</b>' : "N/A") + '</td></tr>';
       }).join("") :
-      '<tr><td colspan="10" class="empty">Aucune experience enregistree.</td></tr>';
+      '<tr><td colspan="10" class="empty">Aucune experience enregistree.</td></tr>');
   } catch (err) { console.error("research", err); }
+  finally { _refreshing.research = false; }
 }
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("main>section").forEach(s => s.classList.remove("show"));

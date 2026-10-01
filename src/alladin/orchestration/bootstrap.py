@@ -29,6 +29,8 @@ from alladin.market.universe import MarketUniverse
 from alladin.orchestration.engine import OrchestrationEngine
 from alladin.orchestration.monitor import PositionMonitor
 from alladin.orchestration.state import RunContext, RunManager
+from alladin.research.models import StrategyStatus
+from alladin.research.repository import ResearchRepository
 from alladin.risk.engine import RiskEngine
 from alladin.strategies.registry import StrategyRegistry
 from alladin.strategies.router import StrategyRouter
@@ -81,6 +83,15 @@ class Components:
         run_mode: RunMode = RunMode.OBSERVE,
     ) -> OrchestrationEngine:
         registry = StrategyRegistry.from_config(self.settings.strategies_dir)
+        effective_mode = RunMode.DEMO if execute and run_mode is RunMode.OBSERVE else run_mode
+        if effective_mode in (RunMode.DEMO, RunMode.PAPER):
+            versions = ResearchRepository.from_engine(self.repo.engine).list_versions()
+            approved = {f"{v.strategy_id}@{v.version}" for v in versions
+                        if v.status is StrategyStatus.APPROVED}
+            if effective_mode is RunMode.DEMO:
+                registry.check_lifecycle(approved, strict=True)
+            else:
+                registry.check_paper_lifecycle(approved)
         universe = MarketUniverse(self.broker, self.profile.universe)
         scanner = MarketScanner(
             self.broker, universe, self.profile.universe, archive=MarketDataArchive(self.repo.engine)

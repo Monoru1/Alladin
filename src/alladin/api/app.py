@@ -1,6 +1,7 @@
 """ALLADIN Mission Control : API strictement GET, alimentée par le journal et le broker."""
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -49,20 +50,31 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
     @app.get("/health")
     def health() -> dict[str, Any]:
         acct = broker.account_info() if broker else None
-        # Last cycle: look for most recent cycle.end event across all runs
+        observed_at = datetime.now(UTC)
+        runs = repo.list_runs()
+        rec = next((r for r in reversed(runs) if r.kind == "RUN"), None)
         last_cycle_at: str | None = None
-        try:
-            runs = repo.list_runs()
-            if runs:
-                evts = repo.events(runs[0].run_id, ["cycle.end"], limit=1, desc=True)
-                if evts:
-                    last_cycle_at = evts[0].ts.isoformat()
-        except Exception:
-            pass
+        run_mode: str | None = None
+        if rec:
+            evts = repo.events(rec.run_id, ["cycle.end"], limit=1, desc=True)
+            if evts:
+                last_cycle_at = evts[0].ts.isoformat()
+            modes = repo.events(rec.run_id, ["mode.change"], limit=1, desc=True)
+            if modes:
+                run_mode = modes[0].payload.get("run_mode")
+        last_dt = datetime.fromisoformat(last_cycle_at) if last_cycle_at else None
+        stale = last_dt is None or observed_at - last_dt.astimezone(UTC) > timedelta(minutes=2)
         return {
             "status": "ok",
-            "broker_connected": broker is not None,
-            "demo": acct is None or acct.account_type is AccountType.DEMO,
+            "run_id": rec.run_id if rec else None,
+            "run_kind": rec.kind if rec else None,
+            "run_mode": run_mode,
+            "account_type": acct.account_type.value if acct else None,
+            "broker_connected": acct is not None,
+            "daemon_state": rec.state if rec else None,
+            "observed_at": observed_at.isoformat(),
+            "stale": stale,
+            "demo": acct is not None and acct.account_type is AccountType.DEMO,
             "last_cycle_at": last_cycle_at,
         }
 
@@ -203,7 +215,7 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             runs = repo.list_runs()
             if not runs:
                 return {"experiments": [], "active": 0, "total": 0}
-            rid = runs[0].run_id
+            rid = next((r.run_id for r in reversed(runs) if r.kind == "RUN"), runs[-1].run_id)
             btc_events = repo.events(rid, ["btc.experiment"], limit=10, desc=True)
             experiments = [e.payload for e in btc_events] if btc_events else []
             return {"experiments": experiments, "active": 0, "total": len(experiments)}

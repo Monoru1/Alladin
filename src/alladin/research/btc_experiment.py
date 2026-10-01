@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -119,6 +120,7 @@ class BTCExperiment:
                 "exit_price": self.position.exit_price,
                 "closed_at": self.position.closed_at.isoformat() if self.position.closed_at else None,
                 "status": self.position.status,
+                "execution_type": "SYNTHETIC_PAPER_SHORT" if self.position.side == Side.SELL else "PAPER_LONG",
                 "pnl_usdt": round(self.position.pnl_usdt, 2),
                 "pnl_r": round(self.position.pnl_r, 4),
                 "mfe_r": round(self.position.mfe_r, 4),
@@ -181,17 +183,29 @@ class BTCThreeWayEngine:
 
     def evaluate(self) -> list[BTCExperiment]:
         """Evalue les 3 hypotheses sur le snapshot actuel."""
-        self.experiments = _create_three_experiments()
+        if not self.experiments:
+            self.experiments = _create_three_experiments()
         self._evaluated = True
 
         # Fetch data
-        bars_h1 = self.provider.klines(SYMBOL, Timeframe.H1, 300)
-        bars_m15 = self.provider.klines(SYMBOL, Timeframe.M15, 300)
-        bars_m5 = self.provider.klines(SYMBOL, Timeframe.M5, 300)
+        now = self.provider.now()
+        if now.tzinfo is None:
+            raise ValueError("crypto decision time must be timezone-aware UTC")
+        def closed_bars(tf: Timeframe) -> list[Bar]:
+            duration = timedelta(minutes=tf.minutes)
+            return [bar for bar in self.provider.klines(SYMBOL, tf, 300)
+                    if bar.time.tzinfo is not None and bar.is_closed is not False
+                    and (bar.close_time or bar.time + duration) <= now]
+
+        bars_h1 = closed_bars(Timeframe.H1)
+        bars_m15 = closed_bars(Timeframe.M15)
+        bars_m5 = closed_bars(Timeframe.M5)
         tick = self.provider.ticker(SYMBOL)
 
         if not bars_h1 or not tick:
             for exp in self.experiments:
+                if exp.position and exp.position.is_open:
+                    continue
                 exp.status = ExperimentStatus.REJECTED
                 exp.rejection_reason = "NO_DATA: insufficient market data"
                 exp.evaluated_at = self.provider.now()
@@ -202,6 +216,8 @@ class BTCThreeWayEngine:
         now = self.provider.now()
 
         for exp in self.experiments:
+            if exp.position and exp.position.is_open:
+                continue
             exp.evaluated_at = now
             exp.regime = assessment.regime
             exp.regime_confidence = assessment.confidence
@@ -279,6 +295,23 @@ class BTCThreeWayEngine:
             return
 
         side = Side.BUY if direction == 1 else Side.SELL
+        # H1 definit la direction; M15 et M5 doivent confirmer sur leurs
+        # propres dernieres barres cloturees. Pas de vote sur bougie ouverte.
+        if not bars_m15 or not bars_m5:
+            exp.status = ExperimentStatus.NO_ENTRY
+            exp.rejection_reason = "TF_MISSING"
+            return
+        now = self.provider.now()
+        if (now - (bars_m15[-1].close_time or bars_m15[-1].time + timedelta(minutes=15)) > timedelta(minutes=30)
+                or now - (bars_m5[-1].close_time or bars_m5[-1].time + timedelta(minutes=5)) > timedelta(minutes=10)):
+            exp.status = ExperimentStatus.NO_ENTRY
+            exp.rejection_reason = "TF_STALE"
+            return
+        if any((tf[-1].close - tf[-1].open) * direction <= 0
+               for tf in (bars_m15, bars_m5)):
+            exp.status = ExperimentStatus.NO_ENTRY
+            exp.rejection_reason = "TF_CONTRADICTION"
+            return
         entry = tick.ask if side == Side.BUY else tick.bid
         sl_dist = 1.5 * atr
         tp_dist = 2.5 * atr
@@ -320,6 +353,11 @@ class BTCThreeWayEngine:
             return
 
         side = Side.BUY if up else Side.SELL
+        if (not bars_m5 or self.provider.now() - (bars_m5[-1].close_time or bars_m5[-1].time + timedelta(minutes=5)) > timedelta(minutes=10)
+                or (bars_m5[-1].close - bars_m5[-1].open) * (1 if up else -1) <= 0):
+            exp.status = ExperimentStatus.NO_ENTRY
+            exp.rejection_reason = "M5_NO_CONFIRMATION"
+            return
         entry = tick.ask if side == Side.BUY else tick.bid
         sl_dist = 1.2 * atr
         tp_dist = 2.4 * atr
@@ -393,10 +431,19 @@ class BTCThreeWayEngine:
     ) -> None:
         """Ouvre une position paper avec sizing base sur le risk_pct du notional."""
         risk_amount = self.notional * self.risk_pct / 100
-        size_btc = risk_amount / sl_dist if sl_dist > 0 else 0
-        if size_btc <= 0:
+        instrument = self.provider.instrument(SYMBOL)
+        if instrument is None or instrument.lot_size <= 0 or sl_dist <= 0:
             exp.status = ExperimentStatus.REJECTED
-            exp.rejection_reason = "SIZING_IMPOSSIBLE"
+            exp.rejection_reason = "INSTRUMENT_OR_SIZING_INVALID"
+            return
+        raw_size = risk_amount / sl_dist
+        step = Decimal(str(instrument.lot_size))
+        size_btc = float((Decimal(str(raw_size)) / step).to_integral_value(rounding=ROUND_DOWN) * step)
+        # Synthetic short consumes equivalent collateral; no spot order is possible.
+        if (size_btc < instrument.lot_size or size_btc * entry < instrument.min_notional
+                or size_btc * entry > self.notional):
+            exp.status = ExperimentStatus.REJECTED
+            exp.rejection_reason = "SIZING_CONSTRAINT"
             return
 
         d = 1 if side == Side.BUY else -1
@@ -417,6 +464,7 @@ class BTCThreeWayEngine:
             "size_btc": round(size_btc, 8),
             "risk_usdt": round(risk_amount, 2),
             "spread_bps": round(tick.spread_bps, 2),
+            "execution_type": "SYNTHETIC_PAPER_SHORT" if side == Side.SELL else "PAPER_LONG",
         }
 
     def _update_position(self, pos: BTCExperimentPosition, tick: CryptoTick) -> None:
@@ -457,12 +505,12 @@ class BTCThreeWayEngine:
         if pos.side == Side.BUY:
             if tick.bid <= pos.stop_loss:
                 return ExperimentStatus.CLOSED_SL
-            if pos.take_profit and tick.ask >= pos.take_profit:
+            if pos.take_profit and tick.bid >= pos.take_profit:
                 return ExperimentStatus.CLOSED_TP
         else:
             if tick.ask >= pos.stop_loss:
                 return ExperimentStatus.CLOSED_SL
-            if pos.take_profit and tick.bid <= pos.take_profit:
+            if pos.take_profit and tick.ask <= pos.take_profit:
                 return ExperimentStatus.CLOSED_TP
         return None
 

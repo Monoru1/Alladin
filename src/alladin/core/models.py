@@ -45,6 +45,8 @@ class Tick(BaseModel):
 
 class Bar(BaseModel):
     time: datetime
+    close_time: datetime | None = None  # crypto: debut exclusif de la prochaine barre, UTC
+    is_closed: bool | None = None
     open: float
     high: float
     low: float

@@ -4,12 +4,34 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
+
 from alladin.agents.base import AgentDecision, AgentIntentDraft
 from alladin.agents.mock import MockAgent
 from alladin.brokers.mock import MockBroker
 from alladin.core.enums import DecisionKind, MarketRegime, RunState, Side
 from alladin.journal.models import EventType
 from alladin.orchestration.bootstrap import Components
+from alladin.research.models import StrategyStatus, StrategyVersion
+from alladin.research.repository import ResearchRepository
+
+
+@pytest.fixture(autouse=True)
+def approved_test_strategies(svc: Components) -> None:
+    """Ces tests d'execution portent sur des versions explicitement approuvees."""
+    repo = ResearchRepository.from_engine(svc.repo.engine)
+    for strategy_id in ("TREND-01", "BREAKOUT-01", "RANGE-01"):
+        repo.save_version(StrategyVersion(
+            strategy_id=strategy_id, version="1.0.0", code_hash="test-hash",
+            created_at=svc.broker.now(),
+        ))
+        for status in (
+            StrategyStatus.FORMALIZED, StrategyStatus.BACKTESTING,
+            StrategyStatus.BACKTEST_PASSED, StrategyStatus.OOS_TESTING,
+            StrategyStatus.OOS_PASSED, StrategyStatus.DEMO_TESTING,
+            StrategyStatus.CANDIDATE, StrategyStatus.APPROVED,
+        ):
+            repo.update_status(strategy_id, "1.0.0", status)
 
 
 def draft_for(svc: Components, symbol: str, **over: object) -> AgentIntentDraft:

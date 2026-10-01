@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
 import pytest
 
-from alladin.brokers.crypto import CryptoMockProvider
+from alladin.brokers.crypto import BinancePublicProvider, CryptoMockProvider, CryptoTick
+from alladin.core.enums import MarketRegime, Side, Timeframe
+from alladin.core.models import Bar
 from alladin.research.btc_experiment import (
+    BTCExperimentPosition,
     BTCThreeWayEngine,
     ExperimentStatus,
     _create_three_experiments,
@@ -21,6 +28,25 @@ class TestCryptoMockProvider:
         # Chronological
         for i in range(1, len(bars)):
             assert bars[i].time > bars[i - 1].time
+
+    def test_binance_forming_kline_excluded(self, monkeypatch):
+        now = datetime(2024, 1, 1, 1, 30, tzinfo=UTC)
+        def kline(start, close):
+            return [int(start.timestamp() * 1000), "100", "101", "99", "100", "1",
+                    int(close.timestamp() * 1000) - 1]
+        data = [kline(now - timedelta(hours=2), now - timedelta(hours=1)),
+                kline(now - timedelta(minutes=30), now + timedelta(minutes=30))]
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): return None
+            def read(self): return json.dumps(data).encode()
+        monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: Response())
+        provider = BinancePublicProvider()
+        monkeypatch.setattr(provider, "now", lambda: now)
+        bars = provider.klines("BTCUSDT", Timeframe.H1, 2)
+        assert len(bars) == 1
+        assert bars[0].is_closed is True
+        assert bars[0].close_time == now - timedelta(hours=1)
 
     def test_ticker(self):
         provider = CryptoMockProvider(base_price=65000.0, spread_bps=5.0)
@@ -61,6 +87,60 @@ class TestThreeExperimentDefinitions:
 
 
 class TestBTCThreeWayEngine:
+    def test_position_and_identity_survive_next_evaluation(self):
+        provider = CryptoMockProvider()
+        engine = BTCThreeWayEngine(provider)
+        exps = engine.evaluate()
+        exp = exps[0]
+        tick = provider.ticker("BTCUSDT")
+        engine._open_paper_position(exp, Side.BUY, tick.ask, 3000, 5000, tick)
+        assert exp.position and exp.position.is_open
+        identity, position = exp.experiment_id, exp.position
+        provider.advance(300)
+        again = engine.evaluate()
+        assert again[0].experiment_id == identity
+        assert again[0].position is position
+        assert again[0].position.is_open
+
+    @pytest.mark.parametrize("side,entry,stop,tp,first,second", [
+        (Side.BUY, 100, 95, 110, (109, 111), (110, 112)),
+        (Side.SELL, 100, 105, 90, (89, 91), (88, 90)),
+    ])
+    def test_tp_requires_liquidation_side(self, side, entry, stop, tp, first, second):
+        engine = BTCThreeWayEngine(CryptoMockProvider())
+        pos = BTCExperimentPosition("x", side, entry, stop, tp, 0.01,
+                                    datetime(2024, 1, 1, tzinfo=UTC))
+        def tick(prices):
+            return CryptoTick("BTCUSDT", datetime.now(UTC),
+                              prices[0], prices[1], sum(prices) / 2)
+        assert engine._check_exit(pos, tick(first)) is None
+        assert engine._check_exit(pos, tick(second)) == ExperimentStatus.CLOSED_TP
+
+    def test_trend_requires_fresh_m15_and_m5_confirmation(self):
+        provider = CryptoMockProvider(start=datetime(2024, 1, 1, 12, tzinfo=UTC))
+        engine = BTCThreeWayEngine(provider)
+        assessment = SimpleNamespace(regime=MarketRegime.TREND,
+                                     metrics={"ema20": 2, "ema50": 1, "atr": 2000})
+        exp = _create_three_experiments()[0]
+        now = provider.now()
+        h1 = [Bar(time=now-timedelta(hours=1), open=100, high=102, low=99, close=101)]
+        m15 = [Bar(time=now-timedelta(minutes=15), open=100, high=102, low=99, close=99)]
+        m5 = [Bar(time=now-timedelta(minutes=5), open=100, high=102, low=99, close=101)]
+        engine._evaluate_trend(exp, h1, m15, m5, provider.ticker("BTCUSDT"), assessment)
+        assert exp.rejection_reason == "TF_CONTRADICTION"
+        m15[0] = m15[0].model_copy(update={"close": 101})
+        m5[0] = m5[0].model_copy(update={"time": now - timedelta(minutes=30)})
+        engine._evaluate_trend(exp, h1, m15, m5, provider.ticker("BTCUSDT"), assessment)
+        assert exp.rejection_reason == "TF_STALE"
+
+    def test_quantity_step_min_notional_and_capital(self):
+        provider = CryptoMockProvider()
+        engine = BTCThreeWayEngine(provider, notional=100)
+        exp = _create_three_experiments()[0]
+        tick = provider.ticker("BTCUSDT")
+        engine._open_paper_position(exp, Side.BUY, tick.ask, 1, 2, tick)
+        assert exp.rejection_reason == "SIZING_CONSTRAINT"
+        assert exp.position is None
     def test_evaluate_creates_three(self):
         provider = CryptoMockProvider()
         engine = BTCThreeWayEngine(provider)

@@ -3,9 +3,9 @@
 # - enabled : activer/désactiver sans toucher au code.
 # - Une entrée dont (id, version) n'a pas d'implémentation est listée comme indisponible.
 strategies:
-  - { id: TREND-01,     version: "1.0.0", enabled: true,  params: { sl_atr: 1.5, tp_atr: 2.5, base_risk_pct: 1.0, max_risk_pct: 6.0 } }
-  - { id: BREAKOUT-01,  version: "1.0.0", enabled: true,  params: { sl_atr: 1.2, tp_atr: 2.4, max_tr_atr: 3.5 } }
-  - { id: RANGE-01,     version: "1.0.0", enabled: true,  params: {} }
+  - { id: TREND-01,     version: "1.0.0", enabled: true, research_paper: true, params: { sl_atr: 1.5, tp_atr: 2.5, base_risk_pct: 1.0, max_risk_pct: 6.0 } }
+  - { id: BREAKOUT-01,  version: "1.0.0", enabled: true, research_paper: true, params: { sl_atr: 1.2, tp_atr: 2.4, max_tr_atr: 3.5 } }
+  - { id: RANGE-01,     version: "1.0.0", enabled: true, research_paper: true, params: {} }
   # Planifiées (architecture prête, logique à venir) :
   - { id: PULLBACK-01,  version: "1.0.0", enabled: false, notes: "à implémenter" }
   - { id: REVERSAL-01,  version: "1.0.0", enabled: false, notes: "à implémenter" }

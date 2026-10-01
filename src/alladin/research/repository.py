@@ -43,6 +43,23 @@ from alladin.research.models import (
 
 _meta = MetaData()
 
+_LIFECYCLE = (
+    StrategyStatus.DISCOVERED, StrategyStatus.FORMALIZED,
+    StrategyStatus.BACKTESTING, StrategyStatus.BACKTEST_PASSED,
+    StrategyStatus.OOS_TESTING, StrategyStatus.OOS_PASSED,
+    StrategyStatus.DEMO_TESTING, StrategyStatus.CANDIDATE,
+    StrategyStatus.APPROVED,
+)
+
+
+def _validate_transition(old: StrategyStatus, new: StrategyStatus) -> None:
+    if old == new:
+        return
+    if new in (StrategyStatus.REJECTED, StrategyStatus.RETIRED):
+        return
+    if old not in _LIFECYCLE or new not in _LIFECYCLE or _LIFECYCLE.index(new) != _LIFECYCLE.index(old) + 1:
+        raise ValueError(f"invalid strategy lifecycle transition: {old} -> {new}")
+
 _sources = Table(
     "research_sources",
     _meta,
@@ -298,6 +315,8 @@ class ResearchRepository:
                 .where(_versions.c.version == version.version)
             ).first()
             if existing is None:
+                if version.status is not StrategyStatus.DISCOVERED:
+                    raise ValueError("new strategy version must start DISCOVERED")
                 conn.execute(
                     _versions.insert(),
                     {
@@ -315,6 +334,7 @@ class ResearchRepository:
                 )
             else:
                 # Seul le status peut être mis à jour
+                _validate_transition(StrategyStatus(existing.status), version.status)
                 conn.execute(
                     _versions.update()
                     .where(_versions.c.strategy_id == version.strategy_id)
@@ -324,6 +344,13 @@ class ResearchRepository:
 
     def update_status(self, strategy_id: str, version: str, status: StrategyStatus) -> None:
         with self.engine.begin() as conn:
+            row = conn.execute(
+                _versions.select().where(_versions.c.strategy_id == strategy_id)
+                .where(_versions.c.version == version)
+            ).first()
+            if row is None:
+                raise ValueError("unknown strategy version")
+            _validate_transition(StrategyStatus(row.status), status)
             conn.execute(
                 _versions.update()
                 .where(_versions.c.strategy_id == strategy_id)

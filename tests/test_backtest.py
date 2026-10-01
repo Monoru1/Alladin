@@ -11,7 +11,7 @@ import pytest
 
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
-from alladin.research.backtest import BacktestResult, BacktestRunner
+from alladin.research.backtest import BacktestResult, BacktestRunner, VirtualPosition
 from alladin.research.r_analytics import compute_r
 from alladin.research.scorecard import MINIMUM_TRADES, build_scorecard
 from alladin.research.splits import DatasetSplitConfig, SplitName, split_bars, split_ranges
@@ -188,12 +188,63 @@ class TestRAnalytics:
         )
         assert r.holding_time == timedelta(hours=4, minutes=30)
 
+    @pytest.mark.parametrize("side,entry,stop,exit_price", [
+        (1, 101.0, 99.0, 103.0), (-1, 100.0, 102.0, 97.0),
+    ])
+    def test_executable_prices_and_costs(self, side, entry, stop, exit_price):
+        params = dict(side_sign=side, entry=entry, stop_loss=stop,
+                      exit_price=exit_price, take_profit=entry + side * 4,
+                      price_value_per_lot=10.0, volume=1.0,
+                      opened_at=datetime(2024, 1, 1, tzinfo=UTC),
+                      closed_at=datetime(2024, 1, 2, tzinfo=UTC))
+        baseline = compute_r(**params, spread_at_entry=1.0)
+        assert baseline.realized_r == pytest.approx((exit_price - entry) * side / 2)
+        assert compute_r(**params, spread_at_entry=0.0).realized_r == baseline.realized_r
+        costly = compute_r(**params, commission=2.0, slippage=0.1,
+                           estimated_commission=2.0, estimated_slippage=0.1)
+        assert costly.initial_risk == pytest.approx(23.0)
+        assert costly.realized_r < baseline.realized_r
+        assert costly.planned_rr == pytest.approx((40 - 2 - 1) / 23)
+        assert compute_r(**params, commission=-2.0).realized_r < baseline.realized_r
+
+    def test_loss_per_lot_is_total_stop_loss_not_price_value(self):
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        r = compute_r(side_sign=1, entry=100, stop_loss=98, exit_price=101,
+                      loss_per_lot=50, volume=2, opened_at=now, closed_at=now)
+        assert r.initial_risk == 100
+        assert r.realized_r == 0.5
+
+    def test_gap_through_stop_below_minus_one_r(self):
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        r = compute_r(side_sign=1, entry=100, stop_loss=99, exit_price=97,
+                      opened_at=now, closed_at=now)
+        assert r.realized_r < -1
+        costly = compute_r(side_sign=1, entry=100, stop_loss=99, exit_price=97,
+                           commission=0.2, slippage=0.1, initial_risk=r.initial_risk,
+                           opened_at=now, closed_at=now)
+        assert costly.realized_r < r.realized_r
+
 
 # ---------------------------------------------------------------------------
 # Dataset Splits Tests
 # ---------------------------------------------------------------------------
 
 class TestSplits:
+    def test_unsorted_or_duplicate_timestamps_rejected(self):
+        bars = make_bars(200)
+        with pytest.raises(ValueError, match="strictly chronological"):
+            split_bars(bars[:100] + [bars[99]] + bars[100:])
+        with pytest.raises(ValueError, match="strictly chronological"):
+            split_bars(list(reversed(bars)))
+
+    def test_gap_and_insufficient_purge_rejected(self):
+        bars = make_bars(200)
+        shifted = bars[:100] + [b.model_copy(update={"time": b.time + timedelta(hours=1)})
+                                for b in bars[100:]]
+        with pytest.raises(ValueError, match="bar gap"):
+            split_bars(shifted, DatasetSplitConfig(expected_interval=timedelta(hours=1)))
+        with pytest.raises(ValueError, match="label_horizon"):
+            DatasetSplitConfig(purge_bars=5, label_horizon_bars=10)
     def test_basic_split(self):
         bars = make_bars(400)
         segments = split_bars(bars)
@@ -266,6 +317,62 @@ class TestSplits:
 # ---------------------------------------------------------------------------
 
 class TestBacktestRunner:
+    def test_next_bar_open_fill_cannot_change_prior_signal(self):
+        class Once(DummyStrategy):
+            def __init__(self):
+                super().__init__()
+                self.decisions = []
+
+            def evaluate(self, ctx):
+                if len(ctx.bars) != 121:
+                    return None
+                self.decisions.append((len(ctx.bars), ctx.bars[-1].close))
+                return StrategySignal(side=Side.BUY, entry=100, stop_loss=98,
+                                      take_profit=110, confidence=0.8, reason="once")
+
+        bars = make_bars(124, start_price=100, trend=0.01)
+        for opening in (100.5, 101.5):
+            history = list(bars)
+            history[121] = bars[121].model_copy(update={"open": opening, "high": 102,
+                                                       "low": 100, "close": 101})
+            strategy = Once()
+            result = BacktestRunner(strategy, spread_pips=0).run(history)
+            assert strategy.decisions == [(121, bars[120].close)]
+            assert result.trades[0].position.entry == opening
+            assert result.trades[0].position.bar_index == 121
+            assert result.trades[0].position.initial_risk == result.trades[0].r_metrics.initial_risk
+
+    @pytest.mark.parametrize("side,entry,stop,opening", [
+        (Side.BUY, 100.0, 99.0, 97.0),
+        (Side.SELL, 100.0, 101.0, 103.0),
+    ])
+    def test_gap_fills_worse_than_stop(self, side, entry, stop, opening):
+        runner = BacktestRunner(DummyStrategy(), spread_pips=0)
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        pos = VirtualPosition("gap", "X", side, entry, stop, None, now, 0)
+        bar = Bar(time=now + timedelta(hours=1), open=opening,
+                  high=opening + 0.5, low=opening - 0.5, close=opening)
+        assert runner._check_exit(pos, bar) == opening
+        assert pos.exit_reason == "SL_GAP"
+        pos.exit_price, pos.closed_at = opening, bar.time
+        assert runner._finalize_trade(pos, 1, 0).r_metrics.realized_r < -1
+
+    def test_ambiguous_bar_uses_stop_and_no_post_exit_mfe(self):
+        runner = BacktestRunner(DummyStrategy(), spread_pips=0)
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        pos = VirtualPosition("both", "X", Side.BUY, 100, 99, 105, now, 0)
+        bar = Bar(time=now + timedelta(hours=1), open=100,
+                  high=200, low=98, close=150)
+        exit_price = runner._check_exit(pos, bar)
+        assert exit_price == 99
+        assert pos.exit_reason == "AMBIGUOUS_STOP_FIRST"
+        runner._update_mfe_mae(pos, bar, exit_price)
+        assert pos.mfe_price == 99  # high 200 survient peut-etre apres le SL
+        excluded = BacktestRunner(DummyStrategy(), spread_pips=0,
+                                  intrabar_policy="EXCLUDE_AMBIGUOUS")
+        pos2 = VirtualPosition("both2", "X", Side.BUY, 100, 99, 105, now, 0)
+        assert excluded._check_exit(pos2, bar) is None
+        assert pos2.exit_reason == "AMBIGUOUS"
     def test_basic_run(self):
         bars = make_bars(200, trend=0.1)
         runner = BacktestRunner(
@@ -343,6 +450,15 @@ class TestBacktestRunner:
         assert "TRAIN" in results
         assert "VALIDATION" in results
         assert "OUT_OF_SAMPLE" in results
+
+    def test_split_warmup_has_context_but_no_warmup_trades(self):
+        bars = make_bars(500, trend=0.05)
+        segments = split_bars(bars)
+        val = segments["VALIDATION"]
+        assert len(val) < 120
+        result = BacktestRunner(DummyStrategy(), spread_pips=0).run_splits(bars)["VALIDATION"]
+        assert result.n_trades > 0
+        assert all(val[0].time <= t.position.opened_at <= val[-1].time for t in result.trades)
 
     def test_result_to_experiment_result(self):
         bars = make_bars(300, trend=0.1)

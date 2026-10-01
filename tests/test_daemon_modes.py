@@ -300,9 +300,33 @@ def test_approved_strategy_requires_explicit_lifecycle(rrepo: ResearchRepository
         status=StrategyStatus.DISCOVERED, created_at=now,
     )
     rrepo.save_version(v)
-    # APPROVED n'est accessible que par update_status (progression du lifecycle)
-    rrepo.update_status("FAKE-01", "1.0.0", StrategyStatus.APPROVED)
+    with pytest.raises(ValueError, match="invalid strategy lifecycle"):
+        rrepo.update_status("FAKE-01", "1.0.0", StrategyStatus.APPROVED)
+    for status in (
+        StrategyStatus.FORMALIZED, StrategyStatus.BACKTESTING,
+        StrategyStatus.BACKTEST_PASSED, StrategyStatus.OOS_TESTING,
+        StrategyStatus.OOS_PASSED, StrategyStatus.DEMO_TESTING,
+        StrategyStatus.CANDIDATE, StrategyStatus.APPROVED,
+    ):
+        rrepo.update_status("FAKE-01", "1.0.0", status)
     assert rrepo.list_versions("FAKE-01")[0].status is StrategyStatus.APPROVED
+
+
+def test_oos_results_cannot_rank_strategy_automatically(rrepo: ResearchRepository) -> None:
+    from alladin.strategies.performance import ResearchPerformanceProvider
+
+    now = datetime.now(UTC)
+    exp = StrategyExperiment(
+        experiment_id="OOS-1", strategy_id="TREND-01", strategy_version="1.0.0",
+        dataset="EURUSD-v1", period_start=now, period_end=now,
+        symbols=["EURUSD"], timeframes=["H1"],
+        parameters={"code_hash": "abc", "cost_model": "v1"}, split="OUT_OF_SAMPLE",
+    )
+    rrepo.save_experiment(exp)
+    rrepo.save_result(ExperimentResult(experiment_id="OOS-1", trades=20, wins=15,
+                                       losses=5, expectancy=2.0, passed=True))
+    provider = ResearchPerformanceProvider(rrepo)
+    assert provider.expectancy_r("TREND-01", "1.0.0", MarketRegime.TREND) is None
 
 
 # ============================================================================

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import uuid4
 
 from alladin.core.enums import MarketRegime, Side, Timeframe
@@ -27,6 +28,7 @@ from alladin.strategies.base import Strategy, StrategyContext, StrategySignal
 log = logging.getLogger(__name__)
 
 MIN_BARS_FOR_EVAL = 120  # barres minimum avant premiere evaluation
+IntrabarPolicy = Literal["CONSERVATIVE_STOP_FIRST", "EXCLUDE_AMBIGUOUS"]
 
 
 @dataclass
@@ -44,6 +46,7 @@ class VirtualPosition:
     confidence: float = 0.0
     reason: str = ""
     regime: MarketRegime = MarketRegime.UNKNOWN
+    initial_risk: float | None = None
 
     # Filled during simulation
     exit_price: float | None = None
@@ -80,6 +83,8 @@ class BacktestResult:
     split: str = ""
     period_start: datetime | None = None
     period_end: datetime | None = None
+    intrabar_policy: str = "CONSERVATIVE_STOP_FIRST"
+    ambiguous_positions: list[VirtualPosition] = field(default_factory=list)
 
     @property
     def n_trades(self) -> int:
@@ -162,6 +167,9 @@ class BacktestRunner:
         commission_per_lot: float = 0.0,
         point: float = 0.00001,
         loss_per_lot: float = 1.0,
+        price_value_per_lot: float | None = None,
+        slippage: float = 0.0,
+        intrabar_policy: IntrabarPolicy = "CONSERVATIVE_STOP_FIRST",
         volume: float = 0.01,
         max_concurrent: int = 1,
     ) -> None:
@@ -171,6 +179,11 @@ class BacktestRunner:
         self.commission = commission_per_lot
         self.point = point
         self.loss_per_lot = loss_per_lot
+        self.price_value_per_lot = price_value_per_lot
+        self.slippage = slippage
+        if intrabar_policy not in ("CONSERVATIVE_STOP_FIRST", "EXCLUDE_AMBIGUOUS"):
+            raise ValueError("unknown intrabar policy")
+        self.intrabar_policy = intrabar_policy
         self.volume = volume
         self.max_concurrent = max_concurrent
 
@@ -180,6 +193,7 @@ class BacktestRunner:
         symbol: str = "UNKNOWN",
         timeframe: Timeframe = Timeframe.H1,
         split: SplitName = "TRAIN",
+        trade_start: datetime | None = None,
     ) -> BacktestResult:
         """Execute le backtest bar par bar. Strictement chronologique."""
         result = BacktestResult(
@@ -188,60 +202,75 @@ class BacktestRunner:
             strategy_id=self.strategy.id,
             strategy_version=self.strategy.version,
             split=split,
+            intrabar_policy=self.intrabar_policy,
         )
 
-        if len(bars) < MIN_BARS_FOR_EVAL:
+        if len(bars) < MIN_BARS_FOR_EVAL + 1:
             log.warning("Not enough bars for backtest: %d < %d", len(bars), MIN_BARS_FOR_EVAL)
             return result
 
         result.period_start = bars[0].time
         result.period_end = bars[-1].time
 
+        if any(a.time >= b.time for a, b in zip(bars[:-1], bars[1:], strict=True)):
+            raise ValueError("bars must be strictly chronological without duplicates")
         open_positions: list[VirtualPosition] = []
+        pending: tuple[StrategySignal, MarketRegime] | None = None
         spread = self.spread_pips * self.point
 
         for i in range(MIN_BARS_FOR_EVAL, len(bars)):
             result.bars_processed += 1
 
-            # ANTI-LOOKAHEAD : la strategie voit UNIQUEMENT bars[0:i+1] (inclus i, excluant futur)
-            visible_bars = bars[:i + 1]
             current_bar = bars[i]
+            # Signal decide a la cloture i-1; execution au premier prix de i.
+            if pending is not None:
+                pending_signal, regime = pending
+                pending = None
+                fill = current_bar.open + spread if pending_signal.side == Side.BUY else current_bar.open
+                direction = 1 if pending_signal.side == Side.BUY else -1
+                valid_stop = (fill - pending_signal.stop_loss) * direction > 0
+                valid_tp = pending_signal.take_profit is None or (pending_signal.take_profit - fill) * direction > 0
+                if valid_stop and valid_tp and len(open_positions) < self.max_concurrent:
+                    open_positions.append(VirtualPosition(
+                        trade_id=f"BT-{uuid4().hex[:8]}", symbol=symbol,
+                        side=pending_signal.side, entry=fill, stop_loss=pending_signal.stop_loss,
+                        take_profit=pending_signal.take_profit, opened_at=current_bar.time,
+                        bar_index=i, confidence=pending_signal.confidence,
+                        reason=pending_signal.reason, regime=regime,
+                        initial_risk=self._initial_risk(fill, pending_signal.stop_loss),
+                    ))
+                else:
+                    result.rejected_signals += 1
 
             # 1. Update open positions avec la barre courante
             newly_closed: list[tuple[VirtualPosition, int]] = []
             for pos in list(open_positions):
-                self._update_mfe_mae(pos, current_bar)
                 exit_price = self._check_exit(pos, current_bar)
                 if exit_price is not None:
+                    # Le chemin intrabar est inconnu: ne jamais crediter le high/low
+                    # apres une sortie. Seul le prix de liquidation est certain.
+                    self._update_mfe_mae(pos, current_bar, exit_price)
                     pos.exit_price = exit_price
                     pos.closed_at = current_bar.time
                     bars_held = i - pos.bar_index
                     newly_closed.append((pos, bars_held))
+                elif pos.exit_reason == "AMBIGUOUS":
+                    result.ambiguous_positions.append(pos)
+                    open_positions.remove(pos)
+                else:
+                    self._update_mfe_mae(pos, current_bar)
 
             for pos, bars_held in newly_closed:
                 open_positions.remove(pos)
                 trade = self._finalize_trade(pos, bars_held, spread)
                 result.trades.append(trade)
 
-            # 2. Evaluate strategy si pas de position ouverte (ou max_concurrent pas atteint)
-            if len(open_positions) < self.max_concurrent:
+            # Decision apres la cloture i; aucune lecture de la barre i+1.
+            if i < len(bars) - 1 and (trade_start is None or current_bar.time >= trade_start) and len(open_positions) < self.max_concurrent:
+                visible_bars = bars[:i + 1]
                 signal = self._evaluate_strategy(visible_bars, symbol, timeframe)
                 if signal is not None:
-                    # Entry sur la PROCHAINE barre (pas la courante) si on est strict
-                    # Ici on entre sur la barre courante a l'open comme approximation
-                    pos = VirtualPosition(
-                        trade_id=f"BT-{uuid4().hex[:8]}",
-                        symbol=symbol,
-                        side=signal.side,
-                        entry=signal.entry,
-                        stop_loss=signal.stop_loss,
-                        take_profit=signal.take_profit,
-                        opened_at=current_bar.time,
-                        bar_index=i,
-                        confidence=signal.confidence,
-                        reason=signal.reason,
-                    )
-                    open_positions.append(pos)
+                    pending = (signal, self.classifier.classify(visible_bars).regime)
                 else:
                     result.rejected_signals += 1
 
@@ -249,7 +278,7 @@ class BacktestRunner:
         if open_positions:
             last_bar = bars[-1]
             for pos in open_positions:
-                exit_p = last_bar.close
+                exit_p = last_bar.close if pos.side == Side.BUY else last_bar.close + spread
                 pos.exit_price = exit_p
                 pos.closed_at = last_bar.time
                 pos.exit_reason = "END_OF_DATA"
@@ -266,11 +295,18 @@ class BacktestRunner:
         timeframe: Timeframe = Timeframe.H1,
         config: DatasetSplitConfig | None = None,
     ) -> dict[SplitName, BacktestResult]:
-        """Execute le backtest sur chaque split independamment."""
+        """Chaque split utilise le passe comme warmup, sans trader avant son debut."""
         segments = split_bars(all_bars, config)
         results: dict[SplitName, BacktestResult] = {}
         for split_name, split_bars_list in segments.items():
-            results[split_name] = self.run(split_bars_list, symbol, timeframe, split_name)
+            if not split_bars_list:
+                results[split_name] = BacktestResult(split=split_name,
+                                                     intrabar_policy=self.intrabar_policy)
+                continue
+            prefix = [bar for bar in all_bars if bar.time <= split_bars_list[-1].time]
+            results[split_name] = self.run(prefix, symbol, timeframe, split_name,
+                                           trade_start=split_bars_list[0].time)
+            results[split_name].period_start = split_bars_list[0].time
         return results
 
     def _evaluate_strategy(
@@ -296,9 +332,11 @@ class BacktestRunner:
 
         last_bar = visible_bars[-1]
         spread = self.spread_pips * self.point
+        decision_time = last_bar.close_time or last_bar.time + timedelta(minutes=timeframe.minutes)
+        decision_time = decision_time if decision_time.tzinfo else decision_time.replace(tzinfo=UTC)
         tick = Tick(
             symbol=symbol,
-            time=last_bar.time,
+            time=decision_time,
             bid=last_bar.close,
             ask=last_bar.close + spread,
         )
@@ -322,23 +360,24 @@ class BacktestRunner:
 
         ctx = StrategyContext(
             run_id="backtest",
-            now=last_bar.time if last_bar.time.tzinfo else last_bar.time.replace(tzinfo=UTC),
+            now=decision_time,
             candidate=cand,
         )
         return self.strategy.evaluate(ctx)
 
-    def _update_mfe_mae(self, pos: VirtualPosition, bar: Bar) -> None:
+    def _update_mfe_mae(self, pos: VirtualPosition, bar: Bar, exit_price: float | None = None) -> None:
         """Met a jour MFE/MAE en prix."""
         if pos.side == Side.BUY:
-            favorable = bar.high
-            adverse = bar.low
+            favorable = exit_price if exit_price is not None else bar.high
+            adverse = exit_price if exit_price is not None else bar.low
             if pos.mfe_price is None or favorable > pos.mfe_price:
                 pos.mfe_price = favorable
             if pos.mae_price is None or adverse < pos.mae_price:
                 pos.mae_price = adverse
         else:
-            favorable = bar.low
-            adverse = bar.high
+            spread = self.spread_pips * self.point
+            favorable = exit_price if exit_price is not None else bar.low + spread
+            adverse = exit_price if exit_price is not None else bar.high + spread
             if pos.mfe_price is None or favorable < pos.mfe_price:
                 pos.mfe_price = favorable
             if pos.mae_price is None or adverse > pos.mae_price:
@@ -346,21 +385,53 @@ class BacktestRunner:
 
     def _check_exit(self, pos: VirtualPosition, bar: Bar) -> float | None:
         """Verifie si SL ou TP touche sur la barre courante. Retourne exit_price ou None."""
+        spread = self.spread_pips * self.point
+        opening_liquidation = bar.open if pos.side == Side.BUY else bar.open + spread
         if pos.side == Side.BUY:
+            if opening_liquidation <= pos.stop_loss:
+                pos.exit_reason = "SL_GAP"
+                return opening_liquidation
+            if pos.take_profit is not None and opening_liquidation >= pos.take_profit:
+                pos.exit_reason = "TP_GAP"
+                return pos.take_profit
             if bar.low <= pos.stop_loss:
-                pos.exit_reason = "SL"
+                both = pos.take_profit is not None and bar.high >= pos.take_profit
+                if both and self.intrabar_policy == "EXCLUDE_AMBIGUOUS":
+                    pos.exit_reason = "AMBIGUOUS"
+                    return None
+                pos.exit_reason = ("AMBIGUOUS_STOP_FIRST" if pos.take_profit is not None
+                                   and bar.high >= pos.take_profit else "SL")
                 return pos.stop_loss
             if pos.take_profit is not None and bar.high >= pos.take_profit:
                 pos.exit_reason = "TP"
                 return pos.take_profit
         else:  # SELL
-            if bar.high >= pos.stop_loss:
-                pos.exit_reason = "SL"
+            if opening_liquidation >= pos.stop_loss:
+                pos.exit_reason = "SL_GAP"
+                return opening_liquidation
+            if pos.take_profit is not None and opening_liquidation <= pos.take_profit:
+                pos.exit_reason = "TP_GAP"
+                return pos.take_profit
+            if bar.high + spread >= pos.stop_loss:
+                both = pos.take_profit is not None and bar.low + spread <= pos.take_profit
+                if both and self.intrabar_policy == "EXCLUDE_AMBIGUOUS":
+                    pos.exit_reason = "AMBIGUOUS"
+                    return None
+                pos.exit_reason = ("AMBIGUOUS_STOP_FIRST" if pos.take_profit is not None
+                                   and bar.low + spread <= pos.take_profit else "SL")
                 return pos.stop_loss
-            if pos.take_profit is not None and bar.low <= pos.take_profit:
+            if pos.take_profit is not None and bar.low + spread <= pos.take_profit:
                 pos.exit_reason = "TP"
                 return pos.take_profit
         return None
+
+    def _initial_risk(self, entry: float, stop_loss: float) -> float:
+        distance = abs(entry - stop_loss)
+        value_per_lot = (self.price_value_per_lot if self.price_value_per_lot is not None
+                         else self.loss_per_lot / distance)
+        return (distance * value_per_lot * self.volume
+                + abs(self.commission * self.volume)
+                + abs(self.slippage) * value_per_lot * self.volume)
 
     def _finalize_trade(self, pos: VirtualPosition, bars_held: int, spread: float) -> BacktestTrade:
         """Finalise un trade et calcule les R metrics."""
@@ -378,10 +449,14 @@ class BacktestRunner:
             opened_at=pos.opened_at,
             closed_at=pos.closed_at,
             spread_at_entry=spread,
-            slippage=0.0,
+            slippage=self.slippage,
             commission=self.commission * self.volume,
+            estimated_commission=self.commission * self.volume,
+            estimated_slippage=self.slippage,
+            initial_risk=pos.initial_risk,
             swap=0.0,
-            loss_per_lot=self.loss_per_lot,
+            loss_per_lot=self.loss_per_lot if self.price_value_per_lot is None else None,
+            price_value_per_lot=self.price_value_per_lot,
             volume=self.volume,
         )
         return BacktestTrade(

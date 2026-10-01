@@ -42,11 +42,22 @@ class DatasetSplitConfig:
     demo_pct: float = 0.10
     purge_bars: int = 10  # barres supprimees entre segments
     embargo_bars: int = 5  # barres ignorees au debut de chaque segment post-purge
+    label_horizon_bars: int = 0  # horizon maximal d'un label/trade pour anti-leakage
+    expected_interval: timedelta | None = None
+    minimum_split_bars: int = 5
 
     def __post_init__(self) -> None:
         total = self.train_pct + self.validation_pct + self.oos_pct + self.demo_pct
         if abs(total - 1.0) > 0.01:
             raise ValueError(f"split percentages must sum to 1.0, got {total:.2f}")
+        if any(p <= 0 for p in (self.train_pct, self.validation_pct, self.oos_pct, self.demo_pct)):
+            raise ValueError("every split percentage must be positive")
+        if self.purge_bars < 0 or self.embargo_bars < 0:
+            raise ValueError("purge and embargo must be non-negative")
+        if self.purge_bars < self.label_horizon_bars:
+            raise ValueError("purge_bars must cover label_horizon_bars")
+        if self.minimum_split_bars < 1:
+            raise ValueError("minimum_split_bars must be positive")
 
 
 def split_bars(
@@ -62,6 +73,13 @@ def split_bars(
     n = len(bars)
     if n < 50:
         raise ValueError(f"need at least 50 bars for splitting, got {n}")
+    if any(a.time >= b.time for a, b in zip(bars[:-1], bars[1:], strict=True)):
+        raise ValueError("bars must be strictly chronological without duplicates")
+    if cfg.expected_interval is not None and any(
+        b.time - a.time != cfg.expected_interval
+        for a, b in zip(bars[:-1], bars[1:], strict=True)
+    ):
+        raise ValueError("bar gap does not match expected_interval")
 
     # Calcul des boundaries : on reserve d'abord le total purge/embargo
     n_gaps = 3  # between TRAIN/VAL, VAL/OOS, OOS/DEMO
@@ -80,7 +98,7 @@ def split_bars(
     boundaries: list[tuple[SplitName, int, int]] = []
     cursor = 0
     for i, (name, pct) in enumerate(splits):
-        raw_count = max(5, int(usable * pct))
+        raw_count = max(cfg.minimum_split_bars, int(usable * pct))
         start = cursor
         end = min(start + raw_count, n)
         boundaries.append((name, start, end))
@@ -92,6 +110,8 @@ def split_bars(
         start = min(start, n)
         end = min(end, n)
         result[name] = bars[start:end]
+        if len(result[name]) < cfg.minimum_split_bars:
+            raise ValueError(f"split {name} too short")
 
     return result
 

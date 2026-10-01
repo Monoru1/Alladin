@@ -19,11 +19,25 @@ from alladin.journal.repository import GENESIS, JournalRepository, _canon, _hash
 from alladin.market.archive import MarketDataArchive
 from alladin.orchestration.bootstrap import Components
 from alladin.orchestration.state import RunManager
+from alladin.research.models import StrategyStatus, StrategyVersion
+from alladin.research.repository import ResearchRepository
 from tests.conftest import T0
 
 
 def test_cycle_id_is_propagated_to_the_complete_cycle_and_trade(svc: Components) -> None:
+    research = ResearchRepository.from_engine(svc.repo.engine)
+    for strategy_id in ("TREND-01", "BREAKOUT-01", "RANGE-01"):
+        research.save_version(StrategyVersion(
+            strategy_id=strategy_id, version="1.0.0", code_hash="test-hash",
+            created_at=svc.broker.now(),
+        ))
+        for status in (StrategyStatus.FORMALIZED, StrategyStatus.BACKTESTING,
+                       StrategyStatus.BACKTEST_PASSED, StrategyStatus.OOS_TESTING,
+                       StrategyStatus.OOS_PASSED, StrategyStatus.DEMO_TESTING,
+                       StrategyStatus.CANDIDATE, StrategyStatus.APPROVED):
+            research.update_status(strategy_id, "1.0.0", status)
     outcome = svc.engine(MockAgent(), execute=True).run_cycle()
+    assert outcome.decision == "TRADE", outcome.reason
     assert outcome.cycle_id
     events = svc.repo.events(svc.run.run_id, cycle_id=outcome.cycle_id)
     types = {event.type for event in events}

@@ -1,10 +1,8 @@
 """ResearchPerformanceProvider : branche les resultats valides du ResearchRepository
 dans le StrategyRouter sans creer de feedback circulaire.
 
-Priorite :
-1. DEMO_FORWARD si disponible
-2. OUT_OF_SAMPLE valide
-3. Rien (neutre) -- TRAIN seul ne compte pas
+Seuls les resultats DEMO peuvent influencer automatiquement le routeur.
+OOS reste une evaluation aveugle a rapporter, jamais un signal de selection.
 
 L'absence de donnees reste neutre (None), pas artificiellement negative ou positive.
 """
@@ -15,14 +13,13 @@ from alladin.core.enums import MarketRegime
 from alladin.research.repository import ResearchRepository
 
 # Splits dont les resultats sont dignes de confiance pour le routing
-_TRUSTED_SPLITS = ("DEMO", "OUT_OF_SAMPLE")
+_TRUSTED_SPLITS = ("DEMO",)
 
 
 class ResearchPerformanceProvider:
     """Fournit expectancy_r au StrategyRouter depuis le ResearchRepository.
 
-    Seuls les splits OOS et DEMO_FORWARD alimentent le routeur.
-    TRAIN et VALIDATION ne sont JAMAIS utilises pour le routing.
+    Seul le split DEMO alimente le routeur. TRAIN/VAL/OOS ne le font pas.
     """
 
     def __init__(self, repo: ResearchRepository) -> None:
@@ -45,7 +42,7 @@ class ResearchPerformanceProvider:
             # On ne filtre pas par regime ici car les experiments
             # couvrent souvent plusieurs regimes
             key = (exp.strategy_id, exp.strategy_version, "ALL")
-            # Priorite DEMO_FORWARD > OOS
+            # DEMO uniquement; OOS conserve son role de mesure aveugle.
             existing = self._cache.get(key)
             if existing is None or exp.split == "DEMO":
                 self._cache[key] = result.expectancy

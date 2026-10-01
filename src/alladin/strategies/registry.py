@@ -27,6 +27,7 @@ class StrategyConfig(BaseModel):
     enabled: bool = False
     params: dict[str, Any] = {}
     notes: str = ""
+    research_paper: bool = False
 
 
 class StrategyRegistry:
@@ -34,6 +35,7 @@ class StrategyRegistry:
         self._classes: dict[tuple[str, str], type[Strategy]] = {}
         self._active: dict[str, Strategy] = {}
         self.unavailable: dict[str, str] = {}  # id -> raison (config sans implémentation, etc.)
+        self._research_paper: set[str] = set()
 
     def register(self, cls: type[Strategy]) -> None:
         self._classes[(cls.id, cls.version)] = cls
@@ -50,6 +52,8 @@ class StrategyRegistry:
             self._active.pop(cfg.id, None)
             return
         self._active[cfg.id] = cls(cfg.params)
+        if cfg.research_paper:
+            self._research_paper.add(cfg.id)
 
     @classmethod
     def from_config(cls, strategies_dir: Path) -> StrategyRegistry:
@@ -101,11 +105,16 @@ class StrategyRegistry:
         """
         violations: dict[str, str] = {}
         for strat_id in list(self._active.keys()):
-            if strat_id not in approved_ids:
+            strategy = self._active[strat_id]
+            if strat_id not in approved_ids and f"{strat_id}@{strategy.version}" not in approved_ids:
                 reason = f"strategie {strat_id} non approuvee (lifecycle enforcement)"
                 violations[strat_id] = reason
                 if strict:
                     del self._active[strat_id]
                     self.unavailable[strat_id] = reason
         return violations
+
+    def check_paper_lifecycle(self, approved_keys: set[str]) -> dict[str, str]:
+        """PAPER: version approuvee ou opt-in research_paper explicite."""
+        return self.check_lifecycle(approved_keys | self._research_paper, strict=True)
 

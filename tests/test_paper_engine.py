@@ -8,10 +8,20 @@ import pytest
 
 from alladin.brokers.mock import MockBroker
 from alladin.core.enums import RunMode, Side
-from alladin.market.paper import PaperExperimentEngine, PaperStatus
+from alladin.market.paper import PaperExperimentEngine, PaperPosition, PaperStatus
 from alladin.orchestration.bootstrap import Components
 
 T0 = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("side,entry,sl,tp,first,second", [
+    (Side.BUY, 100, 95, 110, (109, 111), (110, 112)),
+    (Side.SELL, 100, 105, 90, (89, 91), (88, 90)),
+])
+def test_paper_tp_uses_liquidation_side(side, entry, sl, tp, first, second):
+    pos = PaperPosition("p", "r", "c", "X", side, 1, entry, sl, tp, T0)
+    assert pos.check_exit(*first, 0.01) is None
+    assert pos.check_exit(*second, 0.01) == PaperStatus.CLOSED_TP
 
 
 @pytest.fixture

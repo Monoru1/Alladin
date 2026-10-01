@@ -66,12 +66,12 @@ class PaperPosition:
         if self.side == Side.BUY:
             if bid <= self.sl:
                 return PaperStatus.CLOSED_SL
-            if self.tp is not None and ask >= self.tp:
+            if self.tp is not None and bid >= self.tp:
                 return PaperStatus.CLOSED_TP
         else:
             if ask >= self.sl:
                 return PaperStatus.CLOSED_SL
-            if self.tp is not None and bid <= self.tp:
+            if self.tp is not None and ask <= self.tp:
                 return PaperStatus.CLOSED_TP
         return None
 

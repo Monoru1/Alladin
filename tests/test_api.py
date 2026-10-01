@@ -1,6 +1,8 @@
 """Mission Control : données réelles, sérialisation et surface HTTP read-only."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -79,6 +81,30 @@ def test_health_endpoint_structure(svc: Components) -> None:
     assert "broker_connected" in data
     assert "demo" in data
     assert "last_cycle_at" in data
+    assert {"run_id", "run_kind", "run_mode", "account_type", "broker_connected",
+            "daemon_state", "observed_at", "stale"} <= data.keys()
+
+
+def test_health_selects_latest_official_run(svc: Components) -> None:
+    old = svc.repo.get_run(svc.run.run_id)
+    assert old is not None
+    newer = old.model_copy(update={"run_id": "RUN-LATEST", "seq": old.seq + 1})
+    svc.repo.create_run(newer)
+    observed = datetime.now(UTC)
+    svc.repo.append(newer.run_id, "cycle.end", {"decision": "NO_TRADE"}, ts=observed)
+    health = client(svc).get("/health").json()
+    assert health["run_id"] == newer.run_id
+    assert health["last_cycle_at"] == observed.isoformat()
+    assert health["stale"] is False
+
+
+def test_frontend_untrusted_html_is_sanitized(svc: Components) -> None:
+    html = client(svc).get("/").text
+    assert "template.content.querySelectorAll" in html
+    assert "el.removeAttribute(attr.name)" in html
+    assert "target.replaceChildren(template.content)" in html
+    assert "if (!allowed.has(el.tagName)) { el.remove();" in html
+    assert html.count(".innerHTML =") == 1  # uniquement le template inerte
 
 
 def test_all_get_endpoints_respond_without_crash(svc: Components) -> None:

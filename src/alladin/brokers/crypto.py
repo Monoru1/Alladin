@@ -76,7 +76,7 @@ class CryptoDataProvider(ABC):
 
     @abstractmethod
     def klines(self, symbol: str, timeframe: Timeframe, count: int) -> list[Bar]:
-        """Retourne les N dernieres klines."""
+        """Retourne uniquement les klines cloturees a now() (UTC)."""
 
     @abstractmethod
     def ticker(self, symbol: str) -> CryptoTick | None:
@@ -121,6 +121,8 @@ class CryptoMockProvider(CryptoDataProvider):
             low = min(o, c) - abs(_rng.gauss(0, price * 0.001))
             bars.append(Bar(
                 time=t,
+                close_time=t + timedelta(minutes=tf_minutes),
+                is_closed=True,
                 open=round(o, 2),
                 high=round(h, 2),
                 low=round(low, 2),
@@ -188,9 +190,17 @@ class BinancePublicProvider(CryptoDataProvider):
             return []
 
         bars: list[Bar] = []
+        decision_time = self.now()
         for k in data:
+            # Binance closeTime est la derniere milliseconde de la bougie.
+            # Une kline future ou en formation ne peut servir au signal.
+            close_time = datetime.fromtimestamp((int(k[6]) + 1) / 1000, UTC)
+            if close_time > decision_time:
+                continue
             bars.append(Bar(
                 time=datetime.fromtimestamp(k[0] / 1000, UTC),
+                close_time=close_time,
+                is_closed=True,
                 open=float(k[1]),
                 high=float(k[2]),
                 low=float(k[3]),
