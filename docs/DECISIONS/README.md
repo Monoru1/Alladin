@@ -25,6 +25,7 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 ## Statuts
 
 - `ADOPTED` : décision actuelle.
+- `PROPOSED` : proposition documentée, non encore adoptée.
 - `EXPERIMENTAL` : hypothèse à valider.
 - `SUPERSEDED` : remplacée par une décision plus récente.
 - `REJECTED` : piste explicitement abandonnée.
@@ -41,6 +42,9 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 8. [DECISION-008 — Alladin doit fonctionner comme service autonome](./DECISION-008-AUTONOMOUS-SERVICE.md)
 9. [DECISION-009 — Jafar réutilisera le core Alladin](./DECISION-009-JAFAR-SHARED-CORE.md)
 10. [DECISION-010 — Pas de logique produit V1/V2](./DECISION-010-NO-V1-V2.md)
+11. [DECISION-011 — Cycle de vie autonome multi-position (ADOPTED)](./DECISION-011-AUTONOMOUS-MULTI-POSITION-LIFECYCLE.md)
+12. [DECISION-012 — Inspiration BlackRock Aladdin (ADOPTED)](./DECISION-012-BLACKROCK-ALADDIN-INSPIRATION.md)
+13. [DECISION-013 — Contrat des sorties protectrices par mode (PROPOSED)](./DECISION-013-MODE-SAFETY.md)
 
 ## Source de vérité
 
