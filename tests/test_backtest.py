@@ -11,8 +11,8 @@ import pytest
 
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
-from alladin.research.backtest import BacktestResult, BacktestRunner, VirtualPosition
-from alladin.research.r_analytics import compute_r
+from alladin.research.backtest import BacktestResult, BacktestRunner, BacktestTrade, VirtualPosition
+from alladin.research.r_analytics import CostCategory, FillRecord, compute_r
 from alladin.research.scorecard import MINIMUM_TRADES, build_scorecard
 from alladin.research.splits import DatasetSplitConfig, SplitName, split_bars, split_ranges
 from alladin.strategies.base import Strategy, StrategyContext, StrategySignal
@@ -514,3 +514,268 @@ class TestScorecard:
             # Not enough trades in this synthetic data - that's ok
             card = build_scorecard(result)
             assert card.insufficient is True
+
+
+# ---------------------------------------------------------------------------
+# Fill Record Parity Tests (Lot D)
+# ---------------------------------------------------------------------------
+
+class TestFillRecordParity:
+    """Verify FillRecord economics match RMetrics exactly."""
+
+    def _run_single_trade(self, **runner_kwargs) -> BacktestTrade:
+        """Helper: run a backtest that produces exactly 1 trade."""
+        class OnceSignal(Strategy):
+            id = "PARITY-01"
+            version = "1.0.0"
+            compatible_regimes = frozenset(MarketRegime)
+            _fired = False
+
+            def evaluate(self, ctx: StrategyContext) -> StrategySignal | None:
+                if self._fired or len(ctx.bars) < 122:
+                    return None
+                self._fired = True
+                last = ctx.bars[-1]
+                atr = max(0.001, last.high - last.low)
+                return StrategySignal(
+                    side=Side.BUY,
+                    entry=last.close + 0.0002,
+                    stop_loss=last.close - 1.5 * atr,
+                    take_profit=last.close + 2.5 * atr,
+                    confidence=0.7,
+                    reason="parity test",
+                )
+
+        bars = make_bars(200, trend=0.1)
+        runner = BacktestRunner(OnceSignal(), **runner_kwargs)
+        result = runner.run(bars, symbol="PARITY", timeframe=Timeframe.H1)
+        assert result.n_trades >= 1, "Expected at least 1 trade"
+        return result.trades[0]
+
+    def test_fill_record_exists(self):
+        """Every BacktestTrade must have a FillRecord."""
+        bars = make_bars(200, trend=0.1)
+        runner = BacktestRunner(DummyStrategy())
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            assert trade.fill is not None, "FillRecord must be set"
+            assert isinstance(trade.fill, FillRecord)
+
+    def test_fill_is_immutable(self):
+        """FillRecord must be frozen."""
+        trade = self._run_single_trade()
+        assert trade.fill is not None
+        with pytest.raises(AttributeError):
+            trade.fill.net_pnl = 999.0  # type: ignore[misc]
+
+    def test_r_multiple_matches_realized_r(self):
+        """fill.r_multiple must equal r_metrics.realized_r exactly."""
+        bars = make_bars(300, trend=0.05)
+        runner = BacktestRunner(DummyStrategy(), spread_pips=2.0, commission_per_lot=0.5,
+                                slippage=0.0001)
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            assert trade.fill is not None
+            assert trade.fill.r_multiple == trade.r_metrics.realized_r
+
+    def test_initial_risk_matches(self):
+        """fill.initial_risk must equal r_metrics.initial_risk."""
+        trade = self._run_single_trade(commission_per_lot=1.0, slippage=0.0002)
+        assert trade.fill is not None
+        assert trade.fill.initial_risk == trade.r_metrics.initial_risk
+
+    def test_cost_model_reflects_runner(self):
+        """CostModel must reflect BacktestRunner configuration."""
+        trade_zero = self._run_single_trade(spread_pips=2.0, commission_per_lot=0.0,
+                                            slippage=0.0)
+        assert trade_zero.fill is not None
+        assert trade_zero.fill.cost_model.spread == CostCategory.MODELED
+        assert trade_zero.fill.cost_model.commission == CostCategory.ZERO
+        assert trade_zero.fill.cost_model.slippage == CostCategory.ZERO
+        assert trade_zero.fill.cost_model.swap == CostCategory.ZERO
+
+        trade_costs = self._run_single_trade(spread_pips=2.0, commission_per_lot=1.0,
+                                             slippage=0.0001)
+        assert trade_costs.fill is not None
+        assert trade_costs.fill.cost_model.commission == CostCategory.MODELED
+        assert trade_costs.fill.cost_model.slippage == CostCategory.MODELED
+
+    def test_net_pnl_equals_gross_minus_costs(self):
+        """net_pnl = gross_pnl - slippage_cost - commission + swap."""
+        trade = self._run_single_trade(commission_per_lot=0.5, slippage=0.0001)
+        f = trade.fill
+        assert f is not None
+        expected_net = f.gross_pnl - f.slippage_cost - f.commission + f.swap
+        assert f.net_pnl == pytest.approx(expected_net, abs=1e-10)
+
+    def test_r_from_monetary(self):
+        """r_multiple must equal net_pnl / initial_risk (within rounding)."""
+        trade = self._run_single_trade(commission_per_lot=0.5, slippage=0.0001)
+        f = trade.fill
+        assert f is not None
+        assert f.initial_risk > 0
+        computed_r = f.net_pnl / f.initial_risk
+        assert f.r_multiple == pytest.approx(computed_r, abs=1e-4)
+
+    @pytest.mark.parametrize("trend,exit_type", [
+        (0.1, "winner"),  # uptrend → BUY wins
+        (-0.3, "loser"),  # downtrend → BUY loses fast via SL
+    ])
+    def test_long_winner_and_loser(self, trend, exit_type):
+        """LONG winner and loser must have correct fill sign."""
+        bars = make_bars(200, trend=trend)
+        runner = BacktestRunner(DummyStrategy(), spread_pips=1.0)
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            f = trade.fill
+            assert f is not None
+            assert f.side == 1  # BUY
+            assert f.r_multiple == trade.r_metrics.realized_r
+
+    def test_short_trade_fill(self):
+        """SHORT trades must have side=-1 and correct economics."""
+        class ShortOnly(Strategy):
+            id = "SHORT-01"
+            version = "1.0.0"
+            compatible_regimes = frozenset(MarketRegime)
+            _fired = False
+
+            def evaluate(self, ctx: StrategyContext) -> StrategySignal | None:
+                if self._fired or len(ctx.bars) < 122:
+                    return None
+                self._fired = True
+                last = ctx.bars[-1]
+                atr = max(0.001, last.high - last.low)
+                return StrategySignal(
+                    side=Side.SELL,
+                    entry=last.close,
+                    stop_loss=last.close + 1.5 * atr,
+                    take_profit=last.close - 2.5 * atr,
+                    confidence=0.7,
+                    reason="short parity test",
+                )
+
+        bars = make_bars(200, trend=-0.1)
+        runner = BacktestRunner(ShortOnly(), spread_pips=1.0)
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        if result.n_trades > 0:
+            f = result.trades[0].fill
+            assert f is not None
+            assert f.side == -1
+            assert f.r_multiple == result.trades[0].r_metrics.realized_r
+
+    def test_sl_exit_fill(self):
+        """SL exit must have exit_reason containing 'SL' and correct fill."""
+        t0 = datetime(2024, 1, 1, tzinfo=UTC)
+        up_bars = make_bars(130, trend=0.1, start_time=t0)
+        price = up_bars[-1].close
+        crash_bars = []
+        for i in range(10):
+            crash_bars.append(Bar(
+                time=t0 + timedelta(hours=130 + i),
+                open=price, high=price + 0.1, low=price - 5.0,
+                close=price - 3.0, tick_volume=100, spread=0.00020,
+            ))
+            price -= 3.0
+        runner = BacktestRunner(DummyStrategy(), spread_pips=2.0)
+        result = runner.run(up_bars + crash_bars, symbol="TEST", timeframe=Timeframe.H1)
+        sl_trades = [t for t in result.trades if "SL" in t.position.exit_reason]
+        assert len(sl_trades) > 0, "Expected SL exits from crash"
+        for trade in sl_trades:
+            f = trade.fill
+            assert f is not None
+            assert "SL" in f.exit_reason
+            assert f.r_multiple == trade.r_metrics.realized_r
+            assert f.r_multiple <= 0  # SL exit is a loss
+
+    def test_end_of_data_exit_fill(self):
+        """END_OF_DATA exit must be captured in fill."""
+        class AlwaysBuy(Strategy):
+            id = "ALWAYS-01"
+            version = "1.0.0"
+            compatible_regimes = frozenset(MarketRegime)
+
+            def evaluate(self, ctx: StrategyContext) -> StrategySignal | None:
+                last = ctx.bars[-1]
+                return StrategySignal(
+                    side=Side.BUY, entry=last.close + 0.01,
+                    stop_loss=last.close - 50, take_profit=last.close + 500,
+                    confidence=0.5, reason="always",
+                )
+
+        bars = make_bars(200, trend=0.01)
+        runner = BacktestRunner(AlwaysBuy(), spread_pips=0, max_concurrent=1)
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        eod_trades = [t for t in result.trades if t.position.exit_reason == "END_OF_DATA"]
+        if eod_trades:
+            f = eod_trades[-1].fill
+            assert f is not None
+            assert f.exit_reason == "END_OF_DATA"
+            assert f.r_multiple == eod_trades[-1].r_metrics.realized_r
+
+    def test_spread_cost_is_positive(self):
+        """Spread cost must be non-negative."""
+        bars = make_bars(200, trend=0.1)
+        runner = BacktestRunner(DummyStrategy(), spread_pips=3.0)
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            assert trade.fill is not None
+            assert trade.fill.spread_cost >= 0
+
+    def test_zero_cost_runner(self):
+        """With zero costs, gross_pnl == net_pnl."""
+        bars = make_bars(200, trend=0.1)
+        runner = BacktestRunner(DummyStrategy(), spread_pips=0, commission_per_lot=0,
+                                slippage=0)
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            f = trade.fill
+            assert f is not None
+            assert f.slippage_cost == 0.0
+            assert f.commission == 0.0
+            assert f.swap == 0.0
+            assert f.net_pnl == pytest.approx(f.gross_pnl, abs=1e-12)
+
+    def test_fill_trade_id_matches_position(self):
+        """FillRecord.trade_id must match VirtualPosition.trade_id."""
+        bars = make_bars(200, trend=0.1)
+        runner = BacktestRunner(DummyStrategy())
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            assert trade.fill is not None
+            assert trade.fill.trade_id == trade.position.trade_id
+
+    def test_fill_symbol_and_timing(self):
+        """FillRecord must carry correct symbol and timing from position."""
+        bars = make_bars(200, trend=0.1)
+        runner = BacktestRunner(DummyStrategy())
+        result = runner.run(bars, symbol="EURUSD", timeframe=Timeframe.H1)
+        for trade in result.trades:
+            f = trade.fill
+            assert f is not None
+            assert f.symbol == "EURUSD"
+            assert f.opened_at == trade.position.opened_at
+            assert f.closed_at == trade.position.closed_at
+
+    def test_parity_with_costs(self):
+        """Full parity: same runner config, fill and r_metrics agree on all economics."""
+        bars = make_bars(500, trend=0.05)
+        runner = BacktestRunner(
+            DummyStrategy(), spread_pips=2.0, commission_per_lot=0.7,
+            slippage=0.00005, volume=0.1, loss_per_lot=10.0,
+        )
+        result = runner.run(bars, symbol="GBPUSD", timeframe=Timeframe.H1)
+        assert result.n_trades >= 5, "Need enough trades for parity validation"
+        for trade in result.trades:
+            f = trade.fill
+            r = trade.r_metrics
+            assert f is not None
+            # R parity
+            assert f.r_multiple == r.realized_r
+            assert f.initial_risk == r.initial_risk
+            # Monetary consistency
+            expected_net = f.gross_pnl - f.slippage_cost - f.commission + f.swap
+            assert f.net_pnl == pytest.approx(expected_net, abs=1e-10)
+            # R derivable from monetary
+            if f.initial_risk > 0:
+                assert f.r_multiple == pytest.approx(f.net_pnl / f.initial_risk, abs=1e-4)

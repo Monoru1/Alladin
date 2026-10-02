@@ -446,4 +446,73 @@ KNOWN LIMITATIONS: Lot D non terminé. Aucun contrat partagé de fill/coûts/R e
 
 REMAINING WORK: Contrat commun de simulation et coûts, tests de parité baseline/BTC, gaps/intrabar/slippage/frais, preuve de causalité labels/purge et OOS hors réglage, puis validation du lot D complet.
 
-NEXT EXACT ACTION: Ouvrir `src/alladin/research/r_analytics.py`, `backtest.py`, `btc_experiment.py` et leurs tests ciblés. Définir dans `r_analytics.py` un contrat de fill/coûts exprimant prix exécutables bid/ask, spread sourcé, slippage, frais et risque initial. Adapter d'abord `BacktestRunner._finalize_trade()` et son entrée au contrat avec tests de parité R, puis seulement la voie BTC. Ne pas modifier les résultats historiques ; les marquer non comparables tant que le contrat commun et la provenance ne sont pas prouvés.
+NEXT EXACT ACTION: Adapter `BTCThreeWayEngine` pour produire des `FillRecord` comparables, puis intégrer le fingerprint archive dans chaque expérience. Voir checkpoint Wave 3 ci-dessous.
+
+---
+
+## CLAUDE IMPLEMENTATION WAVE 3 CHECKPOINT — 2026-10-03 01:30 GMT+2
+
+### LOT D2 — Contrat commun de fill/coûts/R
+**STATUS: COMPLETE**
+
+**OBJECTIVE:** Définir un contrat de fill/coûts explicite et immutable permettant la comparaison équitable entre systèmes de décision distincts (backtester classique, futur BTC, futur SNN).
+
+**ROOT CAUSE / MOTIVATION:** Le `BacktestRunner` et le `BTCThreeWayEngine` calculaient P&L, coûts et R de manière indépendante avec des conventions différentes (loss_per_lot vs fee_bps, compute_r vs calcul manuel). Sans contrat commun, aucune comparaison scientifique n'est fiable.
+
+**IMPLEMENTED:**
+- `CostCategory` (StrEnum): classifie chaque composante de coût comme OBSERVED, MODELED ou ZERO
+- `CostModel` (frozen dataclass): convention de coûts explicite; deux expériences ne sont comparables que si elles partagent le même CostModel
+- `FillRecord` (frozen dataclass): contrat de fill commun capturant symbol, side, prix entry/exit, SL/TP, timing, exit_reason, volume, spread_cost, slippage_cost, commission, swap, gross_pnl, net_pnl, initial_risk, r_multiple, cost_model, trade_id, experiment_id
+- `BacktestRunner.__init__()` construit un `CostModel` reflétant sa configuration (spread=MODELED, commission/slippage=MODELED si >0 sinon ZERO, swap=ZERO)
+- `BacktestRunner._finalize_trade()` produit un `FillRecord` pour chaque trade, avec `r_multiple == r_metrics.realized_r` et `initial_risk == r_metrics.initial_risk` (garantie de parité exacte)
+- `BacktestTrade.fill: FillRecord | None` ajouté (backward-compatible, None par défaut)
+
+**FILES:** `src/alladin/research/r_analytics.py`, `src/alladin/research/backtest.py`, `tests/test_backtest.py`
+
+**TESTS ADDED:** 17 tests de parité dans `TestFillRecordParity`:
+- FillRecord existe sur chaque trade
+- FillRecord est immutable (frozen)
+- `r_multiple == r_metrics.realized_r` sur tous les trades (avec coûts variés)
+- `initial_risk` cohérent entre fill et r_metrics
+- CostModel reflète la configuration du runner
+- `net_pnl == gross_pnl - slippage - commission + swap` (vérification algébrique)
+- R dérivable des valeurs monétaires (`net_pnl / initial_risk ≈ r_multiple`)
+- LONG winner / LONG loser (paramétré)
+- SHORT trade avec side=-1
+- SL exit avec exit_reason contenant "SL" et R <= 0
+- END_OF_DATA exit capturé
+- spread_cost >= 0
+- Zero-cost runner: gross_pnl == net_pnl
+- trade_id cohérent entre fill et position
+- symbol et timing cohérents
+- Parité complète avec spread + commission + slippage + volume + loss_per_lot
+
+**TESTS RUN:** 51 tests ciblés backtest (34 existants + 17 nouveaux) PASS ; suite complète 336 passed, 3 skipped MT5 ; ruff PASS ; mypy PASS (77 fichiers) ; `git diff --check` PASS.
+
+**ARCHITECTURAL DECISIONS:**
+- `compute_r()` reste INCHANGÉ : le FillRecord est une couche additionnelle, pas un remplacement
+- `r_multiple` et `initial_risk` dans le FillRecord sont directement pris de `r_metrics` pour garantie de parité exacte (pas de divergence par arrondi)
+- Les valeurs monétaires (gross_pnl, net_pnl, costs) sont calculées indépendamment depuis les mêmes prix/volumes — les tests vérifient la cohérence algébrique
+- Le spread est MODELED (paramètre fixe spread_pips), pas OBSERVED (on ne lit pas le bid/ask réel du marché historique)
+- Le FillRecord est frozen (immutable) pour prévenir toute mutation post-construction
+
+**CAUSALITY GUARANTEES:**
+- Aucun changement aux garanties causales du Lot C (archive, replay, available_at)
+- Le FillRecord ne modifie pas le timing d'exécution du backtest (pending signal → next bar open)
+- Aucune information future n'est utilisée dans le calcul des coûts ou du R
+
+**KNOWN LIMITATIONS:**
+- `BTCThreeWayEngine` n'utilise pas encore le contrat commun — il calcule P&L/R manuellement avec ses propres conventions (fee_bps)
+- Pas encore d'intégration automatique du fingerprint archive dans chaque expérience
+- Pas encore de preuve de comparaison OOS hors réglage
+- Pas de preuve de labels/purge causaux dans le contrat de fill
+- L'adaptateur BTC natif reste à créer (les symboles MT5 BTC/ETH sont des ETF Grayscale, PAS du spot crypto)
+
+**REMAINING WORK (Lot D3+):**
+1. Adapter `BTCThreeWayEngine._close_position()` pour produire un `FillRecord` avec le même contrat
+2. Intégrer le fingerprint archive dans `StrategyExperiment` automatiquement lors du backtest
+3. Prouver la causalité labels/purge dans le pipeline de splits
+4. Preuve de comparaison OOS hors réglage
+5. Baseline fairness : vérifier qu'une stratégie classique et le futur SNN sont évalués sous les mêmes économies
+
+**NEXT EXACT ACTION:** Adapter `BTCThreeWayEngine._close_position()` pour produire un `FillRecord` comparable au `BacktestRunner`, puis écrire un test de parité croisé vérifiant que le même trade simulé sous les deux moteurs produit le même R si les mêmes coûts sont configurés. Alternativement, si le Lot D est déclaré suffisant pour la prochaine phase, documenter le handoff pour Lot E (Brain API).

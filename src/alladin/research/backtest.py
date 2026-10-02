@@ -21,7 +21,7 @@ from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
 from alladin.market.regime import RegimeClassifier, primary_metrics
 from alladin.research.models import ExperimentResult
-from alladin.research.r_analytics import RMetrics, compute_r
+from alladin.research.r_analytics import CostCategory, CostModel, FillRecord, RMetrics, compute_r
 from alladin.research.splits import DatasetSplitConfig, SplitName, split_bars
 from alladin.strategies.base import Strategy, StrategyContext, StrategySignal
 
@@ -62,10 +62,11 @@ class VirtualPosition:
 
 @dataclass
 class BacktestTrade:
-    """Trade complet avec R metrics."""
+    """Trade complet avec R metrics et fill record."""
 
     position: VirtualPosition
     r_metrics: RMetrics
+    fill: FillRecord | None = None
     bars_held: int = 0
 
 
@@ -186,6 +187,13 @@ class BacktestRunner:
         self.intrabar_policy = intrabar_policy
         self.volume = volume
         self.max_concurrent = max_concurrent
+        self.cost_model = CostModel(
+            spread=CostCategory.MODELED,
+            slippage=CostCategory.MODELED if slippage > 0 else CostCategory.ZERO,
+            commission=CostCategory.MODELED if commission_per_lot > 0 else CostCategory.ZERO,
+            swap=CostCategory.ZERO,
+            label=f"backtest(spread={spread_pips}pips)",
+        )
 
     def run(
         self,
@@ -439,12 +447,14 @@ class BacktestRunner:
                 + abs(self.slippage) * value_per_lot * self.volume)
 
     def _finalize_trade(self, pos: VirtualPosition, bars_held: int, spread: float) -> BacktestTrade:
-        """Finalise un trade et calcule les R metrics."""
+        """Finalise un trade et calcule les R metrics + fill record."""
         assert pos.exit_price is not None
         assert pos.closed_at is not None
 
+        side_sign = 1 if pos.side == Side.BUY else -1
+
         r_metrics = compute_r(
-            side_sign=1 if pos.side == Side.BUY else -1,
+            side_sign=side_sign,
             entry=pos.entry,
             stop_loss=pos.stop_loss,
             exit_price=pos.exit_price,
@@ -464,8 +474,44 @@ class BacktestRunner:
             price_value_per_lot=self.price_value_per_lot,
             volume=self.volume,
         )
+
+        # FillRecord: monetary economics derived from same price conversion
+        sl_distance = abs(pos.entry - pos.stop_loss)
+        value_per_lot = (self.price_value_per_lot if self.price_value_per_lot is not None
+                         else self.loss_per_lot / sl_distance if sl_distance > 0 else 1.0)
+        price_value = value_per_lot * self.volume
+        pnl_price = (pos.exit_price - pos.entry) * side_sign
+        gross_pnl = pnl_price * price_value
+        slippage_cost = abs(self.slippage) * price_value
+        commission_cost = abs(self.commission * self.volume)
+        net_pnl = gross_pnl - slippage_cost - commission_cost
+
+        fill = FillRecord(
+            symbol=pos.symbol,
+            side=side_sign,
+            trade_id=pos.trade_id,
+            entry_price=pos.entry,
+            exit_price=pos.exit_price,
+            stop_loss=pos.stop_loss,
+            take_profit=pos.take_profit,
+            opened_at=pos.opened_at,
+            closed_at=pos.closed_at,
+            exit_reason=pos.exit_reason,
+            volume=self.volume,
+            spread_cost=spread * price_value,
+            slippage_cost=slippage_cost,
+            commission=commission_cost,
+            swap=0.0,
+            gross_pnl=gross_pnl,
+            net_pnl=net_pnl,
+            initial_risk=r_metrics.initial_risk,
+            r_multiple=r_metrics.realized_r,
+            cost_model=self.cost_model,
+        )
+
         return BacktestTrade(
             position=pos,
             r_metrics=r_metrics,
+            fill=fill,
             bars_held=bars_held,
         )

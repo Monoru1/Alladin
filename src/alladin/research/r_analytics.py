@@ -8,6 +8,73 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
+
+
+class CostCategory(StrEnum):
+    """Source classification of a cost component."""
+
+    OBSERVED = "OBSERVED"  # from actual market data (bid/ask spread)
+    MODELED = "MODELED"  # configured parameter (fixed slippage, commission)
+    ZERO = "ZERO"  # not modeled, assumed zero
+
+
+@dataclass(frozen=True)
+class CostModel:
+    """Explicit cost convention for experimental comparison.
+
+    Distinguishes observed costs (from market data), modeled costs
+    (configured parameters), and absent costs (assumed zero).
+    Two experiments are cost-comparable only if they share the same CostModel.
+    """
+
+    spread: CostCategory = CostCategory.MODELED
+    slippage: CostCategory = CostCategory.ZERO
+    commission: CostCategory = CostCategory.ZERO
+    swap: CostCategory = CostCategory.ZERO
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class FillRecord:
+    """Common fill contract for the causal experimental bench.
+
+    Captures the complete result of a simulated historical execution.
+    All monetary values are in account currency. Immutable.
+
+    For fair comparison, all experiments must produce FillRecords using
+    the same CostModel and price-to-currency conversion conventions.
+    """
+
+    # Identity
+    symbol: str
+    side: int  # +1 BUY, -1 SELL
+    trade_id: str
+    # Prices
+    entry_price: float
+    exit_price: float
+    stop_loss: float
+    take_profit: float | None
+    # Timing
+    opened_at: datetime
+    closed_at: datetime
+    exit_reason: str
+    # Position
+    volume: float
+    # Cost components (account currency)
+    spread_cost: float  # diagnostic: spread already embedded in entry/exit prices
+    slippage_cost: float
+    commission: float
+    swap: float
+    # Economics (account currency)
+    gross_pnl: float  # price movement * position value, before transaction costs
+    net_pnl: float  # gross_pnl - slippage - commission + swap
+    initial_risk: float  # monetary risk at protective stop
+    r_multiple: float  # net_pnl / initial_risk
+    # Cost transparency
+    cost_model: CostModel
+    # Optional provenance
+    experiment_id: str = ""
 
 
 @dataclass(frozen=True)
