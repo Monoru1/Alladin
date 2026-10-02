@@ -53,6 +53,8 @@ class Bar(BaseModel):
     close: float
     tick_volume: float = 0
     spread: float = 0
+    available_at: datetime | None = None  # quand la barre est devenue observable (reception)
+    provenance: str | None = None  # source : "mt5:ICMarkets", "binance:public", etc.
 
 
 class InstrumentSpec(BaseModel):

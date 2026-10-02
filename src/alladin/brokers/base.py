@@ -9,6 +9,7 @@ Toute implémentation passe obligatoirement par :
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from alladin.core.approval import ApprovalToken, verify_token
@@ -40,6 +41,24 @@ RETCODE_TRADE_DISABLED = 10017
 RETCODE_BLOCKED = -1  # blocage ALLADIN avant envoi (pas un retcode MT5)
 
 
+@dataclass(frozen=True)
+class BrokerCapabilities:
+    """Manifeste de ce que le broker peut fournir comme données."""
+
+    name: str  # ex: "mt5:ICMarkets", "binance:public"
+    has_tick: bool = True
+    has_bars: bool = True
+    has_spread: bool = True  # spread réel dans les barres (False pour Binance public)
+    has_close_time: bool = False  # close_time explicite par barre
+    has_tick_volume: bool = True
+    has_real_volume: bool = False
+    supported_timeframes: frozenset[Timeframe] = field(
+        default_factory=lambda: frozenset(Timeframe)
+    )
+    max_bars: int = 10000
+    provenance_tag: str = ""  # tag pour traçabilité dans l'archive
+
+
 def block_message(account_type: AccountType) -> str:
     if account_type is AccountType.LIVE:
         return "LIVE ACCOUNT DETECTED — EXECUTION BLOCKED"
@@ -48,6 +67,10 @@ def block_message(account_type: AccountType) -> str:
 
 class BrokerAdapter(ABC):
     name: str = "BROKER"
+
+    def capabilities(self) -> BrokerCapabilities:
+        """Manifeste des capacités de données du broker. Surcharger pour chaque implémentation."""
+        return BrokerCapabilities(name=self.name)
 
     # ------------------------------------------------------------------ connexion / compte
 

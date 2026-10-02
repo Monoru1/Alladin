@@ -55,6 +55,9 @@ _CCY_PER_LOT = 100_000.0
 class MockBroker(b.BrokerAdapter):
     name = "MOCK"
 
+    def capabilities(self) -> b.BrokerCapabilities:
+        return b.BrokerCapabilities(name="mock:test", has_spread=True, has_close_time=False)
+
     def __init__(
         self,
         balance: float = 100_000.0,

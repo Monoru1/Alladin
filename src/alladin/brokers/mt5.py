@@ -77,6 +77,15 @@ def explain_error(err: tuple[int, str] | Any) -> str:
 class MT5Broker(b.BrokerAdapter):
     name = "MT5"
 
+    def capabilities(self) -> b.BrokerCapabilities:
+        return b.BrokerCapabilities(
+            name=f"mt5:{self._server}" if hasattr(self, "_server") else "mt5",
+            has_spread=True,
+            has_close_time=False,
+            has_tick_volume=True,
+            provenance_tag="mt5",
+        )
+
     def __init__(
         self,
         *,

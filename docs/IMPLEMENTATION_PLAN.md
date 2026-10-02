@@ -345,6 +345,61 @@ Trois défauts combinés empêchaient la re-détection et la fermeture fiable d'
 - Pas de backoff explicite introduit : le cycle naturel du daemon sert de cadence. Chaque cycle tente au plus une fermeture par position sans SL.
 - `close_all()` ne compte désormais que les fermetures broker-confirmées.
 
-### Prochaine étape
+### Prochaine étape (Lot A)
 
 Lot B selon le plan : résolution du contrat OBSERVE/PAPER (DECISION-013). Requiert l'adoption formelle de la proposition avant implémentation.
+
+---
+
+## CLAUDE IMPLEMENTATION WAVE 2 CHECKPOINT — 2026-10-02 15:20 GMT+2
+
+### LOT B — Modes et PAPER
+**STATUS: COMPLETE** (commit 926a9c8)
+
+**OBJECTIVE:** Résoudre le contrat OBSERVE/PAPER/DEMO (DECISION-013), rendre PAPER réellement simulé et persistant.
+
+**IMPLEMENTED:**
+- DECISION-013 promu de PROPOSED à ADOPTED
+- `ExecStatus.PAPER_EXECUTED` ajouté à `execution/models.py`
+- `PaperExperimentEngine` réécrit avec persistance SQLite (`paper_positions` table dans `journal/repository.py`)
+- `PaperExperimentEngine` accepte `RiskDecision` pour volume/SL/TP du risk engine
+- `PaperExperimentEngine.restore()` pour survie au restart
+- `OrchestrationEngine._run_cycle()` mode-aware : PAPER tick, DEMO protective close, OBSERVE/PAPER alert-only
+- `bootstrap.py` câble `PaperExperimentEngine` avec auto-restore en mode PAPER
+
+**FILES:** `src/alladin/execution/models.py`, `src/alladin/market/paper.py`, `src/alladin/orchestration/engine.py`, `src/alladin/orchestration/bootstrap.py`, `src/alladin/journal/repository.py`, `docs/DECISIONS/DECISION-013-MODE-SAFETY.md`, `docs/DECISIONS/README.md`
+
+**TESTS ADDED:** `tests/test_paper_engine.py` (31 tests : broker isolation, DEMO preserved, OBSERVE alert, LIVE blocked, PAPER lifecycle, persistence, dry_run, risk engine, journal, sizing)
+
+**TESTS RUN:** 31/31 passed (+ suite complète green)
+
+**ARCHITECTURAL DECISIONS:**
+- PAPER utilise `submit(dry_run=True)` pour validation risque, puis `paper_engine.open_position()` — jamais `broker.send_order`
+- SpyBroker pattern : RAISES sur `send_order` pour prouver l'isolation OBSERVE/PAPER
+- Protective close en OBSERVE/PAPER = critical alert log (pas de close broker)
+
+**KNOWN LIMITATIONS:** Commit local 926a9c8, push bloqué par réseau lors de la session précédente.
+
+---
+
+### LOT C — Données causales et replay
+**STATUS: PARTIAL** (non commit)
+
+**OBJECTIVE:** Fiabiliser archive, replay causal, provenance, doublons contradictoires, fenêtres complètes, fingerprint dataset.
+
+**IMPLEMENTED (C1+C2 seulement):**
+- `Bar` model : ajout `available_at: datetime | None` et `provenance: str | None` dans `core/models.py`
+- `BrokerCapabilities` dataclass dans `brokers/base.py` : `name`, `has_tick`, `has_bars`, `has_spread`, `has_close_time`, `has_tick_volume`, `has_real_volume`, `supported_timeframes`, `max_bars`, `provenance_tag`
+- `BrokerAdapter.capabilities()` méthode par défaut
+- `MockBroker.capabilities()` et `MT5Broker.capabilities()` surchargés
+
+**FILES:** `src/alladin/core/models.py`, `src/alladin/brokers/base.py`, `src/alladin/brokers/mock.py`, `src/alladin/brokers/mt5.py`
+
+**TESTS RUN:** 57 tests ciblés (test_market, test_research_replay, test_paper_engine) : 57/57 passed. ruff clean, mypy clean, git diff --check clean.
+
+**REMAINING WORK (C3-C5):**
+- C3 : `MarketDataArchive` — corriger `_last` cache (late insert), `OR IGNORE` masquant doublons contradictoires, `added=len(rows)` surestimation, ajouter colonnes `available_at`/`provenance` à `market_bars`, fingerprint dataset
+- C4 : `ReplayContext.from_cycle()` doit charger les barres archivées réelles (pas seulement références `cycle_inputs`)
+- C5 : Tests causalité : cutoff temporel, trous/duplicates, cache restart, fingerprint, no future data, replay identique aux entrées archivées
+
+**NEXT EXACT ACTION:** Reprendre Lot C à l'étape C3 — modifier `market/archive.py` : ajouter colonnes `available_at`+`provenance` à la table `market_bars`, remplacer `OR IGNORE` par détection de doublons contradictoires, corriger `_last` cache pour insertion tardive, ajouter méthode `fingerprint()`. Puis C4 (ReplayContext avec barres), C5 (tests), C6 (validation/commit).
