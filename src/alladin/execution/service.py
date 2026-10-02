@@ -187,14 +187,19 @@ class ExecutionService:
                 EventType.INFO,
                 {"alert": "position ouverte SANS SL : fermeture d'urgence", "ticket": pos.ticket},
             )
-            self._close(pos, "urgence : SL absent")
+            closed = self._close(pos, "urgence : SL absent")
+            msg = (
+                "SL absent sur la position ouverte : fermée immédiatement"
+                if closed
+                else "SL absent : fermeture d'urgence échouée, position reste ouverte sans SL"
+            )
             return ExecutionResult(
                 status=ExecStatus.FAILED,
                 intent=intent,
                 decision=decision,
                 precheck=check,
                 order=result,
-                messages=["SL absent sur la position ouverte : fermée immédiatement"],
+                messages=[msg],
             )
 
         account_after = self.broker.account_info()
@@ -292,7 +297,7 @@ class ExecutionService:
 
     # ------------------------------------------------------------------ fermeture
 
-    def _close(self, pos: Position, reason: str) -> None:
+    def _close(self, pos: Position, reason: str) -> bool:
         rid = self.run.run_id
         tick = self.broker.tick(pos.symbol)
         request = OrderRequest(
@@ -315,22 +320,33 @@ class ExecutionService:
             self.journal.log(
                 rid, EventType.EXECUTION_BLOCKED, {"close_ticket": pos.ticket, "reason": str(exc)}
             )
-            return
+            return False
         self.journal.log(
             rid, EventType.ORDER_RESULT, {**result.model_dump(mode="json"), "close_reason": reason}
         )
+        if not result.accepted:
+            self.journal.log(
+                rid,
+                EventType.INFO,
+                {
+                    "alert": "fermeture refusée par le broker",
+                    "ticket": pos.ticket,
+                    "retcode": result.retcode,
+                    "reason": reason,
+                },
+            )
+        return result.accepted
 
     def close_position(self, ticket: int, reason: str = "fermeture manuelle") -> bool:
         pos = next((p for p in self.my_positions() if p.ticket == ticket), None)
         if pos is None:
             return False  # jamais une position qui n'appartient pas à ALLADIN/ce run
-        self._close(pos, reason)
-        return True
+        return self._close(pos, reason)
 
     def close_all(self, reason: str) -> int:
         """Fermeture explicite des positions de CE run uniquement (jamais implicite au redémarrage)."""
         n = 0
         for p in self.my_positions():
-            self._close(p, reason)
-            n += 1
+            if self._close(p, reason):
+                n += 1
         return n

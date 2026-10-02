@@ -65,9 +65,11 @@ class PositionMonitor:
             if (mae, mfe) != (trade.mae, trade.mfe):
                 fields.update(mae=mae, mfe=mfe)
             if pos.sl != trade.stop_loss or pos.tp != trade.take_profit:
-                (
-                    rep.sl_removed if pos.sl is None and trade.stop_loss is not None else rep.sl_tp_changed
-                ).append(ticket)
+                first_sl_removal = pos.sl is None and trade.stop_loss is not None
+                if first_sl_removal:
+                    rep.sl_removed.append(ticket)
+                else:
+                    rep.sl_tp_changed.append(ticket)
                 self.journal.log(
                     rid,
                     EventType.POSITION_UPDATE,
@@ -75,10 +77,13 @@ class PositionMonitor:
                         "ticket": ticket,
                         "sl": {"from": trade.stop_loss, "to": pos.sl},
                         "tp": {"from": trade.take_profit, "to": pos.tp},
-                        "alert": "SL SUPPRIMÉ" if pos.sl is None and trade.stop_loss is not None else None,
+                        "alert": "SL SUPPRIMÉ" if first_sl_removal else None,
                     },
                 )
                 fields.update(stop_loss=pos.sl, take_profit=pos.tp)
+            # Position toujours sans SL au broker (DB déjà synchronisée) : re-signaler
+            if pos.sl is None and ticket not in rep.sl_removed:
+                rep.sl_removed.append(ticket)
             if fields:
                 self.repo.update_trade(trade.trade_id, **fields)
 

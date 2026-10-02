@@ -113,7 +113,12 @@ class OrchestrationEngine:
             self.journal.log(
                 rid, EventType.INFO, {"alert": "SL supprimé : fermeture de la position", "ticket": ticket}
             )
-            self.execution.close_position(ticket, "SL supprimé")
+            if not self.execution.close_position(ticket, "SL supprimé"):
+                self.journal.log(
+                    rid,
+                    EventType.INFO,
+                    {"alert": "fermeture protectrice échouée — position reste sans SL", "ticket": ticket},
+                )
         state = self.run.watchdog.run_state
         if self.execution.killswitch.is_active() or state not in (RunState.RUNNING, RunState.TARGET_REACHED):
             why = "kill switch actif" if self.execution.killswitch.is_active() else f"run {state.value}"

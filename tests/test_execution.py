@@ -227,6 +227,133 @@ def test_sl_removed_on_open_position_raises_an_alert(svc: Components, broker: Mo
     assert rep.sl_removed and svc.repo.events("RUN-001", [EventType.POSITION_UPDATE])
 
 
+# ── Tests de fermeture protectrice (work package P0 sécurité) ──
+
+
+def test_close_position_returns_false_when_broker_refuses(
+    svc: Components, broker: MockBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """close_position() doit retourner False quand le broker refuse la fermeture."""
+    res = svc.execution.submit(make_intent(svc))
+    assert res.executed
+    ticket = res.position_ticket
+    original = broker._send
+
+    def refuse_close(req: OrderRequest) -> OrderResult:
+        if req.action is OrderAction.CLOSE:
+            return OrderResult(accepted=False, retcode=10006, retcode_name="REJECT", message="Rejected")
+        return original(req)
+
+    monkeypatch.setattr(broker, "_send", refuse_close)
+    assert not svc.execution.close_position(ticket, "test refusal")
+    assert broker.positions(), "la position doit rester ouverte"
+    info_events = svc.repo.events("RUN-001", [EventType.INFO])
+    assert any("fermeture refusée" in str(e.payload) for e in info_events)
+
+
+def test_sl_removed_position_is_redetected_after_failed_close(
+    svc: Components, broker: MockBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bug P0 : une position sans SL doit être re-signalée au cycle suivant si la fermeture a échoué."""
+    res = svc.execution.submit(make_intent(svc))
+    assert res.executed
+    ticket = res.position_ticket
+    broker._positions[ticket].sl = None
+    original = broker._send
+
+    def refuse_close(req: OrderRequest) -> OrderResult:
+        if req.action is OrderAction.CLOSE:
+            return OrderResult(accepted=False, retcode=10006, retcode_name="REJECT", message="Rejected")
+        return original(req)
+
+    monkeypatch.setattr(broker, "_send", refuse_close)
+
+    # Cycle 1 : détection initiale
+    rep1 = svc.monitor.sync()
+    assert ticket in rep1.sl_removed
+    svc.execution.close_position(ticket, "SL supprimé")  # échoue
+    assert broker.positions(), "la position doit rester ouverte"
+
+    # Cycle 2 : re-détection (c'est le bug corrigé)
+    rep2 = svc.monitor.sync()
+    assert ticket in rep2.sl_removed, "position sans SL doit être re-signalée après échec de fermeture"
+
+
+def test_successful_protective_close_stops_redetection(svc: Components, broker: MockBroker) -> None:
+    """Fermeture réussie : la position disparaît et n'est plus signalée."""
+    res = svc.execution.submit(make_intent(svc))
+    assert res.executed
+    ticket = res.position_ticket
+    broker._positions[ticket].sl = None
+
+    rep = svc.monitor.sync()
+    assert ticket in rep.sl_removed
+    assert svc.execution.close_position(ticket, "SL supprimé")
+    assert not broker.positions()
+
+    rep2 = svc.monitor.sync()
+    assert not rep2.sl_removed
+
+
+def test_close_failure_never_announces_success(
+    svc: Components, broker: MockBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Une fermeture refusée ne doit jamais marquer le trade comme CLOSED."""
+    res = svc.execution.submit(make_intent(svc))
+    assert res.executed
+    ticket = res.position_ticket
+    original = broker._send
+
+    def refuse_close(req: OrderRequest) -> OrderResult:
+        if req.action is OrderAction.CLOSE:
+            return OrderResult(accepted=False, retcode=10006, retcode_name="REJECT", message="Rejected")
+        return original(req)
+
+    monkeypatch.setattr(broker, "_send", refuse_close)
+
+    result = svc.execution.close_position(ticket, "test")
+    assert result is False
+    assert len(broker.positions()) == 1
+    assert len(svc.repo.trades_for_run("RUN-001", "OPEN")) == 1
+    assert len(svc.repo.trades_for_run("RUN-001", "CLOSED")) == 0
+
+
+def test_emergency_close_failure_on_submit_does_not_claim_success(
+    svc: Components, broker: MockBroker, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Si le broker refuse la fermeture d'urgence (SL absent à l'ouverture), le message ne doit pas dire 'fermée'."""
+    original = broker._send
+
+    def strip_sl_then_refuse_close(req: OrderRequest) -> OrderResult:
+        if req.action is OrderAction.OPEN:
+            return original(req.model_copy(update={"stop_loss": None}))
+        return OrderResult(accepted=False, retcode=10006, retcode_name="REJECT", message="Rejected")
+
+    monkeypatch.setattr(broker, "_send", strip_sl_then_refuse_close)
+
+    res = svc.execution.submit(make_intent(svc))
+    assert res.status is ExecStatus.FAILED
+    assert "SL absent" in res.messages[0]
+    assert "échouée" in res.messages[0], "le message doit indiquer l'échec, pas le succès"
+    assert broker.positions(), "la position doit rester ouverte si la fermeture a échoué"
+
+
+def test_no_double_close_on_foreign_position_without_sl(svc: Components, broker: MockBroker) -> None:
+    """Une position étrangère sans SL ne doit pas apparaître dans sl_removed."""
+    from alladin.core.approval import issue_open_token as tok
+
+    foreign = OrderRequest(
+        action=OrderAction.OPEN, symbol="GBPUSD", side=Side.BUY, volume=0.5,
+        stop_loss=1.0, magic=0, comment="manual",
+    )
+    result = broker.send_order(foreign, tok("RUN-001", "m", "GBPUSD", 0.5))
+    broker._positions[result.position_ticket].sl = None  # retirer SL après ouverture
+
+    rep = svc.monitor.sync()
+    assert not rep.sl_removed, "position étrangère sans SL ne doit pas être signalée"
+    assert rep.foreign_ignored == 1
+
+
 def test_mockbroker_basics() -> None:
     b = MockBroker(balance=10_000)
     acct = b.account_info()

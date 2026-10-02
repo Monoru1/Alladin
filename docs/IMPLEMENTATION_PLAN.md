@@ -258,3 +258,62 @@ Le premier lot traite le risque P0 de fermeture protectrice non confirmée. Le r
 **Conditions d'arrêt.** Si résoudre le cas exige de changer la politique d'envoi de CLOSE en OBSERVE/PAPER, de retirer un garde-fou, ou d'introduire une migration destructrice, arrêter le lot après tests qui reproduisent le défaut et présenter le choix bloquant. Si la fermeture broker retourne un état ambigu, ne pas déclarer succès : journaliser l'incertitude et réconcilier avant nouvelle action.
 
 **Hors scope.** SNN, Brain API, PAPER P&L, Mission Control, refonte générale du moniteur, trading LIVE, nouveaux brokers, stratégie de retry distribuée et migration de schéma non nécessaire.
+
+## CLAUDE SESSION CHECKPOINT
+
+- **Date :** 2026-10-02 10:38 UTC+2
+- **Work package :** Lot A — P0 sécurité fermeture protectrice
+- **État : COMPLETE**
+
+### Cause racine
+
+Trois défauts combinés empêchaient la re-détection et la fermeture fiable d'une position sans SL :
+
+1. `monitor.sync()` comparait `pos.sl` (broker) à `trade.stop_loss` (DB). Après le premier cycle, la DB était mise à jour avec `stop_loss=None`, rendant la condition fausse au cycle suivant — la position sans SL devenait invisible.
+2. `_close()` retournait `None` et ne vérifiait pas `result.accepted`. `close_position()` retournait `True` inconditionnellement.
+3. `engine._run_cycle()` ignorait le retour de `close_position()` — aucune journalisation d'échec, aucun retry.
+
+### Fichiers modifiés
+
+| Fichier | Changement |
+|---|---|
+| `src/alladin/execution/service.py` | `_close()` retourne `bool` basé sur `result.accepted`, log l'échec. `close_position()` propage le résultat. `close_all()` ne compte que les fermetures confirmées. `submit()` path no-SL : message distinct selon succès/échec de la fermeture d'urgence. |
+| `src/alladin/orchestration/monitor.py` | `sync()` re-signale `sl_removed` chaque cycle si le broker montre `pos.sl is None`, indépendamment de l'état DB. |
+| `src/alladin/orchestration/engine.py` | `_run_cycle()` capture le retour de `close_position()` et journalise l'échec. |
+| `tests/test_execution.py` | 6 nouveaux tests de régression (voir ci-dessous). |
+
+### Tests ajoutés
+
+1. `test_close_position_returns_false_when_broker_refuses`
+2. `test_sl_removed_position_is_redetected_after_failed_close` (reproduit le bug P0)
+3. `test_successful_protective_close_stops_redetection`
+4. `test_close_failure_never_announces_success`
+5. `test_emergency_close_failure_on_submit_does_not_claim_success`
+6. `test_no_double_close_on_foreign_position_without_sl`
+
+### Résultats de validation
+
+- Tests ciblés (3 fichiers, 55 tests) : **55 passed**
+- Suite globale complète : **all passed, 0 failed**
+- `ruff check src tests` : **All checks passed**
+- `mypy src` : **Success: no issues found in 77 source files**
+- `git diff --check` : **aucun problème de whitespace**
+
+### Critères d'acceptation satisfaits
+
+- (a) position sans SL re-détectée au cycle suivant ✓
+- (b) fermeture refusée journalisée, jamais annoncée réussie ✓
+- (c) fermeture confirmée arrête les retries ✓
+- (d) aucun ordre vers position étrangère ✓
+- (e) tests de sécurité existants et nouveaux verts ✓
+- (f) aucun changement du sens OBSERVE/PAPER ✓
+
+### Décisions techniques
+
+- La re-détection utilise un `if pos.sl is None and ticket not in rep.sl_removed` séparé du bloc de comparaison SL/TP, pour couvrir aussi le cas où seul TP change avec SL toujours absent.
+- Pas de backoff explicite introduit : le cycle naturel du daemon sert de cadence. Chaque cycle tente au plus une fermeture par position sans SL.
+- `close_all()` ne compte désormais que les fermetures broker-confirmées.
+
+### Prochaine étape
+
+Lot B selon le plan : résolution du contrat OBSERVE/PAPER (DECISION-013). Requiert l'adoption formelle de la proposition avant implémentation.
