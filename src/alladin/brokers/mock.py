@@ -248,7 +248,7 @@ class MockBroker(b.BrokerAdapter):
             series.append(px)
         series.reverse()
         step = timedelta(minutes=timeframe.minutes)
-        end = self._time.replace(second=0, microsecond=0)
+        end = self._time.replace(second=0, microsecond=0) - step  # dernière barre entièrement clôturée
         out: list[Bar] = []
         prev = series[0]
         for i, c in enumerate(series):

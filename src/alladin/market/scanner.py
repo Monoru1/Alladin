@@ -158,7 +158,16 @@ class MarketScanner:
                         cached = self._scheduler.cached(sym, tf)
                         bars[tf] = cached if cached else self.broker.bars(sym, tf, self.bars_count)
                 if self.archive is not None:
-                    archived += sum(self.archive.store(sym, tf, b, cycle_id) for tf, b in bars.items())
+                    observed_at = self.broker.now()
+                    provenance = self.broker.capabilities().provenance_tag or self.broker.capabilities().name
+                    for tf, series in bars.items():
+                        bars[tf] = [
+                            bar if bar.provenance else bar.model_copy(update={"provenance": provenance})
+                            for bar in series
+                        ]
+                        archived += self.archive.store(sym, tf, bars[tf], cycle_id, decision_at=observed_at)
+                    if cycle_id and any(bars.values()):
+                        bars.update(self.archive.load_cycle(cycle_id, symbol=sym)[sym])
                 prim = bars[self.primary]
                 if len(prim) < MIN_BARS:
                     rejected[sym] = [f"historique insuffisant ({len(prim)} barres {self.primary.value})"]

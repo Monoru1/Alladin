@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -16,7 +16,7 @@ from alladin.core.models import Bar
 from alladin.execution.models import comment_matches, make_comment, parse_comment
 from alladin.journal.models import EventType
 from alladin.journal.repository import GENESIS, JournalRepository, _canon, _hash
-from alladin.market.archive import MarketDataArchive
+from alladin.market.archive import ArchiveConflictError, ArchiveIncompleteError, MarketDataArchive
 from alladin.orchestration.bootstrap import Components
 from alladin.orchestration.state import RunManager
 from alladin.research.models import StrategyStatus, StrategyVersion
@@ -78,17 +78,137 @@ def _bars(count: int = 3) -> list[Bar]:
 def test_market_archive_is_incremental_deduplicated_and_immutable(svc: Components) -> None:
     archive = MarketDataArchive(svc.repo.engine)
     bars = _bars()
-    assert archive.store("EURUSD", Timeframe.H1, bars, "CYC-1") == 3
-    assert archive.store("EURUSD", Timeframe.H1, bars, "CYC-2") == 0
+    decision = T0 + timedelta(hours=4)
+    assert archive.store("EURUSD", Timeframe.H1, bars, "CYC-1", decision_at=decision) == 3
+    assert archive.store("EURUSD", Timeframe.H1, bars, "CYC-2", decision_at=decision) == 0
     extra = bars[-1].model_copy(
         update={"time": bars[-1].time + timedelta(hours=1), "close": 1.2}
     )
-    assert archive.store("EURUSD", Timeframe.H1, [*bars, extra], "CYC-3") == 1
-    assert archive.load("EURUSD", Timeframe.H1) == [*bars, extra]
+    assert archive.store("EURUSD", Timeframe.H1, [*bars, extra], "CYC-3", decision_at=decision) == 1
+    assert archive.load("EURUSD", Timeframe.H1) == [
+        b.model_copy(update={"available_at": decision}) for b in [*bars, extra]
+    ]
     assert archive.stats() == {"bars": 4, "symbols": 1}
     assert archive.cycle_inputs("CYC-2")[0]["n_bars"] == 3
     with pytest.raises(DatabaseError), svc.repo.engine.begin() as conn:
         conn.execute(text("UPDATE market_bars SET close=2 WHERE symbol='EURUSD'"))
+
+
+def test_archive_late_insert_duplicates_fingerprint_and_restart(tmp_path: Path) -> None:
+    path = tmp_path / "archive.db"
+    repo = JournalRepository.from_url(f"sqlite:///{path}")
+    archive = MarketDataArchive(repo.engine)
+    source = _bars(4)
+    # Le même instant peut être représenté avec un autre fuseau.
+    source[0] = source[0].model_copy(update={
+        "time": source[0].time.astimezone(timezone(timedelta(hours=2))),
+        "close_time": source[0].time + timedelta(hours=1),
+        "available_at": source[0].time + timedelta(hours=1, minutes=1),
+        "provenance": "mt5:test", "is_closed": True,
+    })
+    assert archive.store("EURUSD", Timeframe.H1, [source[3], source[0], source[1]]) == 3
+    before = archive.fingerprint("EURUSD", Timeframe.H1)
+    assert archive.store("EURUSD", Timeframe.H1, [source[1], source[0]]) == 0
+    assert archive.store("EURUSD", Timeframe.H1, [source[2]]) == 1
+    assert archive._last_ts("EURUSD", Timeframe.H1.value) == int(source[3].time.timestamp())
+    assert archive.load("EURUSD", Timeframe.H1) == source
+    assert archive.fingerprint("EURUSD", Timeframe.H1) != before
+    assert archive.fingerprint("EURUSD", Timeframe.H1) == archive.fingerprint(
+        "EURUSD", Timeframe.H1, since=source[0].time, until=source[3].time)
+    with pytest.raises(ArchiveConflictError, match="contradictoire"):
+        archive.store("EURUSD", Timeframe.H1, [source[2].model_copy(update={"close": 99})])
+    assert archive.stats()["bars"] == 4
+    repo.engine.dispose()
+    restarted = MarketDataArchive(JournalRepository.from_url(f"sqlite:///{path}").engine)
+    assert restarted.load("EURUSD", Timeframe.H1) == source
+    assert restarted._last_ts("EURUSD", Timeframe.H1.value) == int(source[3].time.timestamp())
+    assert restarted.fingerprint("EURUSD", Timeframe.H1) == archive.fingerprint("EURUSD", Timeframe.H1)
+    assert restarted.store("EURUSD", Timeframe.H1, source) == 0
+
+
+def test_archive_batch_conflict_is_atomic_and_identical_rows_are_idempotent(svc: Components) -> None:
+    archive = MarketDataArchive(svc.repo.engine)
+    first = _bars(1)[0]
+    with pytest.raises(ValueError, match="cutoff"):
+        archive.store("EURUSD", Timeframe.H1, [first], "CYC-NO-CUTOFF")
+    assert archive.store("EURUSD", Timeframe.H1, [first, first]) == 1
+    assert archive.store("EURUSD", Timeframe.H1, [first, first]) == 0
+    changed = first.model_copy(update={"spread": first.spread + 1})
+    with pytest.raises(ArchiveConflictError, match="dans le lot"):
+        archive.store("GBPUSD", Timeframe.H1, [first, changed])
+    assert archive.load("GBPUSD", Timeframe.H1) == []
+    with pytest.raises(ArchiveConflictError, match="archivée contradictoire"):
+        archive.store("EURUSD", Timeframe.H1, [changed])
+    assert archive.stats()["bars"] == 1
+
+
+def test_archive_records_an_empty_cycle_timeframe(svc: Components) -> None:
+    archive = MarketDataArchive(svc.repo.engine)
+    assert archive.store("EURUSD", Timeframe.M15, [], "CYC-EMPTY", decision_at=T0) == 0
+    assert archive.load_cycle("CYC-EMPTY") == {"EURUSD": {Timeframe.M15: []}}
+    assert archive.store("EURUSD", Timeframe.M15, [], "CYC-EMPTY", decision_at=T0) == 0
+    with pytest.raises(ArchiveConflictError, match="fenêtre de cycle"):
+        archive.store("EURUSD", Timeframe.M15, _bars(1), "CYC-EMPTY", decision_at=T0 + timedelta(hours=1))
+
+
+def test_scanner_decision_uses_the_exact_archived_bars(svc: Components) -> None:
+    scanner = svc.engine(MockAgent()).scanner
+    report = scanner.scan(cycle_id="CYC-SCAN-ARCHIVE")
+    assert report.candidates
+    archived = MarketDataArchive(svc.repo.engine).load_cycle("CYC-SCAN-ARCHIVE")
+    for candidate in report.candidates:
+        assert candidate.bars == archived[candidate.symbol]
+        assert all(bar.available_at is not None for series in candidate.bars.values() for bar in series)
+
+
+def test_archive_cycle_manifest_keeps_exact_historical_window_after_late_insert(svc: Components) -> None:
+    archive = MarketDataArchive(svc.repo.engine)
+    bars = _bars(4)
+    decision = bars[-1].time + timedelta(hours=2)
+    assert archive.store("EURUSD", Timeframe.H1, [bars[0], bars[1], bars[3]],
+                         "CYC-GAP", decision_at=decision) == 3
+    first = archive.load_cycle("CYC-GAP")["EURUSD"][Timeframe.H1]
+    assert len(first) == 3
+    assert [b.time for b in first] == [bars[i].time for i in (0, 1, 3)]
+    assert all(b.available_at == decision for b in first)
+    late = bars[2].model_copy(update={"available_at": decision - timedelta(minutes=1)})
+    assert archive.store("EURUSD", Timeframe.H1, [late]) == 1
+    assert archive.load_cycle("CYC-GAP")["EURUSD"][Timeframe.H1] == first
+    assert archive.load("EURUSD", Timeframe.H1, available_until=decision - timedelta(seconds=1)) == [late]
+    with pytest.raises(ArchiveConflictError, match="fenêtre de cycle"):
+        archive.store("EURUSD", Timeframe.H1, bars, "CYC-GAP", decision_at=decision)
+    with pytest.raises(ValueError, match="indisponible"):
+        archive.store("EURUSD", Timeframe.H1, [bars[2].model_copy(update={
+            "available_at": decision + timedelta(seconds=1)})], "CYC-FUTURE", decision_at=decision)
+    with pytest.raises(ValueError, match="non clôturée"):
+        archive.store("EURUSD", Timeframe.H1, [bars[3]], "CYC-EARLY",
+                      decision_at=bars[3].time + timedelta(minutes=1))
+
+
+def test_archive_migrates_existing_sqlite_and_legacy_window_fails_explicitly(tmp_path: Path) -> None:
+    path = tmp_path / "legacy_archive.db"
+    db = sqlite3.connect(path)
+    db.executescript("""
+        CREATE TABLE market_bars (symbol VARCHAR, timeframe VARCHAR, ts INTEGER,
+          open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL,
+          tick_volume FLOAT NOT NULL, spread FLOAT NOT NULL,
+          PRIMARY KEY (symbol, timeframe, ts));
+        CREATE TABLE cycle_inputs (cycle_id VARCHAR, symbol VARCHAR, timeframe VARCHAR,
+          n_bars INTEGER NOT NULL, first_ts INTEGER NOT NULL, last_ts INTEGER NOT NULL,
+          PRIMARY KEY (cycle_id, symbol, timeframe));
+    """)
+    stamp = int(T0.timestamp())
+    db.execute("INSERT INTO market_bars VALUES (?,?,?,?,?,?,?,?,?)",
+               ("EURUSD", "H1", stamp, 1, 2, 0.5, 1.5, 100, 10))
+    db.execute("INSERT INTO cycle_inputs VALUES (?,?,?,?,?,?)",
+               ("OLD", "EURUSD", "H1", 1, stamp, stamp))
+    db.commit()
+    db.close()
+    archive = MarketDataArchive(JournalRepository.from_url(f"sqlite:///{path}").engine)
+    assert len(archive.load("EURUSD", Timeframe.H1)) == 1
+    with pytest.raises(ArchiveIncompleteError, match="membres manquants"):
+        archive.load_cycle("OLD")
+    assert archive.store("EURUSD", Timeframe.H1, archive.load("EURUSD", Timeframe.H1)) == 0
 
 
 def test_old_sqlite_database_is_migrated_without_breaking_hash_chain(tmp_path: Path) -> None:

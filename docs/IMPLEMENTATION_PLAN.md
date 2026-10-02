@@ -383,23 +383,26 @@ Lot B selon le plan : résolution du contrat OBSERVE/PAPER (DECISION-013). Requi
 ---
 
 ### LOT C — Données causales et replay
-**STATUS: PARTIAL** (non commit)
+**STATUS: COMPLETE**
 
 **OBJECTIVE:** Fiabiliser archive, replay causal, provenance, doublons contradictoires, fenêtres complètes, fingerprint dataset.
 
-**IMPLEMENTED (C1+C2 seulement):**
+**IMPLEMENTED:**
 - `Bar` model : ajout `available_at: datetime | None` et `provenance: str | None` dans `core/models.py`
 - `BrokerCapabilities` dataclass dans `brokers/base.py` : `name`, `has_tick`, `has_bars`, `has_spread`, `has_close_time`, `has_tick_volume`, `has_real_volume`, `supported_timeframes`, `max_bars`, `provenance_tag`
 - `BrokerAdapter.capabilities()` méthode par défaut
 - `MockBroker.capabilities()` et `MT5Broker.capabilities()` surchargés
+- `MarketDataArchive` migre additivement SQLite, conserve `close_time`/`is_closed`/`available_at`/`provenance`, compare chaque doublon et refuse toute contradiction ; le compte d'insertions et `_last` reflètent les lignes réelles, même après une insertion tardive.
+- `cycle_input_bars` conserve les timestamps exacts de chaque fenêtre par cycle ; `cycle_inputs` conserve le cutoff observé et le fingerprint SHA-256 des barres canoniquement ordonnées. Les deux tables sont immuables sous SQLite.
+- Le scanner vérifie la clôture et la disponibilité des barres au cutoff de décision, archive leur provenance, puis emploie les barres relues depuis l'archive comme entrée du calcul. Le mock ne fournit plus de barre en cours.
+- `ReplayContext.from_cycle()` restitue les `Bar` exactes par symbole et timeframe, sans écriture ni broker fetch ; manifeste absent, barre manquante, fingerprint divergent ou disponibilité future produisent un échec explicite.
 
-**FILES:** `src/alladin/core/models.py`, `src/alladin/brokers/base.py`, `src/alladin/brokers/mock.py`, `src/alladin/brokers/mt5.py`
+**FILES:** `src/alladin/core/models.py`, `src/alladin/brokers/base.py`, `src/alladin/brokers/mock.py`, `src/alladin/brokers/mt5.py`, `src/alladin/market/archive.py`, `src/alladin/market/scanner.py`, `src/alladin/replay.py`, `tests/test_observability.py`, `tests/test_research_replay.py`
 
-**TESTS RUN:** 57 tests ciblés (test_market, test_research_replay, test_paper_engine) : 57/57 passed. ruff clean, mypy clean, git diff --check clean.
+**TESTS RUN:** C1+C2 : 57 tests ciblés PASS. C3-C5 : 38 tests ciblés PASS ; suite complète 317 PASS, 3 tests d'intégration MT5 ignorés ; ruff PASS, mypy PASS, `git diff --check` PASS.
 
-**REMAINING WORK (C3-C5):**
-- C3 : `MarketDataArchive` — corriger `_last` cache (late insert), `OR IGNORE` masquant doublons contradictoires, `added=len(rows)` surestimation, ajouter colonnes `available_at`/`provenance` à `market_bars`, fingerprint dataset
-- C4 : `ReplayContext.from_cycle()` doit charger les barres archivées réelles (pas seulement références `cycle_inputs`)
-- C5 : Tests causalité : cutoff temporel, trous/duplicates, cache restart, fingerprint, no future data, replay identique aux entrées archivées
+**DECISIONS:** Le premier cutoff d'observation devient `available_at` lorsque le broker ne fournit pas cet instant ; une nouvelle lecture conserve cette valeur immuable. Une ancienne archive sans manifeste exact ou preuve de disponibilité reste lisible, mais son replay causal échoue. Le fingerprint couvre les données stockées et leur ordre canonique, jamais un état du runtime.
 
-**NEXT EXACT ACTION:** Reprendre Lot C à l'étape C3 — modifier `market/archive.py` : ajouter colonnes `available_at`+`provenance` à la table `market_bars`, remplacer `OR IGNORE` par détection de doublons contradictoires, corriger `_last` cache pour insertion tardive, ajouter méthode `fingerprint()`. Puis C4 (ReplayContext avec barres), C5 (tests), C6 (validation/commit).
+**LIMITES:** Les anciennes fenêtres C préexistantes sans manifeste ne sont pas reconstructibles exactement. Le replay reconstruit les entrées historiques ; il ne réexécute pas encore le moteur de décision ni les ordres. Pour les fournisseurs sans `close_time`, la clôture est déduite de `time + durée du timeframe`.
+
+**NEXT EXACT ACTION:** Lot D : banc expérimental causal commun aux baselines classiques et au futur cerveau, selon la section « Unités d'implémentation » ci-dessus.
