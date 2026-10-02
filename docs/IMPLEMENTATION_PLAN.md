@@ -259,7 +259,38 @@ Le premier lot traite le risque P0 de fermeture protectrice non confirmée. Le r
 
 **Hors scope.** SNN, Brain API, PAPER P&L, Mission Control, refonte générale du moniteur, trading LIVE, nouveaux brokers, stratégie de retry distribuée et migration de schéma non nécessaire.
 
-## CLAUDE SESSION CHECKPOINT
+## CLAUDE SESSION CHECKPOINT — Lot B
+
+- **Date :** 2026-10-02 15:15 UTC+2
+- **Work package :** Lot B — Contrat OBSERVE/PAPER/DEMO et environnement PAPER réel
+- **État : COMPLETE**
+
+### Objectif
+
+Adopter DECISION-013 et implémenter le contrat de modes : OBSERVE (lecture stricte, aucun send_order), PAPER (simulation réelle avec PaperExperimentEngine, persistance, RiskEngine actif), DEMO (chemin sécurisé inchangé).
+
+### Fichiers modifiés
+
+| Fichier | Changement |
+|---|---|
+| `docs/DECISIONS/DECISION-013-MODE-SAFETY.md` | Statut PROPOSED → ADOPTED. Contrat formalisé : OBSERVE strict read-only, PAPER simulation isolée avec persistence, DEMO avec fermetures protectrices. |
+| `src/alladin/execution/models.py` | `ExecStatus.PAPER_EXECUTED` ajouté — position paper créée, aucun ordre broker. |
+| `src/alladin/journal/repository.py` | Table `paper_positions` ajoutée (paper_id PK, run_id, symbol, side, volume, entry_price, sl, tp, status, pnl_pips, mfe_pips, mae_pips, etc.). Méthodes CRUD : `insert_paper_position`, `update_paper_position`, `get_paper_position`, `list_paper_positions`. |
+| `src/alladin/market/paper.py` | `PaperExperimentEngine` enrichi : persistance via repo, `restore()` pour restart, `close_position_by_id()` pour close explicite, accepte `RiskDecision` pour sizing. `PaperPosition.to_persistence()` / `from_persistence()` pour sérialisation. |
+| `src/alladin/orchestration/engine.py` | `_run_cycle()` mode-aware : PAPER tick les positions paper, utilise submit(dry_run=True) + paper_engine.open_position. OBSERVE/PAPER : alerte critique sur SL supprimé sans send_order. DEMO : fermeture protectrice inchangée. Import `PaperExperimentEngine`, attribut `paper_engine`. |
+| `src/alladin/orchestration/bootstrap.py` | `Components.engine()` crée `PaperExperimentEngine` et appelle `restore()` en mode PAPER. Import `PaperExperimentEngine`. |
+| `tests/test_paper_engine.py` | 31 tests couvrant : isolation broker (SpyBroker qui RAISE sur send_order pour OBSERVE/PAPER/SL/TP/close/restart), DEMO conservé, OBSERVE alerte critique sans close, LIVE bloqué, PAPER lifecycle (open/SL/TP/close/P&L), persistance restart, double fill/close, DRY_RUN_APPROVED != EXECUTED, RiskEngine en PAPER, kill switch, journal, sizing, spread, round-trip persistence. |
+
+### Résultats de validation
+
+- Suite globale complète : **309 passed, 3 skipped** (MT5 opt-in)
+- `ruff check src tests` : **All checks passed**
+- `mypy src` : **Success: no issues found in 77 source files**
+- `git diff --check` : aucune erreur
+
+---
+
+## CLAUDE SESSION CHECKPOINT — Lot A
 
 - **Date :** 2026-10-02 10:38 UTC+2
 - **Work package :** Lot A — P0 sécurité fermeture protectrice

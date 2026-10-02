@@ -43,6 +43,7 @@ def comment_matches(comment: str, run_id: str, magic: int) -> bool:
 
 class ExecStatus(StrEnum):
     EXECUTED = "EXECUTED"
+    PAPER_EXECUTED = "PAPER_EXECUTED"  # simulé en mode PAPER (position paper créée, aucun ordre broker)
     DRY_RUN_APPROVED = "DRY_RUN_APPROVED"  # approuvé par le RiskEngine, volontairement non envoyé
     REJECTED_RISK = "REJECTED_RISK"
     REJECTED_BROKER = "REJECTED_BROKER"

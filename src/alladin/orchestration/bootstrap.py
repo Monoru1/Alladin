@@ -24,6 +24,7 @@ from alladin.execution.service import ExecutionService
 from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
 from alladin.market.archive import MarketDataArchive
+from alladin.market.paper import PaperExperimentEngine
 from alladin.market.scanner import MarketScanner
 from alladin.market.universe import MarketUniverse
 from alladin.orchestration.engine import OrchestrationEngine
@@ -97,6 +98,10 @@ class Components:
             self.broker, universe, self.profile.universe, archive=MarketDataArchive(self.repo.engine)
         )
         router = StrategyRouter(registry, performance=self.journal)
+        paper_engine: PaperExperimentEngine | None = None
+        if effective_mode is RunMode.PAPER:
+            paper_engine = PaperExperimentEngine(self.broker, self.run.run_id, repo=self.repo)
+            paper_engine.restore()
         return OrchestrationEngine(
             broker=self.broker,
             run=self.run,
@@ -109,6 +114,7 @@ class Components:
             monitor=self.monitor,
             run_mode=run_mode,
             execute=execute,
+            paper_engine=paper_engine,
         )
 
 

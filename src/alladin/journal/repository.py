@@ -70,6 +70,29 @@ trades = Table(
     *[Column(n, t, primary_key=(n == "trade_id")) for n, t in _TRADE_COLS],
 )
 
+paper_positions = Table(
+    "paper_positions",
+    metadata,
+    Column("paper_id", String, primary_key=True),
+    Column("run_id", String, nullable=False, index=True),
+    Column("cycle_id", String),
+    Column("symbol", String, nullable=False),
+    Column("side", String, nullable=False),
+    Column("volume", Float, nullable=False),
+    Column("entry_price", Float, nullable=False),
+    Column("sl", Float),
+    Column("tp", Float),
+    Column("opened_at", String, nullable=False),
+    Column("exit_price", Float),
+    Column("closed_at", String),
+    Column("status", String, nullable=False, default="OPEN"),
+    Column("close_reason", String),
+    Column("pnl_pips", Float, default=0.0),
+    Column("mfe_pips", Float, default=0.0),
+    Column("mae_pips", Float, default=0.0),
+    Column("intent_json", Text),
+)
+
 _TRIGGERS = [
     "CREATE TRIGGER IF NOT EXISTS journal_no_update BEFORE UPDATE ON journal_events "
     "BEGIN SELECT RAISE(ABORT, 'journal is append-only'); END",
@@ -369,3 +392,31 @@ class JournalRepository:
         with self.engine.connect() as c:
             rows = c.execute(trades.select().where(trades.c.status == "CLOSED")).all()
         return [self._trade(r) for r in rows]
+
+    # ------------------------------------------------------------------ paper positions
+
+    def insert_paper_position(self, d: dict[str, Any]) -> None:
+        with self.engine.begin() as c:
+            c.execute(paper_positions.insert().values(**d))
+
+    def update_paper_position(self, paper_id: str, **fields: Any) -> None:
+        with self.engine.begin() as c:
+            c.execute(
+                paper_positions.update().where(paper_positions.c.paper_id == paper_id).values(**fields)
+            )
+
+    def get_paper_position(self, paper_id: str) -> dict[str, Any] | None:
+        with self.engine.connect() as c:
+            row = c.execute(
+                paper_positions.select().where(paper_positions.c.paper_id == paper_id)
+            ).first()
+        return dict(row._mapping) if row else None
+
+    def list_paper_positions(self, run_id: str, status: str | None = None) -> list[dict[str, Any]]:
+        q = paper_positions.select().where(paper_positions.c.run_id == run_id)
+        if status:
+            q = q.where(paper_positions.c.status == status)
+        q = q.order_by(paper_positions.c.opened_at)
+        with self.engine.connect() as c:
+            rows = c.execute(q).all()
+        return [dict(r._mapping) for r in rows]

@@ -26,6 +26,7 @@ from alladin.journal.models import EventType
 from alladin.journal.service import JournalService
 from alladin.market.models import ScanReport
 from alladin.market.opportunity import Opportunity, OpportunityStatus
+from alladin.market.paper import PaperExperimentEngine
 from alladin.market.scanner import MarketScanner
 from alladin.orchestration.monitor import PositionMonitor
 from alladin.orchestration.state import RunContext, RunManager
@@ -63,6 +64,7 @@ class OrchestrationEngine:
         monitor: PositionMonitor,
         run_mode: RunMode = RunMode.OBSERVE,
         execute: bool = False,  # rétrocompatibilité : remplacé par run_mode
+        paper_engine: PaperExperimentEngine | None = None,
     ) -> None:
         self.broker, self.run, self.manager, self.journal = broker, run, manager, journal
         self.scanner, self.router, self.agent = scanner, router, agent
@@ -72,6 +74,7 @@ class OrchestrationEngine:
             run_mode = RunMode.DEMO
         self.run_mode = run_mode
         self.execute = run_mode is RunMode.DEMO  # compatibilité interne
+        self.paper_engine = paper_engine
         self._cycle = 0
         self._stop_requested = False
 
@@ -107,17 +110,39 @@ class OrchestrationEngine:
     def _run_cycle(self, cycle_id: str) -> CycleOutcome:
         rid = self.run.run_id
 
+        # 0. PAPER : tick les positions paper avant le scan (SL/TP auto)
+        if self.run_mode is RunMode.PAPER and self.paper_engine is not None:
+            for pc in self.paper_engine.tick_all():
+                self.journal.log(
+                    rid,
+                    EventType.POSITION_CLOSED,
+                    {"paper": True, **pc.to_dict()},
+                )
+
         # 1. positions & watchdog d'abord
         rep = self.monitor.sync()
         for ticket in rep.sl_removed:
-            self.journal.log(
-                rid, EventType.INFO, {"alert": "SL supprimé : fermeture de la position", "ticket": ticket}
-            )
-            if not self.execution.close_position(ticket, "SL supprimé"):
+            if self.run_mode is RunMode.DEMO:
+                # DEMO : fermeture protectrice autorisee
+                self.journal.log(
+                    rid, EventType.INFO,
+                    {"alert": "SL supprimé : fermeture de la position", "ticket": ticket},
+                )
+                if not self.execution.close_position(ticket, "SL supprimé"):
+                    self.journal.log(
+                        rid,
+                        EventType.INFO,
+                        {"alert": "fermeture protectrice échouée — position reste sans SL",
+                         "ticket": ticket},
+                    )
+            else:
+                # OBSERVE / PAPER : aucun send_order, alerte critique seulement
                 self.journal.log(
                     rid,
                     EventType.INFO,
-                    {"alert": "fermeture protectrice échouée — position reste sans SL", "ticket": ticket},
+                    {"alert": "CRITIQUE : position sans SL détectée, intervention humaine requise "
+                              "(mode strict, aucun ordre envoyé)",
+                     "ticket": ticket, "run_mode": self.run_mode.value},
                 )
         state = self.run.watchdog.run_state
         if self.execution.killswitch.is_active() or state not in (RunState.RUNNING, RunState.TARGET_REACHED):
@@ -172,14 +197,36 @@ class OrchestrationEngine:
                 scan, evaluated, response.agent, f"intent refusé : {'; '.join(problems)}", shortlist
             )
 
-        # 6. exécution (ou dry-run)
-        result = self.execution.submit(intent, dry_run=not self.execute)
+        # 6. exécution (ou dry-run ou paper)
+        if self.run_mode is RunMode.PAPER and self.paper_engine is not None:
+            # PAPER : risk validation via dry_run, puis execution simulee
+            result = self.execution.submit(intent, dry_run=True)
+            if result.status is ExecStatus.DRY_RUN_APPROVED and result.decision is not None:
+                paper_pos = self.paper_engine.open_position(
+                    intent, cycle_id, decision=result.decision,
+                )
+                self.journal.log(
+                    rid,
+                    EventType.POSITION_OPENED,
+                    {"paper": True, **paper_pos.to_dict()},
+                )
+                from alladin.execution.models import ExecutionResult
+
+                result = ExecutionResult(
+                    status=ExecStatus.PAPER_EXECUTED,
+                    intent=intent,
+                    decision=result.decision,
+                    messages=[f"position paper {paper_pos.paper_id} ouverte"],
+                )
+        else:
+            result = self.execution.submit(intent, dry_run=not self.execute)
+
         self.monitor.sync()
         return CycleOutcome(
             cycle=self._cycle,
             run_state=self.run.watchdog.run_state.value,
             decision="TRADE"
-            if result.status in (ExecStatus.EXECUTED, ExecStatus.DRY_RUN_APPROVED)
+            if result.status in (ExecStatus.EXECUTED, ExecStatus.DRY_RUN_APPROVED, ExecStatus.PAPER_EXECUTED)
             else "NO_TRADE",
             reason=f"{result.status.value}: {'; '.join(result.messages)}",
             shortlist=shortlist,
