@@ -24,6 +24,7 @@ from alladin.brokers.crypto import CryptoDataProvider, CryptoTick
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
 from alladin.market.regime import RegimeClassifier
+from alladin.research.r_analytics import CostCategory, CostModel, FillRecord
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class BTCExperimentPosition:
     mae_price: float | None = None
     mfe_r: float = 0.0
     mae_r: float = 0.0
+    fill: FillRecord | None = None
 
     @property
     def is_open(self) -> bool:
@@ -180,6 +182,13 @@ class BTCThreeWayEngine:
         self.risk_pct = risk_pct
         self.experiments: list[BTCExperiment] = []
         self._evaluated = False
+        self.cost_model = CostModel(
+            spread=CostCategory.OBSERVED,
+            commission=CostCategory.MODELED if fee_bps > 0 else CostCategory.ZERO,
+            slippage=CostCategory.ZERO,
+            swap=CostCategory.ZERO,
+            label=f"crypto(fee={fee_bps}bps)",
+        )
 
     def evaluate(self) -> list[BTCExperiment]:
         """Evalue les 3 hypotheses sur le snapshot actuel."""
@@ -520,12 +529,37 @@ class BTCThreeWayEngine:
         pos.closed_at = self.provider.now()
         pos.status = status
 
-        d = 1 if pos.side == Side.BUY else -1
-        pnl = (exit_price - pos.entry_price) * d * pos.size_btc
-        # Deduct fees
+        side_sign = 1 if pos.side == Side.BUY else -1
+        gross_pnl = (exit_price - pos.entry_price) * side_sign * pos.size_btc
         fee = (pos.entry_price + exit_price) * pos.size_btc * self.fee_bps / 10000
-        pos.pnl_usdt = round(pnl - fee, 2)
-
         sl_dist = abs(pos.entry_price - pos.stop_loss)
-        if sl_dist > 0:
-            pos.pnl_r = round((pnl - fee) / (sl_dist * pos.size_btc), 4)
+        initial_risk = sl_dist * pos.size_btc
+        net_pnl = gross_pnl - fee
+        r_multiple = round(net_pnl / initial_risk, 4) if initial_risk > 0 else 0.0
+
+        pos.pnl_usdt = round(net_pnl, 2)
+        pos.pnl_r = r_multiple
+
+        pos.fill = FillRecord(
+            symbol=SYMBOL,
+            side=side_sign,
+            trade_id=pos.experiment_id,
+            entry_price=pos.entry_price,
+            exit_price=exit_price,
+            stop_loss=pos.stop_loss,
+            take_profit=pos.take_profit,
+            opened_at=pos.opened_at,
+            closed_at=pos.closed_at,
+            exit_reason=status,
+            volume=pos.size_btc,
+            spread_cost=0.0,
+            slippage_cost=0.0,
+            commission=fee,
+            swap=0.0,
+            gross_pnl=gross_pnl,
+            net_pnl=net_pnl,
+            initial_risk=initial_risk,
+            r_multiple=r_multiple,
+            cost_model=self.cost_model,
+            experiment_id=pos.experiment_id,
+        )

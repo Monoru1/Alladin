@@ -20,7 +20,7 @@ from uuid import NAMESPACE_URL, uuid5
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
 from alladin.market.regime import RegimeClassifier, primary_metrics
-from alladin.research.models import ExperimentResult
+from alladin.research.models import ExperimentResult, StrategyExperiment
 from alladin.research.r_analytics import CostCategory, CostModel, FillRecord, RMetrics, compute_r
 from alladin.research.splits import DatasetSplitConfig, SplitName, split_bars
 from alladin.strategies.base import Strategy, StrategyContext, StrategySignal
@@ -150,6 +150,39 @@ class BacktestResult:
             r_total=self.total_r,
             sharpe=None,  # TODO: ajouter si necessaire
             passed=self.n_trades >= 30 and (self.expectancy_r or 0) > 0,
+        )
+
+    def to_experiment(
+        self,
+        experiment_id: str,
+        dataset: str,
+        *,
+        dataset_fingerprint: str | None = None,
+        dataset_provenance: str | None = None,
+        cost_model_label: str = "",
+    ) -> StrategyExperiment:
+        """Create a StrategyExperiment bound to this result's provenance.
+
+        The caller must provide dataset_fingerprint/provenance from the
+        archive that produced the bars. This is the explicit required
+        boundary between research and archival systems.
+        """
+        params: dict[str, object] = {}
+        if cost_model_label:
+            params["cost_model"] = cost_model_label
+        return StrategyExperiment(
+            experiment_id=experiment_id,
+            strategy_id=self.strategy_id,
+            strategy_version=self.strategy_version,
+            dataset=dataset,
+            dataset_fingerprint=dataset_fingerprint,
+            dataset_provenance=dataset_provenance,
+            period_start=self.period_start or datetime(2000, 1, 1, tzinfo=UTC),
+            period_end=self.period_end or datetime(2099, 1, 1, tzinfo=UTC),
+            symbols=[self.symbol],
+            timeframes=[self.timeframe],
+            parameters=params,
+            split=self.split if self.split in ("TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO") else "TRAIN",
         )
 
 

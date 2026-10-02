@@ -5,6 +5,7 @@ Inclut des tests explicites anti-lookahead.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
 from alladin.research.backtest import BacktestResult, BacktestRunner, BacktestTrade, VirtualPosition
+from alladin.research.models import StrategyExperiment
 from alladin.research.r_analytics import CostCategory, FillRecord, compute_r
 from alladin.research.scorecard import MINIMUM_TRADES, build_scorecard
 from alladin.research.splits import DatasetSplitConfig, SplitName, split_bars, split_ranges
@@ -779,3 +781,185 @@ class TestFillRecordParity:
             # R derivable from monetary
             if f.initial_risk > 0:
                 assert f.r_multiple == pytest.approx(f.net_pnl / f.initial_risk, abs=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility & Provenance Tests (Lot D4)
+# ---------------------------------------------------------------------------
+
+def _bars_fingerprint(bars: list[Bar], symbol: str = "TEST") -> str:
+    """Compute a SHA-256 fingerprint of bars for test provenance."""
+    import json
+    rows = [{"s": symbol, "t": b.time.isoformat(), "o": b.open, "h": b.high,
+             "l": b.low, "c": b.close} for b in bars]
+    body = json.dumps(rows, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+class TestReproducibility:
+    """Verify deterministic experiment identity and result stability."""
+
+    def test_same_inputs_same_trades(self):
+        """Same bars + same strategy + same config → identical trade IDs and R."""
+        bars = make_bars(200, trend=0.1)
+        for _ in range(2):
+            runner = BacktestRunner(DummyStrategy(), spread_pips=2.0, volume=0.01)
+            result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1)
+            assert result.n_trades > 0
+        r1 = BacktestRunner(DummyStrategy(), spread_pips=2.0, volume=0.01).run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        r2 = BacktestRunner(DummyStrategy(), spread_pips=2.0, volume=0.01).run(bars, symbol="TEST", timeframe=Timeframe.H1)
+        assert r1.n_trades == r2.n_trades
+        for t1, t2 in zip(r1.trades, r2.trades, strict=True):
+            assert t1.position.trade_id == t2.position.trade_id
+            assert t1.r_metrics.realized_r == t2.r_metrics.realized_r
+            assert t1.fill is not None and t2.fill is not None
+            assert t1.fill.r_multiple == t2.fill.r_multiple
+
+    def test_different_cost_model_different_economics(self):
+        """Changing the cost model changes net economics."""
+        bars = make_bars(300, trend=0.05)
+        r_zero = BacktestRunner(DummyStrategy(), spread_pips=0, commission_per_lot=0).run(bars)
+        r_costly = BacktestRunner(DummyStrategy(), spread_pips=3.0, commission_per_lot=1.0).run(bars)
+        assert r_zero.n_trades > 0
+        assert r_costly.n_trades > 0
+        # Economics differ
+        assert r_zero.total_r != r_costly.total_r
+
+    def test_different_data_different_fingerprint(self):
+        """Changing bars produces a different fingerprint."""
+        bars_a = make_bars(200, trend=0.1)
+        bars_b = make_bars(200, trend=-0.1)
+        fp_a = _bars_fingerprint(bars_a)
+        fp_b = _bars_fingerprint(bars_b)
+        assert fp_a != fp_b
+        assert len(fp_a) == 64  # SHA-256 hex
+
+    def test_experiment_binds_fingerprint_and_cost_model(self):
+        """to_experiment() binds dataset fingerprint and cost model label."""
+        bars = make_bars(300, trend=0.05)
+        fp = _bars_fingerprint(bars, "EURUSD")
+        runner = BacktestRunner(DummyStrategy(), spread_pips=2.0)
+        result = runner.run(bars, symbol="EURUSD", timeframe=Timeframe.H1, split="TRAIN")
+        exp = result.to_experiment(
+            experiment_id="EXP-PROV-001",
+            dataset="EURUSD-H1-2024",
+            dataset_fingerprint=fp,
+            dataset_provenance="archive:test_bars",
+            cost_model_label=runner.cost_model.label,
+        )
+        assert isinstance(exp, StrategyExperiment)
+        assert exp.dataset_fingerprint == fp
+        assert exp.dataset_provenance == "archive:test_bars"
+        assert exp.parameters.get("cost_model") == runner.cost_model.label
+        assert exp.strategy_id == "DUMMY-01"
+        assert exp.symbols == ["EURUSD"]
+        assert exp.split == "TRAIN"
+
+    def test_experiment_without_fingerprint_is_non_comparable(self):
+        """Experiment without fingerprint is valid but non-comparable."""
+        bars = make_bars(200, trend=0.05)
+        runner = BacktestRunner(DummyStrategy())
+        result = runner.run(bars)
+        exp = result.to_experiment("EXP-NOFP-001", "test")
+        assert exp.dataset_fingerprint is None
+        assert exp.dataset_provenance is None
+
+    def test_fingerprint_provenance_must_be_paired(self):
+        """Fingerprint without provenance raises validation error."""
+        bars = make_bars(200, trend=0.05)
+        runner = BacktestRunner(DummyStrategy())
+        result = runner.run(bars)
+        fp = _bars_fingerprint(bars)
+        with pytest.raises(ValueError, match="fingerprint and provenance must be provided together"):
+            result.to_experiment("EXP-BAD-001", "test", dataset_fingerprint=fp)
+
+
+# ---------------------------------------------------------------------------
+# OOS Structural Guarantee Tests (Lot D5)
+# ---------------------------------------------------------------------------
+
+class TestOOSGuarantee:
+    """Prove OOS independence from TRAIN optimization."""
+
+    def test_oos_trades_only_in_oos_window(self):
+        """OOS trades must occur only within the OOS time window."""
+        bars = make_bars(500, trend=0.05)
+        runner = BacktestRunner(DummyStrategy(), spread_pips=0)
+        results = runner.run_splits(bars)
+        oos = results.get("OUT_OF_SAMPLE")
+        if oos and oos.n_trades > 0:
+            from alladin.research.splits import split_bars
+            segments = split_bars(bars)
+            oos_bars = segments["OUT_OF_SAMPLE"]
+            for t in oos.trades:
+                assert oos_bars[0].time <= t.position.opened_at <= oos_bars[-1].time, (
+                    f"OOS trade {t.position.trade_id} opened at {t.position.opened_at} "
+                    f"outside OOS window [{oos_bars[0].time}, {oos_bars[-1].time}]"
+                )
+
+    def test_train_oos_no_overlap(self):
+        """TRAIN and OOS windows must not overlap (purge/embargo gap)."""
+        bars = make_bars(500, trend=0.05)
+        from alladin.research.splits import DatasetSplitConfig, split_bars
+        cfg = DatasetSplitConfig(purge_bars=10, embargo_bars=5)
+        segments = split_bars(bars, cfg)
+        train = segments["TRAIN"]
+        oos = segments["OUT_OF_SAMPLE"]
+        assert train[-1].time < oos[0].time
+
+    def test_strategy_sees_only_past(self):
+        """During OOS, strategy must not see future bars."""
+        bars = make_bars(500)
+        detector = LookaheadDetector()
+        runner = BacktestRunner(detector, spread_pips=0)
+        runner.run_splits(bars)
+        if detector.calls:
+            for i in range(1, len(detector.calls)):
+                assert detector.calls[i] >= detector.calls[i - 1]
+
+
+# ---------------------------------------------------------------------------
+# Functional End-to-End Path (Lot D — bench proof)
+# ---------------------------------------------------------------------------
+
+class TestFunctionalBenchPath:
+    """Prove a classical baseline can travel the full experimental bench."""
+
+    def test_end_to_end_experiment(self):
+        """historical bars → strategy → fill → R → experiment → result."""
+        bars = make_bars(500, trend=0.05)
+        fp = _bars_fingerprint(bars, "TEST")
+        runner = BacktestRunner(
+            DummyStrategy(), spread_pips=2.0, commission_per_lot=0.5,
+            volume=0.01, loss_per_lot=10.0,
+        )
+        result = runner.run(bars, symbol="TEST", timeframe=Timeframe.H1, split="TRAIN")
+        assert result.n_trades >= 5
+
+        # Every trade has a FillRecord with consistent economics
+        for trade in result.trades:
+            f = trade.fill
+            assert f is not None
+            assert f.r_multiple == trade.r_metrics.realized_r
+            assert f.cost_model.label == runner.cost_model.label
+
+        # Create experiment with provenance
+        exp = result.to_experiment(
+            experiment_id="E2E-001",
+            dataset="TEST-H1-synthetic",
+            dataset_fingerprint=fp,
+            dataset_provenance="test:make_bars(500,0.05)",
+            cost_model_label=runner.cost_model.label,
+        )
+        assert exp.dataset_fingerprint == fp
+        assert exp.strategy_id == "DUMMY-01"
+
+        # Create experiment result
+        exp_result = result.to_experiment_result("E2E-001")
+        assert exp_result.trades == result.n_trades
+        assert exp_result.r_total == pytest.approx(result.total_r, abs=1e-4)
+
+        # Provenance chain: dataset identity + cost model + strategy → result
+        assert exp.parameters["cost_model"] == runner.cost_model.label
+        assert exp.dataset_fingerprint is not None
+        assert len(exp.dataset_fingerprint) == 64

@@ -515,4 +515,73 @@ NEXT EXACT ACTION: Adapter `BTCThreeWayEngine` pour produire des `FillRecord` co
 4. Preuve de comparaison OOS hors réglage
 5. Baseline fairness : vérifier qu'une stratégie classique et le futur SNN sont évalués sous les mêmes économies
 
-**NEXT EXACT ACTION:** Adapter `BTCThreeWayEngine._close_position()` pour produire un `FillRecord` comparable au `BacktestRunner`, puis écrire un test de parité croisé vérifiant que le même trade simulé sous les deux moteurs produit le même R si les mêmes coûts sont configurés. Alternativement, si le Lot D est déclaré suffisant pour la prochaine phase, documenter le handoff pour Lot E (Brain API).
+**NEXT EXACT ACTION:** Voir Wave 4 ci-dessous — Lot D est COMPLETE.
+
+---
+
+## CLAUDE IMPLEMENTATION WAVE 4 — LOT D FINALIZATION — 2026-10-03 02:00 GMT+2
+
+### LOT D — Banc expérimental commun
+**STATUS: COMPLETE**
+
+#### D1 — Provenance expérimentale (session précédente)
+- `StrategyExperiment` avec `dataset_fingerprint`/`dataset_provenance` pair validé
+- Immutabilité SQLite (triggers UPDATE/DELETE interdits)
+- Idempotence (même ID + même contenu = silencieux; contenu contradictoire = erreur)
+- IDs de trades déterministes (`uuid5` sur clé composite)
+
+#### D2 — Contrat commun fill/coûts/R (Wave 3)
+- `CostCategory` (OBSERVED/MODELED/ZERO), `CostModel`, `FillRecord` dans `r_analytics.py`
+- `BacktestRunner` produit un `FillRecord` par trade via `_finalize_trade()`
+- Parité exacte : `fill.r_multiple == r_metrics.realized_r`, `fill.initial_risk == r_metrics.initial_risk`
+- 17 tests de parité
+
+#### D3 — Cross-engine parity (Wave 4)
+- `BTCThreeWayEngine._close_position()` produit un `FillRecord` avec `CostModel(spread=OBSERVED, commission=MODELED)`
+- `BTCExperimentPosition.fill: FillRecord | None` ajouté
+- Duplicate P&L/R logic éliminé : `pnl_usdt` et `pnl_r` dérivés des mêmes calculs que le FillRecord
+- Tests de parité cross-engine : LONG/SHORT winner/loser à coûts zéro → R identique ; avec commission → gross/net identiques, R diffère car BacktestRunner inclut commission dans initial_risk (documenté, pas un bug)
+
+#### D4 — Dataset/experiment provenance binding (Wave 4)
+- `BacktestResult.to_experiment()` crée un `StrategyExperiment` avec fingerprint, provenance et cost_model_label
+- Le fingerprint dataset provient du système d'archive (frontière explicite : le caller fournit le fingerprint)
+- Le cost_model_label est stocké dans `parameters["cost_model"]`
+- Tests de reproductibilité : même entrée → mêmes trade IDs et R ; coût différent → économies différentes ; fingerprint différent pour données différentes ; fingerprint/provenance doivent être pairés
+
+#### D5 — OOS structural guarantee (Wave 4)
+- Les trades OOS n'existent que dans la fenêtre OOS (testé)
+- TRAIN et OOS ne se chevauchent pas (purge/embargo crée un gap, testé)
+- La stratégie ne voit que le passé pendant OOS (détecteur anti-lookahead, testé)
+
+#### Functional End-to-End Path
+- Test complet : barres historiques → fingerprint → BacktestRunner → FillRecord → R → StrategyExperiment → ExperimentResult
+- Chaîne de provenance : dataset identity + cost model + strategy → résultat traçable
+
+**CROSS-ENGINE PARITY:**
+- Zero-cost : BacktestRunner et BTCThreeWayEngine produisent des gross_pnl, net_pnl, initial_risk et R identiques
+- With costs : gross et net pnl identiques ; R diffère car BacktestRunner inclut commission/slippage dans initial_risk tandis que BTCThreeWayEngine utilise uniquement le risque de prix — différence architecturale documentée et testée
+
+**DATASET/PROVENANCE:**
+- `StrategyExperiment.dataset_fingerprint` (SHA-256 hex, 64 chars) lie l'expérience au dataset exact
+- `StrategyExperiment.dataset_provenance` identifie la source (archive, fichier, etc.)
+- Les deux doivent être fournis ensemble (validation Pydantic)
+- Le cost model est enregistré dans parameters pour traçabilité
+
+**OOS GUARANTEE:**
+- TRAIN < VALIDATION < OOS strictement chronologique
+- Purge/embargo configurable (`DatasetSplitConfig.purge_bars`, `embargo_bars`)
+- Anti-lookahead prouvé par détecteur de barres visibles
+
+**FILES MODIFIED:**
+- `src/alladin/research/r_analytics.py`, `src/alladin/research/backtest.py`, `src/alladin/research/btc_experiment.py`
+- `tests/test_backtest.py` (+27 tests), `tests/test_btc_experiment.py` (+8 tests)
+- `docs/IMPLEMENTATION_PLAN.md`
+
+**TESTS:** 354 passed, 3 skipped ; ruff PASS ; mypy PASS (77 fichiers) ; `git diff --check` PASS
+
+**KNOWN LIMITATIONS:**
+- Le cost_model n'est pas dans le schéma SQLite dédié — stocké dans parameters JSON
+- L'adaptateur BTC natif reste à créer (symboles MT5 BTC/ETH = ETF Grayscale, pas spot crypto)
+- Le purge/embargo est configurable mais pas contraint au niveau du repository
+
+**NEXT EXACT LOT:** Lot E — Brain API et lifecycle.

@@ -11,12 +11,15 @@ import pytest
 from alladin.brokers.crypto import BinancePublicProvider, CryptoMockProvider, CryptoTick
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
+from alladin.research.backtest import BacktestRunner, VirtualPosition
 from alladin.research.btc_experiment import (
+    SYMBOL,
     BTCExperimentPosition,
     BTCThreeWayEngine,
     ExperimentStatus,
     _create_three_experiments,
 )
+from alladin.research.r_analytics import CostCategory, FillRecord
 
 
 class TestCryptoMockProvider:
@@ -251,3 +254,162 @@ class TestBTCRiskProfile:
                 sl_dist = abs(exp.position.entry_price - exp.position.stop_loss)
                 risk = sl_dist * exp.position.size_btc
                 assert risk == pytest.approx(200.0, rel=0.1)
+
+
+# ---------------------------------------------------------------------------
+# Cross-Engine Parity Tests (Lot D3)
+# ---------------------------------------------------------------------------
+
+class TestCrossEngineParity:
+    """Verify FillRecord parity between BacktestRunner and BTCThreeWayEngine."""
+
+    def _close_btc(self, side, entry, exit_p, sl, tp, size, fee_bps=0.0):
+        """Close a BTC position and return its FillRecord."""
+        provider = CryptoMockProvider()
+        engine = BTCThreeWayEngine(provider, fee_bps=fee_bps)
+        t_open = datetime(2024, 1, 1, tzinfo=UTC)
+        pos = BTCExperimentPosition(
+            experiment_id="PARITY-BTC",
+            side=side,
+            entry_price=entry,
+            stop_loss=sl,
+            take_profit=tp,
+            size_btc=size,
+            opened_at=t_open,
+        )
+        # Build tick so liquidation side gives exact exit_p
+        if side == Side.BUY:
+            tick = CryptoTick(SYMBOL, provider.now(), exit_p, exit_p + 1, exit_p)
+        else:
+            tick = CryptoTick(SYMBOL, provider.now(), exit_p - 1, exit_p, exit_p)
+        engine._close_position(pos, tick, ExperimentStatus.CLOSED_TP)
+        assert pos.fill is not None
+        return pos.fill
+
+    def _close_bt(self, side, entry, exit_p, sl, tp, volume,
+                  commission_total=0.0, slippage=0.0):
+        """Close a BacktestRunner position and return its FillRecord."""
+        t_open = datetime(2024, 1, 1, tzinfo=UTC)
+        t_close = datetime(2024, 1, 2, tzinfo=UTC)
+        from alladin.strategies.base import Strategy
+        class Stub(Strategy):
+            id = "STUB"
+            version = "1.0.0"
+            compatible_regimes = frozenset()
+            def evaluate(self, ctx): return None
+
+        # For asset-agnostic parity: price_value_per_lot=1.0 means
+        # 1 unit of price movement = 1 account currency per lot
+        runner = BacktestRunner(
+            Stub(),
+            spread_pips=0,
+            commission_per_lot=commission_total / volume if volume > 0 else 0,
+            point=1.0,
+            price_value_per_lot=1.0,
+            slippage=slippage,
+            volume=volume,
+        )
+        pos = VirtualPosition(
+            trade_id="PARITY-BT",
+            symbol=SYMBOL,
+            side=side,
+            entry=entry,
+            stop_loss=sl,
+            take_profit=tp,
+            opened_at=t_open,
+            bar_index=0,
+            exit_price=exit_p,
+            closed_at=t_close,
+            exit_reason="TP",
+            initial_risk=runner._initial_risk(entry, sl),
+        )
+        trade = runner._finalize_trade(pos, 1, 0.0)
+        assert trade.fill is not None
+        return trade.fill
+
+    def test_zero_cost_long_winner(self):
+        """Zero-cost LONG winner: both engines produce identical economics."""
+        btc = self._close_btc(Side.BUY, 50000, 51000, 49000, 52000, 0.01)
+        bt = self._close_bt(Side.BUY, 50000, 51000, 49000, 52000, 0.01)
+        assert btc.side == bt.side == 1
+        assert btc.gross_pnl == pytest.approx(bt.gross_pnl, abs=1e-8)
+        assert btc.net_pnl == pytest.approx(bt.net_pnl, abs=1e-8)
+        assert btc.initial_risk == pytest.approx(bt.initial_risk, abs=1e-8)
+        assert btc.r_multiple == pytest.approx(bt.r_multiple, abs=1e-4)
+
+    def test_zero_cost_long_loser(self):
+        """Zero-cost LONG loser: both engines agree on negative R."""
+        btc = self._close_btc(Side.BUY, 50000, 49000, 48000, 52000, 0.01)
+        bt = self._close_bt(Side.BUY, 50000, 49000, 48000, 52000, 0.01)
+        assert btc.gross_pnl == pytest.approx(bt.gross_pnl, abs=1e-8)
+        assert btc.r_multiple == pytest.approx(bt.r_multiple, abs=1e-4)
+        assert btc.r_multiple < 0
+
+    def test_zero_cost_short_winner(self):
+        """Zero-cost SHORT winner: both engines agree."""
+        btc = self._close_btc(Side.SELL, 50000, 49000, 51000, 48000, 0.01)
+        bt = self._close_bt(Side.SELL, 50000, 49000, 51000, 48000, 0.01)
+        assert btc.side == bt.side == -1
+        assert btc.gross_pnl == pytest.approx(bt.gross_pnl, abs=1e-8)
+        assert btc.r_multiple == pytest.approx(bt.r_multiple, abs=1e-4)
+        assert btc.r_multiple > 0
+
+    def test_zero_cost_short_loser(self):
+        """Zero-cost SHORT loser: both engines agree on negative R."""
+        btc = self._close_btc(Side.SELL, 50000, 51000, 51500, 48000, 0.01)
+        bt = self._close_bt(Side.SELL, 50000, 51000, 51500, 48000, 0.01)
+        assert btc.gross_pnl == pytest.approx(bt.gross_pnl, abs=1e-8)
+        assert btc.r_multiple == pytest.approx(bt.r_multiple, abs=1e-4)
+        assert btc.r_multiple < 0
+
+    def test_with_commission_gross_and_net_parity(self):
+        """With matching absolute commission, gross and net match.
+
+        R multiples may differ because BacktestRunner includes commission
+        in initial_risk while BTCThreeWayEngine does not. This is a
+        documented architectural difference, not a bug.
+        """
+        entry, exit_p, sl, tp, size = 50000, 51000, 49000, 52000, 0.01
+        # BTC fee: (50000+51000) * 0.01 * 10/10000 = 1.01 USDT
+        btc = self._close_btc(Side.BUY, entry, exit_p, sl, tp, size, fee_bps=10)
+        # Match absolute commission
+        bt = self._close_bt(Side.BUY, entry, exit_p, sl, tp, size,
+                            commission_total=btc.commission)
+        # Gross pnl must match (same prices, no slippage)
+        assert btc.gross_pnl == pytest.approx(bt.gross_pnl, abs=1e-8)
+        # Net pnl must match (same gross, same commission)
+        assert btc.net_pnl == pytest.approx(bt.net_pnl, abs=1e-8)
+        # Initial risk differs: BT includes commission, BTC does not
+        assert bt.initial_risk > btc.initial_risk
+        risk_diff = bt.initial_risk - btc.initial_risk
+        assert risk_diff == pytest.approx(btc.commission, abs=1e-8)
+
+    def test_fill_record_on_closed_btc_experiment(self):
+        """A closed BTC experiment must have a FillRecord on its position."""
+        provider = CryptoMockProvider()
+        engine = BTCThreeWayEngine(provider)
+        engine.evaluate()
+        # Force-close any open positions via tick_all
+        for _ in range(50):
+            provider.advance(3600)
+            engine.tick_all()
+        for exp in engine.experiments:
+            if exp.position and not exp.position.is_open:
+                assert exp.position.fill is not None
+                assert isinstance(exp.position.fill, FillRecord)
+                assert exp.position.fill.r_multiple == exp.position.pnl_r
+
+    def test_btc_cost_model(self):
+        """BTCThreeWayEngine cost model: spread=OBSERVED, commission=MODELED."""
+        provider = CryptoMockProvider()
+        engine = BTCThreeWayEngine(provider, fee_bps=10)
+        assert engine.cost_model.spread == CostCategory.OBSERVED
+        assert engine.cost_model.commission == CostCategory.MODELED
+        assert engine.cost_model.slippage == CostCategory.ZERO
+        assert engine.cost_model.swap == CostCategory.ZERO
+
+    def test_btc_zero_fee_cost_model(self):
+        """Zero-fee BTC engine: commission=ZERO."""
+        provider = CryptoMockProvider()
+        engine = BTCThreeWayEngine(provider, fee_bps=0)
+        assert engine.cost_model.commission == CostCategory.ZERO
