@@ -124,6 +124,8 @@ _experiments = Table(
     Column("strategy_id", String, nullable=False),
     Column("strategy_version", String, nullable=False),
     Column("dataset", String, nullable=False),
+    Column("dataset_fingerprint", String, nullable=True),
+    Column("dataset_provenance", String, nullable=True),
     Column("period_start", DateTime, nullable=False),
     Column("period_end", DateTime, nullable=False),
     Column("symbols", Text, nullable=False),
@@ -163,12 +165,59 @@ def _from_j(val: str) -> Any:
     return json.loads(val)
 
 
+def _as_utc(value: datetime) -> datetime:
+    """SQLite restitue ses DateTime sans fuseau ; les dates Research sont UTC."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _experiment_from_row(row: Any) -> StrategyExperiment:
+    return StrategyExperiment(
+        experiment_id=row.experiment_id,
+        strategy_id=row.strategy_id,
+        strategy_version=row.strategy_version,
+        dataset=row.dataset,
+        dataset_fingerprint=row.dataset_fingerprint,
+        dataset_provenance=row.dataset_provenance,
+        period_start=_as_utc(row.period_start),
+        period_end=_as_utc(row.period_end),
+        symbols=_from_j(row.symbols),
+        timeframes=_from_j(row.timeframes),
+        parameters=_from_j(row.parameters),
+        split=row.split,
+    )
+
+
+def _result_from_row(row: Any) -> ExperimentResult:
+    return ExperimentResult(
+        experiment_id=row.experiment_id,
+        trades=int(row.trades), wins=int(row.wins), losses=int(row.losses),
+        win_rate=row.win_rate, expectancy=row.expectancy,
+        profit_factor=row.profit_factor, max_drawdown=row.max_drawdown,
+        r_total=row.r_total, sharpe=row.sharpe, passed=bool(row.passed),
+    )
+
+
 class ResearchRepository:
     """Dépôt SQLAlchemy pour les modèles Research (SQLite)."""
 
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
         _meta.create_all(engine)
+        if engine.dialect.name == "sqlite":
+            with engine.begin() as conn:
+                columns = {row[1] for row in conn.execute(text("PRAGMA table_info(research_experiments)"))}
+                for name in ("dataset_fingerprint", "dataset_provenance"):
+                    if name not in columns:
+                        conn.execute(text(f"ALTER TABLE research_experiments ADD COLUMN {name} VARCHAR"))
+                for table in ("research_experiments", "research_experiment_results"):
+                    conn.execute(text(
+                        f"CREATE TRIGGER IF NOT EXISTS {table}_no_update BEFORE UPDATE ON {table} "
+                        "BEGIN SELECT RAISE(ABORT, 'research records are immutable'); END"
+                    ))
+                    conn.execute(text(
+                        f"CREATE TRIGGER IF NOT EXISTS {table}_no_delete BEFORE DELETE ON {table} "
+                        "BEGIN SELECT RAISE(ABORT, 'research records are immutable'); END"
+                    ))
 
     @classmethod
     def from_url(cls, db_url: str) -> ResearchRepository:
@@ -383,13 +432,24 @@ class ResearchRepository:
 
     def save_experiment(self, exp: StrategyExperiment) -> None:
         with self.engine.begin() as conn:
+            existing = conn.execute(_experiments.select().where(_experiments.c.experiment_id == exp.experiment_id)).first()
+            if existing is not None:
+                stored = _experiment_from_row(existing)
+                if stored != exp.model_copy(update={
+                    "period_start": _as_utc(exp.period_start),
+                    "period_end": _as_utc(exp.period_end),
+                }):
+                    raise ValueError(f"conflicting experiment: {exp.experiment_id}")
+                return
             conn.execute(
-                sqlite_insert(_experiments).on_conflict_do_nothing(),
+                _experiments.insert(),
                 {
                     "experiment_id": exp.experiment_id,
                     "strategy_id": exp.strategy_id,
                     "strategy_version": exp.strategy_version,
                     "dataset": exp.dataset,
+                    "dataset_fingerprint": exp.dataset_fingerprint,
+                    "dataset_provenance": exp.dataset_provenance,
                     "period_start": exp.period_start,
                     "period_end": exp.period_end,
                     "symbols": _j(exp.symbols),
@@ -406,28 +466,19 @@ class ResearchRepository:
             q = q.where(_experiments.c.strategy_id == strategy_id)
         with self.engine.connect() as conn:
             rows = conn.execute(q).all()
-        return [
-            StrategyExperiment(
-                experiment_id=r.experiment_id,
-                strategy_id=r.strategy_id,
-                strategy_version=r.strategy_version,
-                dataset=r.dataset,
-                period_start=r.period_start,
-                period_end=r.period_end,
-                symbols=_from_j(r.symbols),
-                timeframes=_from_j(r.timeframes),
-                parameters=_from_j(r.parameters),
-                split=r.split,
-            )
-            for r in rows
-        ]
+        return [_experiment_from_row(r) for r in rows]
 
     # ------------------------------------------------------------------ results
 
     def save_result(self, result: ExperimentResult) -> None:
         with self.engine.begin() as conn:
+            existing = conn.execute(_results.select().where(_results.c.experiment_id == result.experiment_id)).first()
+            if existing is not None:
+                if _result_from_row(existing) != result:
+                    raise ValueError(f"conflicting experiment result: {result.experiment_id}")
+                return
             conn.execute(
-                sqlite_insert(_results).on_conflict_do_nothing(),
+                _results.insert(),
                 {
                     "experiment_id": result.experiment_id,
                     "trades": result.trades,
@@ -451,19 +502,7 @@ class ResearchRepository:
             ).first()
         if row is None:
             return None
-        return ExperimentResult(
-            experiment_id=row.experiment_id,
-            trades=int(row.trades),
-            wins=int(row.wins),
-            losses=int(row.losses),
-            win_rate=row.win_rate,
-            expectancy=row.expectancy,
-            profit_factor=row.profit_factor,
-            max_drawdown=row.max_drawdown,
-            r_total=row.r_total,
-            sharpe=row.sharpe,
-            passed=bool(row.passed),
-        )
+        return _result_from_row(row)
 
     def stats(self) -> dict[str, int]:
         with self.engine.connect() as conn:

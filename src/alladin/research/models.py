@@ -81,12 +81,20 @@ class StrategyExperiment(BaseModel):
     strategy_id: str
     strategy_version: str
     dataset: str
+    dataset_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    dataset_provenance: str | None = None
     period_start: datetime
     period_end: datetime
     symbols: list[str]
     timeframes: list[str]
     parameters: dict[str, Any] = {}
     split: Literal["TRAIN", "VALIDATION", "OUT_OF_SAMPLE", "DEMO"]
+
+    @model_validator(mode="after")
+    def dataset_evidence_is_paired(self) -> StrategyExperiment:
+        if (self.dataset_fingerprint is None) != (self.dataset_provenance is None):
+            raise ValueError("dataset fingerprint and provenance must be provided together")
+        return self
 
 
 class ExperimentResult(BaseModel):

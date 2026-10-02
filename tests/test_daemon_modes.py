@@ -3,9 +3,13 @@ Research persistence."""
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import DatabaseError
 
 from alladin.agents.mock import MockAgent
 from alladin.core.enums import MarketRegime, RunMode, Side, Timeframe
@@ -261,6 +265,8 @@ def test_research_repository_experiment_and_result(rrepo: ResearchRepository) ->
     assert len(rrepo.list_experiments("MOM-01")) == 1
     assert len(rrepo.list_experiments("OTHER")) == 0
 
+    rrepo.save_version(StrategyVersion(strategy_id="MOM-01", version="1.0.0",
+                                       code_hash="mom-code", created_at=now))
     result = ExperimentResult(experiment_id="EXP-1", trades=20, wins=12, losses=8,
                               win_rate=0.6, expectancy=0.8, profit_factor=1.5,
                               max_drawdown=0.05, r_total=16.0, passed=True)
@@ -269,6 +275,59 @@ def test_research_repository_experiment_and_result(rrepo: ResearchRepository) ->
     assert fetched is not None
     assert fetched.win_rate == pytest.approx(0.6)
     assert fetched.passed is True
+    assert rrepo.list_versions("MOM-01")[0].status is StrategyStatus.DISCOVERED
+
+
+def test_research_experiment_provenance_negative_result_and_conflicts(rrepo: ResearchRepository) -> None:
+    now = datetime.now(UTC)
+    exp = StrategyExperiment(
+        experiment_id="EXP-CAUSAL", strategy_id="BASELINE-1", strategy_version="1.0.0",
+        dataset="EURUSD-H1", dataset_fingerprint="a" * 64,
+        dataset_provenance="archive:mt5", period_start=now, period_end=now,
+        symbols=["EURUSD"], timeframes=["H1"], split="OUT_OF_SAMPLE",
+        parameters={"cost_model": "v1"},
+    )
+    with pytest.raises(ValueError, match="fingerprint and provenance"):
+        StrategyExperiment.model_validate({**exp.model_dump(), "dataset_provenance": None})
+    with pytest.raises(ValueError, match="string_pattern_mismatch"):
+        StrategyExperiment.model_validate({**exp.model_dump(), "dataset_fingerprint": "invalid"})
+    rrepo.save_version(StrategyVersion(strategy_id="BASELINE-1", version="1.0.0",
+                                       code_hash="code", created_at=now))
+    rrepo.save_experiment(exp)
+    rrepo.save_experiment(exp)
+    assert rrepo.list_experiments() == [exp]
+    with pytest.raises(ValueError, match="conflicting experiment"):
+        rrepo.save_experiment(exp.model_copy(update={"dataset_fingerprint": "b" * 64}))
+    result = ExperimentResult(experiment_id=exp.experiment_id, trades=2, wins=0, losses=2,
+                              expectancy=-1.0, passed=False)
+    rrepo.save_result(result)
+    rrepo.save_result(result)
+    assert rrepo.get_result(exp.experiment_id) == result
+    assert rrepo.list_versions()[0].status is StrategyStatus.DISCOVERED
+    with pytest.raises(ValueError, match="conflicting experiment result"):
+        rrepo.save_result(result.model_copy(update={"passed": True}))
+    with pytest.raises(DatabaseError), rrepo.engine.begin() as conn:
+        conn.execute(text("UPDATE research_experiments SET dataset='changed' WHERE experiment_id='EXP-CAUSAL'"))
+    with pytest.raises(DatabaseError), rrepo.engine.begin() as conn:
+        conn.execute(text("DELETE FROM research_experiment_results WHERE experiment_id='EXP-CAUSAL'"))
+
+
+def test_research_repository_adds_provenance_to_legacy_sqlite(tmp_path: Path) -> None:
+    path = tmp_path / "legacy_research.db"
+    db = sqlite3.connect(path)
+    db.executescript("""
+        CREATE TABLE research_experiments (
+          experiment_id VARCHAR PRIMARY KEY, strategy_id VARCHAR NOT NULL,
+          strategy_version VARCHAR NOT NULL, dataset VARCHAR NOT NULL,
+          period_start DATETIME NOT NULL, period_end DATETIME NOT NULL,
+          symbols TEXT NOT NULL, timeframes TEXT NOT NULL,
+          parameters TEXT, split VARCHAR NOT NULL, created_at DATETIME NOT NULL);
+    """)
+    db.close()
+    repo = ResearchRepository.from_url(f"sqlite:///{path}")
+    with repo.engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(research_experiments)"))}
+    assert {"dataset_fingerprint", "dataset_provenance"} <= columns
 
 
 def test_research_repository_stats(rrepo: ResearchRepository) -> None:

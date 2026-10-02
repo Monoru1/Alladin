@@ -406,3 +406,44 @@ Lot B selon le plan : résolution du contrat OBSERVE/PAPER (DECISION-013). Requi
 **LIMITES:** Les anciennes fenêtres C préexistantes sans manifeste ne sont pas reconstructibles exactement. Le replay reconstruit les entrées historiques ; il ne réexécute pas encore le moteur de décision ni les ordres. Pour les fournisseurs sans `close_time`, la clôture est déduite de `time + durée du timeframe`.
 
 **NEXT EXACT ACTION:** Lot D : banc expérimental causal commun aux baselines classiques et au futur cerveau, selon la section « Unités d'implémentation » ci-dessus.
+
+---
+
+### LOT D — Banc expérimental commun
+**STATUS: PARTIAL**
+
+**IMPLEMENTED (D1):** `StrategyExperiment` conserve facultativement le fingerprint SHA-256 et la provenance du dataset comme paire validée ; migration SQLite additive. Les expériences et résultats sont idempotents si identiques, contradictoires si le même ID désigne un autre contenu, et immuables sous SQLite. Les résultats négatifs sont conservés. `passed` reste un résultat technique et ne modifie pas `StrategyVersion.status`. Les identifiants de trades du backtest sont reproductibles pour une entrée identique.
+
+**FILES:** `src/alladin/research/{models,repository,backtest}.py`, `tests/{test_daemon_modes,test_backtest}.py`.
+
+**LIMITES:** Les anciennes expériences sans fingerprint/provenance restent lisibles et ne prouvent pas la comparabilité. Le moteur de fill/coût commun, le contrat de spread BTC, les labels/purge et la comparaison OOS restent à implémenter avant de déclarer le lot D complet.
+
+**NEXT EXACT ACTION:** Lot D2 : définir et tester un même contrat de fill/coûts/R pour la baseline et BTC, en réutilisant `research/r_analytics.py`, puis enregistrer la configuration de coûts et le fingerprint du dataset dans chaque expérience comparable. Préserver les résultats historiques comme baselines non comparables.
+
+## CODEX SESSION CHECKPOINT
+
+DATE: 2026-10-02 (Europe/Paris)
+
+CURRENT LOT: D — banc expérimental commun
+
+STATUS: PARTIAL
+
+OBJECTIVE: Rendre les expériences traçables et leurs résultats immuables avant d'unifier les simulations classiques et BTC.
+
+IMPLEMENTED: `StrategyExperiment` porte une paire facultative `dataset_fingerprint` (SHA-256 hexadécimal) / `dataset_provenance`. `ResearchRepository` migre les bases SQLite existantes, restitue cette paire, accepte l'enregistrement identique, refuse un même ID au contenu contradictoire, et interdit UPDATE/DELETE des expériences et résultats via triggers SQLite. Les résultats négatifs restent visibles ; `ExperimentResult.passed` ne promeut pas `StrategyVersion`. `BacktestRunner` produit des IDs de trades déterministes à entrée identique.
+
+FILES MODIFIED: `src/alladin/research/models.py`, `src/alladin/research/repository.py`, `src/alladin/research/backtest.py`, `tests/test_daemon_modes.py`, `tests/test_backtest.py`, `docs/IMPLEMENTATION_PLAN.md`.
+
+TESTS ADDED: Persistance et validation de la provenance, migration SQLite ancienne, idempotence et rejet des contradictions, immutabilité SQL, conservation d'un résultat négatif, absence de promotion automatique, reproductibilité des IDs et métriques de backtest.
+
+TESTS RUN: 5 tests ciblés Research et backtest ; ruff ; mypy ; `git diff --check`. Suite complète du Lot C avant D : 317 passed, 3 skipped MT5.
+
+RESULTS: 5 passed ; ruff/mypy/diff-check verts. La suite complète n'a pas été relancée après D.
+
+ARCHITECTURAL DECISIONS: Une expérience ancienne sans paire fingerprint/provenance reste lisible mais ne prouve pas la comparabilité. Une répétition identique est idempotente ; un résultat contradictoire ne peut pas remplacer silencieusement l'ancien. Le résultat technique et le statut de promotion restent distincts.
+
+KNOWN LIMITATIONS: Lot D non terminé. Aucun contrat partagé de fill/coûts/R entre `BacktestRunner` et `BTCThreeWayEngine` ; pas encore de spread BTC sourcé dans ce contrat, ni de preuve de comparaison OOS ou d'intégration automatique du fingerprint archive dans chaque expérience.
+
+REMAINING WORK: Contrat commun de simulation et coûts, tests de parité baseline/BTC, gaps/intrabar/slippage/frais, preuve de causalité labels/purge et OOS hors réglage, puis validation du lot D complet.
+
+NEXT EXACT ACTION: Ouvrir `src/alladin/research/r_analytics.py`, `backtest.py`, `btc_experiment.py` et leurs tests ciblés. Définir dans `r_analytics.py` un contrat de fill/coûts exprimant prix exécutables bid/ask, spread sourcé, slippage, frais et risque initial. Adapter d'abord `BacktestRunner._finalize_trade()` et son entrée au contrat avec tests de parité R, puis seulement la voie BTC. Ne pas modifier les résultats historiques ; les marquer non comparables tant que le contrat commun et la provenance ne sont pas prouvés.

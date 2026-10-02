@@ -341,6 +341,9 @@ class TestBacktestRunner:
             assert result.trades[0].position.entry == opening
             assert result.trades[0].position.bar_index == 121
             assert result.trades[0].position.initial_risk == result.trades[0].r_metrics.initial_risk
+            repeated = BacktestRunner(Once(), spread_pips=0).run(history)
+            assert repeated.trades[0].position.trade_id == result.trades[0].position.trade_id
+            assert repeated.trades[0].r_metrics == result.trades[0].r_metrics
 
     @pytest.mark.parametrize("side,entry,stop,opening", [
         (Side.BUY, 100.0, 99.0, 97.0),

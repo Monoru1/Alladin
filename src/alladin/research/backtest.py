@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Literal
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid5
 
 from alladin.core.enums import MarketRegime, Side, Timeframe
 from alladin.core.models import Bar
@@ -231,8 +231,13 @@ class BacktestRunner:
                 valid_stop = (fill - pending_signal.stop_loss) * direction > 0
                 valid_tp = pending_signal.take_profit is None or (pending_signal.take_profit - fill) * direction > 0
                 if valid_stop and valid_tp and len(open_positions) < self.max_concurrent:
+                    trade_key = (
+                        f"{self.strategy.id}|{self.strategy.version}|{symbol}|{timeframe.value}|{split}|"
+                        f"{i}|{current_bar.time.isoformat()}|{pending_signal.side.value}|{fill}|"
+                        f"{pending_signal.stop_loss}|{pending_signal.take_profit}"
+                    )
                     open_positions.append(VirtualPosition(
-                        trade_id=f"BT-{uuid4().hex[:8]}", symbol=symbol,
+                        trade_id=f"BT-{uuid5(NAMESPACE_URL, trade_key).hex[:12]}", symbol=symbol,
                         side=pending_signal.side, entry=fill, stop_loss=pending_signal.stop_loss,
                         take_profit=pending_signal.take_profit, opened_at=current_bar.time,
                         bar_index=i, confidence=pending_signal.confidence,
