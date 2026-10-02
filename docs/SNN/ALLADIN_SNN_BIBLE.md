@@ -615,3 +615,444 @@ Cette question doit rester falsifiable.
 ---
 
 **Décision d'architecture du 2 octobre 2026 : Alladin devient SNN-first. Le SNN est le cœur apprenant du nouveau système ; l'infrastructure de risque, d'exécution, de challenge, de journalisation et de replay d'Alladin constitue l'environnement sécurisé autour de ce cerveau.**
+
+
+# 26. Spécification détaillée héritée du concept SNN-BTC
+
+Cette section préserve le raisonnement technique qui a conduit à l'architecture SNN-first, mais l'étend à Alladin multi-instruments. Les valeurs numériques ci-dessous sont des **points de départ expérimentaux** sauf lorsqu'elles sont explicitement marquées comme faits vérifiés.
+
+## 26.1 Fondations MaleCNS
+
+**Fait vérifié (Janelia MaleCNS, consultation 2026-10-02)** : le dataset MaleCNS contient environ **166 700 neurones** et **11 710 types neuronaux**. Il s'agit d'une collaboration incluant FlyEM/HHMI Janelia, University of Cambridge, MRC LMB et Google Research.
+
+À vérifier directement lors de l'ingestion :
+- nombre exact d'arêtes/synapses de la version de dataset utilisée ;
+- version NeuPrint ;
+- disponibilité et qualité des annotations ROI, neurotransmetteur et soma ;
+- licences et provenance.
+
+Le graphe doit être exporté sous une représentation reproductible :
+- tables Parquet pour neurones/connexions/métadonnées ;
+- matrices creuses CSR pour le calcul ;
+- hash cryptographique de chaque snapshot de dataset ;
+- manifeste contenant dataset/version/date/requêtes d'extraction.
+
+## 26.2 Hypothèse de pruning biologique
+
+L'objectif initial est de réduire radicalement le graphe afin de concentrer le calcul sur les circuits candidats et de rendre les expériences abordables.
+
+**Hypothèse à tester, pas vérité neuroscientifique** :
+- retirer les circuits principalement sensoriels/moteurs sans analogue utile pour le flux financier ;
+- préserver en priorité MB, CX, relais pertinents, projections sensorielles sélectionnées et une petite population de sortie.
+
+Architecture expérimentale proposée :
+
+| Bloc | Taille de départ | Hypothèse fonctionnelle |
+|---|---:|---|
+| Mushroom Body | 4k–5k | contexte/régime et apprentissage |
+| Central Complex | 3k–4k | état directionnel, persistance/hystérésis |
+| projections d'entrée | 6k–9k | interface sensorielle marché |
+| relais/modulation | 2k–4k | communication entre blocs |
+| sorties | <300 | Long / Short / Flat |
+
+Tailles d'expérience :
+- Core : 8k–10k ;
+- Standard : 15k–20k ;
+- Large : 30k–40k.
+
+Ces tailles ne sont pas « optimales » par définition. Elles doivent être comparées à coût calculatoire et protocole comparables.
+
+Contrôles après pruning :
+- composantes connexes ;
+- chemins entrée -> circuits internes -> sortie ;
+- distribution des degrés ;
+- motifs ;
+- ratio excitateur/inhibiteur lorsque l'annotation le permet ;
+- conservation des propriétés du graphe par rapport au sous-graphe source.
+
+## 26.3 Dynamique neuronale
+
+Baseline : LIF. Variante : AdEx.
+
+Point de départ expérimental :
+- pas interne potentiel : 1 ms ;
+- fenêtre d'intégration décisionnelle : 50–500 ms ;
+- simulation event-driven à benchmarker contre pas fixe.
+
+Poids initiaux candidats :
+
+```text
+w_ij(0) = g_global * synapse_count_ij * sign_ij
+```
+
+où `sign_ij` dépend de l'annotation excitatrice/inhibitrice disponible.
+
+L'idée « rayon spectral proche de 1 / edge of chaos » est une **hypothèse de réglage reservoir**, pas un objectif biologique universel. Elle doit être mesurée et ablatée.
+
+Prototype candidat : Brian2. Moteur optimisé ultérieur : Numba/C++/autre backend sparse seulement si le profilage le justifie.
+
+## 26.4 R-STDP à trois facteurs
+
+Forme centrale de travail :
+
+```math
+\Delta w_{ij}(t) = \eta \; D(t) \; e_{ij}(t)
+```
+
+avec :
+- `eta` : taux d'apprentissage ;
+- `D(t)` : troisième facteur/modulateur global ;
+- `e_ij(t)` : trace d'éligibilité de la synapse.
+
+Dynamique conceptuelle de la trace :
+
+```math
+\dot e_{ij} = -\frac{e_{ij}}{\tau_e} + STDP(pre_i, post_j)
+```
+
+La littérature sur les règles d'apprentissage à trois facteurs supporte l'usage de traces d'éligibilité comme mémoire transitoire permettant de relier activité synaptique et signal retardé. Cela justifie le mécanisme général, **pas notre choix de reward financier**.
+
+Première restriction de plasticité à tester :
+- entrées -> CX ;
+- Kenyon cells -> MBON ;
+- CX -> sorties.
+
+Comparer :
+1. poids gelés ;
+2. STDP locale ;
+3. R-STDP ;
+4. R-STDP + métabolisme.
+
+## 26.5 Readout et contrôles
+
+Un readout Ridge/RLS doit rester disponible comme bras de comparaison.
+
+Progression :
+- A : reservoir/connectome figé + Ridge ;
+- B : SNN figé + même protocole de readout ;
+- C : SNN + R-STDP ;
+- D : SNN + R-STDP + métabolisme.
+
+Une amélioration du modèle D n'est attribuable au mécanisme ajouté que si les contrôles précédents sont comparables.
+
+## 26.6 Encodage sensoriel hybride
+
+### Event coding prix
+
+```text
+price move >= +delta -> spike ON
+price move <= -delta -> spike OFF
+volatility breakout -> burst / higher event density
+quiet regime -> lower event density
+```
+
+`delta` doit être normalisé (ticks, ATR ou volatilité) afin de rendre les instruments comparables.
+
+### Rate coding contexte
+
+Variables candidates :
+- return robuste normalisé ;
+- volatilité réalisée ;
+- volume/tick volume lorsque pertinent ;
+- spread ;
+- profondeur/imbalance lorsque disponible ;
+- momentum multi-horizon ;
+- état portefeuille/challenge.
+
+Point de départ : 16–32 neurones d'entrée par variable avec courbes d'accord ; comparer Poisson coding à des encodeurs déterministes.
+
+### Mapping spatial
+
+Hypothèse : projeter une grille temps x niveaux relatifs au prix/mid sur une population sensorielle en utilisant une géométrie fixe.
+
+Exemple initial lorsqu'un carnet existe :
+- 32 pas temporels ;
+- 32 niveaux relatifs ;
+- 2 canaux bid/ask ou agressor buy/sell.
+
+Pour MT5/Forex, ne pas supposer qu'un carnet Binance-like est disponible ou équivalent. L'encodeur doit gérer explicitement les capacités de chaque source.
+
+### Normalisation causale
+
+Préférence initiale :
+- médiane glissante ;
+- MAD ;
+- aucune information future.
+
+## 26.7 Reward : deux niveaux à comparer
+
+### Reward composite général d'Alladin
+
+```math
+R_t =
+\alpha R_{PnL}
++ \beta R_{decision}
++ \gamma R_{survival}
++ \delta R_{prediction}
++ \eta R_{calibration}
+- \lambda P_{risk}
+- \mu P_{drawdown}
+- \nu P_{execution}
+- \xi P_{rule}
+```
+
+### Variante financière « Sortino différentiel + drawdown »
+
+À implémenter comme **candidat**, pas comme vérité :
+
+```math
+D_t = \tanh(r^{diff}_{Sortino,t})
+      - \lambda \max(0, DD_t - DD_{seuil})
+```
+
+Le Sortino pénalise le risque baissier plutôt que toute volatilité. Une forme différentielle est intéressante pour l'apprentissage online, mais la définition exacte de `r_Sortino_diff` doit être documentée mathématiquement et testée numériquement avant utilisation.
+
+Les deux reward families doivent être comparées contre :
+- PnL net simple ;
+- log-return net ;
+- reward sans composante prédictive ;
+- reward sans composante métabolique.
+
+## 26.8 Signal négatif / « douleur » numérique
+
+Le mot douleur est une métaphore fonctionnelle. Aucune sensation n'est postulée.
+
+Forme candidate :
+
+```math
+\sigma_{noise,t} =
+\sigma_0
++ k_1 DD_t
++ k_2 DownsideDeviation_t
++ k_3 ConsecutiveLosses_t
++ k_4 RulePressure_t
+```
+
+Cette quantité peut moduler un bruit contrôlé injecté dans certaines populations.
+
+**Risque expérimental majeur** : injecter davantage de bruit après des pertes peut dégrader le réseau précisément au moment où la stabilité est nécessaire. Il faut donc comparer :
+- aucun bruit métabolique ;
+- bruit croissant avec stress ;
+- exploration décroissante avec stress ;
+- modulation des seuils plutôt que bruit.
+
+La métaphore « le réseau fuit le désordre » reste une hypothèse à tester.
+
+## 26.9 Énergie métabolique
+
+État candidat :
+
+```math
+E_{t+1} = clip(E_t + G_t - L_t - C_t, 0, E_{max})
+```
+
+où :
+- `G_t` = contribution positive nette ;
+- `L_t` = pertes/risque réalisé ;
+- `C_t` = coûts d'exécution/activité.
+
+L'énergie peut moduler exploration, seuils ou intensité de plasticité.
+
+`E = 0` ne doit pas directement commander l'exécution : il peut terminer l'épisode d'apprentissage, tandis que le vrai kill switch reste déterministe dans Alladin.
+
+## 26.10 Surprise / Free-Energy-inspired
+
+Minimum opérationnel :
+
+```math
+Surprise_t = d(\hat{x}_{t+1}, x_{t+1})
+```
+
+Objectif expérimental :
+
+```math
+J_t =
+a \cdot Surprise_t
++ b \cdot Risk_t
++ c \cdot Loss_t
++ d \cdot Complexity_t
+```
+
+Le système tente de réduire `J` sans que cela remplace le reward économique ni les contraintes de risque.
+
+L'appellation « Free Energy Principle » doit rester prudente : une simple erreur de prédiction + régularisation n'est pas automatiquement une implémentation complète du FEP.
+
+## 26.11 Reward différé
+
+Le crédit doit pouvoir être attribué sur plusieurs horizons.
+
+```text
+T0       décision
+T+short  réaction immédiate
+T+mid    MAE/MFE et changement de régime
+T+close  résultat net
+T+cf     contre-factuels
+T+day    impact portefeuille/challenge
+```
+
+Forme initiale :
+
+```math
+R =
+0.4 R_{trade}
++ 0.2 R_{decision}
++ 0.2 R_{portfolio}
++ 0.2 R_{counterfactual}
+```
+
+Les coefficients sont des valeurs de départ et doivent être optimisés uniquement sur TRAIN/VALIDATION.
+
+## 26.12 Contre-factuels
+
+Pour chaque opportunité, calculer si possible :
+
+```text
+chosen BUY  -> outcome BUY
+counterfact -> SELL
+counterfact -> HOLD
+
+chosen HOLD -> outcome HOLD
+counterfact -> BUY
+counterfact -> SELL
+```
+
+Même modèle de frais, spread, slippage, latence et règles de remplissage pour toutes les branches.
+
+Cela permet notamment de récompenser un bon NO_TRADE.
+
+## 26.13 Essaim
+
+Population initiale candidate : 5–10 organismes, plus contrôles.
+
+Axes de diversité :
+- pruning Core/Standard/Large ;
+- seeds ;
+- sous-graphes/hémisphères ;
+- horizons 1 s / 5 s / 30 s / autres ;
+- paramètres neuronaux ;
+- historique d'apprentissage.
+
+Vote candidat :
+
+```math
+score(a) = \sum_i q_i \; p_i(a)
+```
+
+où `q_i` est une mesure de qualité/calibration récente et `p_i(a)` la préférence de l'organisme pour l'action.
+
+Ne pas dimensionner directement une position par consensus sans passage complet par le RiskEngine.
+
+Mesurer continuellement la corrélation entre organismes : un essaim de clones corrélés n'apporte pas la diversité attendue.
+
+## 26.14 Backend asynchrone cible
+
+```text
+P1 INGEST       -> flux marché / ring buffer
+P2 ENCODER      -> features causales -> spikes
+P3 SNN ENGINE   -> état neuronal en RAM
+P4 DECISION     -> action/confidence
+P5 RISK GATE    -> Alladin RiskEngine
+P6 EXECUTION    -> MT5 PAPER/DEMO
+P7 OUTCOME      -> conséquences et contre-factuels
+P8 PERSISTENCE  -> journal/checkpoints/WAL asynchrones
+```
+
+Le chemin critique d'inférence ne doit pas dépendre d'une écriture disque synchrone non nécessaire.
+
+Budget de latence historique proposé (à **benchmark réel**, pas promesse) :
+- encodage : <2 ms ;
+- SNN : 5–30 ms par organisme ;
+- décision : <2 ms ;
+- réseau/broker : variable et potentiellement dominant.
+
+Ces chiffres sont des objectifs de benchmark, pas des caractéristiques garanties.
+
+## 26.15 Persistance/WAL
+
+À évaluer :
+- snapshots complets périodiques ;
+- WAL append-only des deltas de poids et états de plasticité ;
+- fsync groupé ;
+- restauration snapshot + replay WAL ;
+- checksum et version de schéma ;
+- test automatique de crash/recovery.
+
+Technologies candidates : memmap/LMDB ou stockage équivalent, après benchmark.
+
+## 26.16 Trading et sizing
+
+Sortie du cerveau :
+
+```text
+target_action in {SHORT, FLAT, LONG}
+confidence
+optional desired_risk_signal
+```
+
+Le cerveau **ne fixe pas le lot final**.
+
+Le sizing reste sous contrôle déterministe d'Alladin. Kelly fractionné peut être étudié comme expérience, mais n'est pas une règle par défaut et doit être plafonné par le RiskEngine.
+
+## 26.17 Pipeline de validation complet
+
+1. reproduire les baselines ;
+2. reproduire toute référence ESN revendiquée avant de l'utiliser comme benchmark ;
+3. connectome vs degree-preserving rewiring vs random reservoir ;
+4. >10 seeds lorsque le coût le permet ;
+5. walk-forward chronologique ;
+6. purge + embargo ;
+7. coûts et slippage partout ;
+8. replay avec latence injectée ;
+9. ablations encoding/R-STDP/metabolism/pruning ;
+10. PAPER ;
+11. MT5 DEMO continu pendant une durée définie à l'avance ;
+12. revue humaine avant toute discussion d'un environnement réel.
+
+Métriques additionnelles candidates :
+- Deflated Sharpe lorsque les hypothèses et le nombre de trials sont correctement suivis ;
+- stabilité des paramètres ;
+- degradation TRAIN -> VALIDATION -> OOS ;
+- tail risk ;
+- time-under-water ;
+- calibration action/confidence ;
+- reward hacking indicators.
+
+## 26.18 Référence ESN historique : statut NON VÉRIFIÉ
+
+Le concept initial mentionnait une expérience « ESN Flywire Strategy » avec environ 7 500 neurones / 323 000 connexions et les performances suivantes :
+- Random Forest : +3,62 % ;
+- ESN recâblé : +3,78 % ;
+- ESN connectome : +4,32 % ;
+- leak rate 0,7 ;
+- input gain 0,12 ;
+- tanh.
+
+**Ne pas utiliser ces nombres comme faits tant que la publication/repository exact, dataset, période, frais, splits et code n'ont pas été retrouvés et reproduits.**
+
+Ils sont conservés ici uniquement pour ne pas perdre l'origine du raisonnement.
+
+## 26.19 Sources scientifiques vérifiées au 2026-10-02
+
+- Janelia MaleCNS media/dataset documentation : 166 700 neurons, 11 710 neuron types; collaboration FlyEM/Janelia, Cambridge, MRC LMB, Google Research.
+- Frémaux & Gerstner, *Neuromodulated Spike-Timing-Dependent Plasticity, and Theory of Three-Factor Learning Rules*, Frontiers in Neural Circuits (2016): R-STDP, eligibility traces and delayed third-factor modulation.
+- Gerstner et al./review literature on eligibility traces: eligibility traces bridge the temporal gap between neural activity and delayed reward/modulatory signals.
+- Financial RL literature: downside-risk/Sortino-family rewards are legitimate experimental reward-shaping candidates, but implementation details materially affect results.
+
+## 26.20 Principe final de cette spécification
+
+Les métaphores biologiques servent à générer des mécanismes testables. Elles ne remplacent jamais les contrôles.
+
+Pour chaque mécanisme M :
+
+```text
+baseline
+vs
+baseline + M
+-> same data
+-> same costs
+-> same splits
+-> multiple seeds
+-> OOS comparison
+```
+
+Si `M` n'apporte pas de bénéfice robuste, il est retiré même s'il est biologiquement séduisant.
