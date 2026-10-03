@@ -25,7 +25,7 @@ Ils ne sont pas non plus un seul runtime couplé qui tenterait de tout faire.
 ╠═════════════════╦════════════════════════════╣
 ║   ALLADIN       ║   JAFAR                   ║
 ║   (bleu)        ║   (rouge)                 ║
-║   FX / metals   ║   crypto                  ║
+║   multi-asset   ║   crypto-focused          ║
 ║   MT5-first     ║   MT5 crypto → exchange   ║
 ║   classique→SNN ║   SNN crypto              ║
 ╚═════════════════╩════════════════════════════╝
@@ -106,8 +106,8 @@ ALLADIN-SPECIFIC — Lié au profil FX/challenge/MT5
 ────────────────────────────────────────────────────────────
 ChallengeWatchdog       Règles FTMO/prop-firm
 Challenge profiles      Fichiers YAML par programme
-MarketUniverse (FX)     Découverte / filtrage symbols FX
-AssetCategory (FX)      FOREX_MAJOR, FOREX_MINOR, etc.
+Workspace universe      Politique d'éligibilité ALLADIN sur découverte broker dynamique
+Asset classification    Taxonomie extensible ; FX/métaux sont l'état actuel, pas la frontière cible
 Classic strategies      TREND-01, BREAKOUT-01, RANGE-01
 
 JAFAR-SPECIFIC — À créer, ne pas coller sur ALLADIN
@@ -155,18 +155,18 @@ JournalEvent       +workspace: WorkspaceId  (dénormalisé pour queries)
 TradeRecord        via run_id → RunRecord
 ActionProposal     via run_id → RunRecord   (pas de duplication)
 Opportunity        via run_id
-Position           via magic / comment (existant, déjà workspace-safe si magic unique)
+Position           identité canonique workspace + ownership broker ; magic/comment = preuve broker, pas unique frontière
 Experiment         +workspace: WorkspaceId
 Dataset            +workspace: WorkspaceId
 ```
 
-**Règle :** `proposal_id` et `run_id` incluent déjà l'identité. Le workspace se déduit du run. Pas de duplication dans chaque event.
+**Règle :** le workspace doit être résoluble sans ambiguïté dans toute la chaîne causale. Le choix dénormalisé vs résolution via `run_id` est un détail d'implémentation à valider par migration/tests ; aucune entité ne doit dépendre uniquement d'un magic number ou d'un commentaire broker pour son identité métier.
 
 ### Isolation par magic number
 
 Le système actuel utilise déjà `magic` pour identifier les positions ALLADIN.
 Pour JAFAR : plage de magic séparée (ex : ALLADIN 1000-1999, JAFAR 2000-2999).
-La position broker est alors toujours identifiable même si les deux workspaces utilisent le même compte.
+La plage de magic séparée renforce l'ownership côté broker, mais ne remplace pas l'identité canonique de workspace. Deux workspaces peuvent éventuellement utiliser le même broker/compte seulement si l'adapter, l'ownership, le risque et la réconciliation prouvent l'isolation.
 
 ```python
 MAGIC_ALLADIN_BASE = 1000
@@ -188,7 +188,7 @@ MAGIC_JAFAR_BASE   = 2000
 | Challenge | Profile par workspace (ALLADIN peut avoir challenge, JAFAR non) |
 | Strategy registry | Répertoire de config par workspace |
 | Brain version | `source_id` inclut workspace → checkpoints non partagés |
-| Universe | `MarketUniverse` instancié par workspace |
+| Universe | découverte broker commune possible, puis classification/capabilities/éligibilité et univers dynamique par workspace |
 | Expériences research | `workspace` field dans `StrategyExperiment` |
 | Journal queries | Filter `workspace` sur `RunRecord` |
 
@@ -197,7 +197,7 @@ MAGIC_JAFAR_BASE   = 2000
 | Resource | Notes |
 |---|---|
 | DB SQLite | Tables partagées, workspace comme clé de partition |
-| BrokerAdapter instance | Si même compte ; sinon instances séparées |
+| BrokerAdapter code | partageable ; les instances/runtime bindings ne sont partagés que si l'isolation et la concurrence sont explicitement sûres |
 | BrokerCapabilities | Partagé par broker, pas par workspace |
 | CausalArchive | Fingerprint universel ; dataset taggé par workspace |
 
@@ -644,3 +644,18 @@ Non-implémenté (cible) :
            Command Center
            SNN réel · Outcome Engine · Reward
 ```
+
+
+---
+
+## 16. Corrections de cohérence avec le registre — 2026-10-03
+
+Cette étude est subordonnée aux décisions ADOPTED. En particulier :
+
+- **DECISION-004 + DECISION-021 :** ALLADIN n'est pas limité architecturalement à FX/métaux. L'état courant de son univers peut l'être, mais la cible est découverte broker large → classification → capabilities → eligibility → univers dynamique.
+- **DECISION-014 :** l'isolation workspace est une identité métier explicite. Les magic numbers/comments renforcent l'ownership broker mais ne constituent pas à eux seuls la frontière d'isolation.
+- **DECISION-015 :** un broker/account est un binding. Le partage éventuel d'une instance adapter ou d'un compte n'est jamais supposé sûr ; il doit être prouvé par capabilities, ownership, risque et réconciliation.
+- **DECISION-017/018 :** les workspaces peuvent partager l'infrastructure causale/research, mais aucun raccourci multi-workspace ne peut casser provenance, fingerprint, replay exact ou parité expérimentale.
+- **DECISION-019/020 :** chaque Brain reste derrière ActionProposal/Risk/Execution et ses checkpoints/promotions restent workspace-scopés.
+
+Le document reste une étude de cible. Les types proposés (WorkspaceId, AccountBinding, extensions BrokerCapabilities, etc.) ne sont pas considérés implémentés avant code + migrations + tests.
