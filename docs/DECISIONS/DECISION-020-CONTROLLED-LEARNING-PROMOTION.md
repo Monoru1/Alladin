@@ -4,7 +4,7 @@
 **Statut :** ADOPTED
 
 ## Contexte
-Alladin doit être autonome et adaptatif sans permettre à une perte, un bruit de marché ou un reward mal spécifié de réécrire directement le cerveau actif.
+Cette décision précise le volet « boucle lente — apprentissage/promotion » déjà adopté dans DECISION-011 ; elle ne le remplace pas. Alladin doit être autonome et adaptatif sans permettre à une perte, un bruit de marché ou un reward mal spécifié de réécrire directement le cerveau actif.
 
 ## Décision
 Séparer deux temporalités :
