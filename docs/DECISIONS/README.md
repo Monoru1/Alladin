@@ -55,6 +55,8 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 21. [DECISION-021 — Univers broker dynamique et filtré (ADOPTED)](./DECISION-021-DYNAMIC-BROKER-UNIVERSE.md)
 22. [DECISION-022 — Strategy Harvester : provenance, licence et clean-room (ADOPTED)](./DECISION-022-STRATEGY-HARVESTER-GOVERNANCE.md)
 
+23. [DECISION-023 — Outcomes audités et reward expérimental versionné (ADOPTED / coefficients EXPERIMENTAL)](./DECISION-023-OUTCOME-REWARD-EVIDENCE.md)
+
 ## Source de vérité
 
 - Architecture SNN : `docs/SNN/ALLADIN_SNN_BIBLE.md`
