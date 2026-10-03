@@ -35,6 +35,7 @@ from alladin.orchestration.engine import OrchestrationEngine
 from alladin.orchestration.monitor import PositionMonitor
 from alladin.orchestration.state import RunContext, RunManager
 from alladin.research.models import StrategyStatus
+from alladin.research.outcomes import OutcomeEngine, RewardPolicy
 from alladin.research.repository import ResearchRepository
 from alladin.risk.engine import RiskEngine
 from alladin.strategies.registry import StrategyRegistry
@@ -82,6 +83,7 @@ class Components:
     risk: RiskEngine
     execution: ExecutionService
     monitor: PositionMonitor
+    outcomes: OutcomeEngine
 
     def engine(
         self,
@@ -132,6 +134,7 @@ class Components:
             execute=execute,
             paper_engine=paper_engine,
             brain=brain,
+            outcomes=self.outcomes,
         )
 
 
@@ -194,5 +197,6 @@ def build_services(
     execution = ExecutionService(broker, risk, run, manager, journal, killswitch, clock=clk)
     monitor = PositionMonitor(broker, manager, journal, run)
     return Components(
-        settings, run.profile, broker, repo, journal, manager, killswitch, run, risk, execution, monitor
+        settings, run.profile, broker, repo, journal, manager, killswitch, run, risk, execution, monitor,
+        OutcomeEngine(repo, journal, RewardPolicy.load(settings.reward_policy_path)),
     )

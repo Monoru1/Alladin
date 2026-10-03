@@ -52,6 +52,8 @@ app.add_typer(replay_app, name="replay")
 app.add_typer(archive_app, name="archive")
 jafar_app = typer.Typer(no_args_is_help=True, help="Jafar — crypto OBSERVE uniquement, aucun ordre.")
 app.add_typer(jafar_app, name="jafar")
+outcomes_app = typer.Typer(no_args_is_help=True, help="Résultats et rewards hors exécution, aucun ordre.")
+app.add_typer(outcomes_app, name="outcomes")
 
 console = Console(markup=False, highlight=False)
 BrokerOpt = Annotated[str, typer.Option("--broker", help="mt5 | mock")]
@@ -904,6 +906,43 @@ def jafar_kill(broker_kind: BrokerOpt = "crypto-mock", reason: str = "arrêt Jaf
     comps = _jafar_components(broker_kind)
     comps.manager.kill(comps.run, reason)
     out(f"{comps.run.run_id} KILLED — Alladin indépendant")
+
+
+@outcomes_app.command("refresh")
+def outcomes_refresh(run_id: str, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> None:
+    """Capture les trades déjà clôturés depuis la base et le journal, sans broker."""
+    from alladin.journal.repository import JournalRepository
+    from alladin.journal.service import JournalService
+    from alladin.research.outcomes import OutcomeEngine, RewardPolicy
+    settings = get_settings().for_workspace(workspace)
+    repo = JournalRepository.from_url(settings.db_url, workspace)
+    engine = OutcomeEngine(repo, JournalService(repo), RewardPolicy.load(settings.reward_policy_path))
+    try:
+        report = engine.collect_run(run_id)
+    except ValueError as exc:
+        raise die(str(exc), 2) from exc
+    out(report.model_dump_json(indent=2))
+    if report.errors:
+        raise typer.Exit(2)
+
+
+@outcomes_app.command("show")
+def outcomes_show(run_id: str, workspace: WorkspaceId = WorkspaceId.ALLADIN, limit: int = 200) -> None:
+    """Lit les snapshots persistés ; ne calcule pas de récompenses et ne parle pas au broker."""
+    import json
+
+    from alladin.journal.repository import JournalRepository
+    from alladin.research.outcomes import OutcomeRepository, outcome_summary
+    if not 1 <= limit <= 1000:
+        raise die("limit entre 1 et 1000 requis", 2)
+    settings = get_settings().for_workspace(workspace)
+    repo = JournalRepository.from_url(settings.db_url, workspace)
+    if repo.get_run(run_id) is None:
+        raise die("run inconnu ou hors workspace", 2)
+    rows = OutcomeRepository(repo, read_only=True).list(run_id, limit=limit)
+    out(json.dumps({"workspace": workspace.value, "run_id": run_id, "summary_scope": "RETURNED_ROWS",
+                    "summary": outcome_summary(rows), "outcomes": [r.model_dump(mode="json") for r in rows]},
+                   ensure_ascii=False, indent=2, allow_nan=False))
 
 def main() -> None:
     app()

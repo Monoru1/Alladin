@@ -806,6 +806,12 @@ details.trace-raw pre {
       <div id="risk-map-body"><p class="empty">Aucune exposition.</p></div>
     </article>
 
+    <article class="panel s12">
+      <h2><span class="dot"></span> Résultats &amp; récompenses <span class="panel-count" id="outcomes-count"></span></h2>
+      <p class="text-muted">Trades clôturés · excursions échantillonnées · reward expérimental, sans apprentissage automatique actif.</p>
+      <div id="outcomes-body"><p class="empty">Aucun résultat capturé.</p></div>
+    </article>
+
     <!-- BTC Three-Way Experiment -->
     <article class="panel s12">
       <h2><span class="dot"></span> BTC Three-Way Experiment</h2>
@@ -942,11 +948,16 @@ details.trace-raw pre {
 "use strict";
 const $id = id => document.getElementById(id);
 const safe = v => v == null ? "N/A" : v;
-const money = (v, c) => v == null ? "N/A" : new Intl.NumberFormat("fr-FR", {style:"currency",currency:c||"EUR",maximumFractionDigits:2}).format(v);
+const money = (v, c) => {
+  if (v == null || !Number.isFinite(v)) return "N/A";
+  const currency = /^[A-Z]{3,8}$/.test(c || "EUR") ? (c || "EUR") : "?";
+  try { return new Intl.NumberFormat("fr-FR", {style:"currency",currency,maximumFractionDigits:2}).format(v); }
+  catch (_) { return new Intl.NumberFormat("fr-FR", {maximumFractionDigits:2}).format(v) + " " + currency; }
+};
 const pct = v => v == null ? "N/A" : v.toFixed(2) + "%";
 const rval = v => v == null ? "N/A" : v.toFixed(2) + "R";
 let _inflight = {};
-const _refreshing = {fast:false, medium:false, slow:false, research:false};
+const _refreshing = {fast:false, medium:false, slow:false, research:false, outcomes:false};
 
 function renderHTML(id, html) {
   const target = $id(id);
@@ -992,7 +1003,7 @@ const EVT = {
   "risk.decision":"RISK","order.precheck":"PRECHECK","order.sent":"ORDER","order.result":"ORDER RES",
   "position.opened":"POS OPEN","position.closed":"POS CLOSE","position.update":"POS UPD",
   "opportunity.created":"OPP","opportunity.rejected":"OPP REJECT",
-  "mode.change":"MODE","reconcile":"RECONCILE","info":"INFO","btc.experiment":"BTC EXP"
+  "learning.outcome":"OUTCOME", "mode.change":"MODE","reconcile":"RECONCILE","info":"INFO","btc.experiment":"BTC EXP"
 };
 
 function evtClass(t) {
@@ -1305,6 +1316,44 @@ async function refreshResearch() {
   finally { _refreshing.research = false; }
 }
 
+async function refreshOutcomes() {
+  if (_refreshing.outcomes) return;
+  _refreshing.outcomes = true;
+  const body = $id("outcomes-body");
+  try {
+    const data = await api("/api/outcomes?limit=20");
+    const rows = data.outcomes || [];
+    $id("outcomes-count").textContent = rows.length ? rows.length + " derniers résultats" : "";
+    body.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement("p"); empty.className = "empty";
+      empty.textContent = "Aucun résultat capturé. Les trades ouverts n'ont pas encore de reward.";
+      body.append(empty); return;
+    }
+    const table = document.createElement("table");
+    const header = table.createTHead().insertRow();
+    for (const label of ["Mode / devise", "Trade", "Net", "R", "MAE / MFE (R)", "Reward", "Données"]) {
+      const th = document.createElement("th"); th.textContent = label; header.append(th);
+    }
+    const tbody = table.createTBody();
+    for (const result of rows) {
+      const source = result.source; const row = tbody.insertRow();
+      const values = [source.mode + " / " + (source.currency || "inconnue"), source.symbol + " · " + source.strategy_id,
+        money(source.net_pnl, source.currency || "?"), rval(result.net_r), rval(result.mae_r) + " / " + rval(result.mfe_r),
+        result.reward == null ? "Indisponible" : result.reward.toFixed(3),
+        result.status === "ELIGIBLE" ? "Mesures disponibles" : result.warnings.join(" ; ")];
+      for (const value of values) row.insertCell().textContent = value;
+      const details = document.createElement("details");
+      const summary = document.createElement("summary"); summary.textContent = result.policy.version + " · détails";
+      const pre = document.createElement("pre"); pre.textContent = JSON.stringify(result, null, 2);
+      details.append(summary, pre); row.lastElementChild.append(details);
+    }
+    body.append(table);
+  } catch (error) {
+    body.textContent = "Résultats indisponibles : " + error.message;
+  } finally { _refreshing.outcomes = false; }
+}
+
 /* ── Navigation ───────────────────────────────────────────── */
 function navigate(page) {
   document.querySelectorAll(".workspace section").forEach(s => s.classList.remove("show"));
@@ -1321,6 +1370,7 @@ document.querySelectorAll(".sidebar-link, .mobile-nav button").forEach(b => {
 refreshFast();  setInterval(refreshFast, 2000);
 refreshMedium(); setInterval(refreshMedium, 8000);
 refreshSlow();  setInterval(refreshSlow, 30000);
+refreshOutcomes(); setInterval(refreshOutcomes, 30000);
 </script>
 </body>
 </html>

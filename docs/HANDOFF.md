@@ -834,3 +834,15 @@ et accès crypto public réel restent distincts de la validation logicielle H/I.
 Validation H/I : **590 passed, 3 skipped** (MT5), Ruff et mypy propres
 (84 fichiers source). Tests complémentaires du parcours kill/clear/new/run
 également verts. Aucun terminal MT5 ni endpoint crypto réel utilisé.
+
+## Lot J — fondation Outcome/Reward et recette PC (2026-10-04)
+
+Les trades clôturés PAPER/DEMO alimentent désormais des snapshots immuables, isolés par workspace/run/mode et politique versionnée. Capture après le cycle, ou hors connexion via `outcomes refresh/show`. Insertion du snapshot et événement `learning.outcome` dans une transaction ; répétition/reprise sans doublon, contrôle des empreintes et données dérivées à la lecture. Une erreur de recherche ne modifie ni Brain ni exécution.
+
+Net PnL, durée, risque initial figé, MAE/MFE monétaires échantillonnées et ratios R sont conservés. Les réalisations partielles entrent dans les excursions et l’historique incomplet ne clôture pas prématurément un trade DEMO. Un changement de compte est bloqué avant synchronisation. Coûts DEMO rapportés ; PAPER modélisé sans prétendre mesurer des commissions réelles.
+
+Reward explicite expérimental `PnL_R + 0.1 * protection_quality - 0.25 * sampled_MAE_R`, borné à ±5. La qualité est un proxy de protection, pas une calibration statistique. Données absentes/adoptées : INCOMPLETE, reward indisponible. Contrefactuels limités : NO_TRADE sans exposition et HOLD au prix/temps de sortie final réel, brut modélisé à conversion d’ouverture ; pas de frais nets ni trajectoire SL/TP inventés.
+
+API GET et panneau cockpit disponibles, agrégation par mode/devise/politique. Affichage USDT corrigé. `scripts/Invoke-AlladinChecks.ps1` sauvegarde SQLite puis vérifie le logiciel ; option MT5 strictement lecture seule. Voir [PC_ACCEPTANCE.md](PC_ACCEPTANCE.md). Le cœur Python est testé ici ; PowerShell/Windows et le terminal MT5 réel restent à vérifier sur PC. Les maxima intracycle et l’attribution journalière de réalisations partielles interjours ne sont pas une nouvelle garantie de ce lot. Pas d’entraînement/promotion SNN automatique ; suite K.
+
+Validation de ce checkpoint : 629 tests réussis, 3 tests MT5 ignorés sans terminal ; Ruff et mypy (85 sources) propres, syntaxe JavaScript vérifiée par Node. Aucun ordre réel envoyé depuis cet environnement.

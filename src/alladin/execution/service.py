@@ -288,6 +288,8 @@ class ExecutionService:
         trade = TradeRecord(
             trade_id=intent.intent_id,
             workspace=self.run.workspace,
+            account_currency=account.currency,
+            price_value_per_lot=ctx.spec.trade_tick_value / ctx.spec.trade_tick_size if ctx else None,
             proposal_id=intent.proposal_id,
             opportunity_id=intent.opportunity_id,
             run_id=rid,

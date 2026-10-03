@@ -1,0 +1,6 @@
+# Experimental learning signal, not a trading rule or an optimized objective.
+version: reward-v1
+pnl_weight: 1.0
+quality_weight: 0.1
+drawdown_weight: 0.25
+clip_abs: 5.0

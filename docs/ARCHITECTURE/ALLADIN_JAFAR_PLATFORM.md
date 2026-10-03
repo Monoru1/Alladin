@@ -558,8 +558,9 @@ Lot I — Jafar skeleton (OBSERVE VALIDÉ LOGICIELLEMENT)
   Zéro stratégie réelle — OBSERVE only
   [Bloquant pour : cerveau crypto]
 
-Lot J — Outcome Engine + Reward (LEARNING FOUNDATION)
-  Outcome Engine : MAE/MFE, durée, coût réel, contre-factuel
+Lot J — Outcome Engine + Reward (FONDATION LOGICIELLE IMPLÉMENTÉE)
+  Snapshots immuables : MAE/MFE échantillonnées, durée, coûts sourcés
+  Contrefactuels NO_TRADE / HOLD brut au prix final réel
   Reward signal : PnL + quality + drawdown penalty
   [Bloquant pour : SNN R-STDP]
 
@@ -579,11 +580,12 @@ F (lifecycle) → G (workspace) → H (broker) → I (Jafar) ↘
 
 **F/G sont validés logiciellement ; H/I fournissent les fondations crypto et Jafar OBSERVE.**
 La recette terminal MT5 et l’accès public crypto réel restent à effectuer.
-Le prochain lot de développement est J (Outcome/Reward).
+J fournit les résultats persistés et un reward expérimental versionné, consultables hors connexion et dans le cockpit.
+Le prochain lot de développement est K (SNN minimal contrôlable). Voir `docs/PC_ACCEPTANCE.md` pour la recette PC.
 Rappel des dépendances résolues par F :
 - le Brain ne peut pas gérer ses positions
 - PAPER simulation est incomplète
-- le feedback loop Outcome → Reward est vide
+- le feedback Outcome → Reward dispose désormais de snapshots ; apprentissage/promotion restent à construire
 - JAFAR hériterait d'une lacune fondamentale
 
 ---

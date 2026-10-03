@@ -5,12 +5,14 @@ Appelé à chaque cycle ET au démarrage (réconciliation). Ne ferme jamais rien
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 
 from pydantic import BaseModel
 
 from alladin.brokers.base import BrokerAdapter
 from alladin.core.enums import DealEntry, Side
+from alladin.core.errors import ExecutionBlockedError
 from alladin.core.models import Deal, Position
 from alladin.execution.models import comment_matches
 from alladin.journal.models import EventType, TradeRecord
@@ -47,6 +49,13 @@ class PositionMonitor:
     def sync(self, *, adopt: bool = False) -> MonitorReport:
         rid = self.run.run_id
         now = self.broker.now()
+        acct = self.broker.account_info()
+        binding = self.run.account_binding
+        if binding and (binding.broker != self.broker.name or binding.account_ref != acct.login_masked
+                        or binding.server != acct.server or binding.account_type != acct.account_type
+                        or (binding.account_fingerprint is not None
+                            and binding.account_fingerprint != acct.account_fingerprint)):
+            raise ExecutionBlockedError("monitor: compte différent du binding du run")
         mine, foreign = self._mine(self.broker.positions())
         rep = MonitorReport(open_positions=len(mine), foreign_ignored=foreign)
         open_trades = {t.ticket: t for t in self.repo.trades_for_run(rid, "OPEN") if t.ticket is not None}
@@ -60,8 +69,12 @@ class PositionMonitor:
                     self._adopt(pos, now)
                     rep.adopted.append(ticket)
                 continue
-            mae, mfe = min(trade.mae, pos.profit), max(trade.mfe, pos.profit)
-            fields: dict[str, float | None] = {}
+            deals = self._position_deals(ticket, trade.opened_at, now, trade.symbol)
+            observed = pos.profit + sum(d.profit for d in deals)
+            if not math.isfinite(observed):
+                raise ValueError("excursion broker non finie")
+            mae, mfe = min(trade.mae, observed), max(trade.mfe, observed)
+            fields: dict[str, float | None] = {"excursion_samples": trade.excursion_samples + 1}
             if (mae, mfe) != (trade.mae, trade.mfe):
                 fields.update(mae=mae, mfe=mfe)
             if pos.sl != trade.stop_loss or pos.tp != trade.take_profit:
@@ -103,17 +116,28 @@ class PositionMonitor:
 
     # ------------------------------------------------------------------ internes
 
-    def _position_deals(self, ticket: int, since: datetime, now: datetime) -> list[Deal]:
+    def _position_deals(self, ticket: int, since: datetime, now: datetime, symbol: str) -> list[Deal]:
         deals = self.broker.history_deals(since - timedelta(minutes=5), now + timedelta(minutes=5))
-        return [d for d in deals if d.position_id == ticket]
+        return [d for d in deals if d.position_id == ticket and d.symbol == symbol
+                and d.magic in (0, self.run.magic) and d.time <= now]
 
     def _finalise(self, trade: TradeRecord, now: datetime) -> bool:
         assert trade.ticket is not None
-        deals = self._position_deals(trade.ticket, trade.opened_at, now)
-        outs = [d for d in deals if d.entry in (DealEntry.OUT, DealEntry.INOUT, DealEntry.OUT_BY)]
+        deals = self._position_deals(trade.ticket, trade.opened_at, now, trade.symbol)
+        if (len({d.ticket for d in deals}) != len(deals)
+                or any(d.entry is DealEntry.INOUT for d in deals)
+                or any(not all(math.isfinite(v) for v in (d.volume, d.price, d.profit, d.commission, d.fee, d.swap))
+                       for d in deals)):
+            return False
+        outs = [d for d in deals if d.entry in (DealEntry.OUT, DealEntry.OUT_BY)]
+        closed_volume = sum(d.volume for d in outs)
+        if (any(d.volume <= 0 for d in outs)
+                or (not trade.adopted and abs(closed_volume - trade.volume) > 1e-9)
+                or (trade.adopted and closed_volume < trade.volume - 1e-9)):
+            return False
         if not outs:
             return False  # historique pas encore disponible : on réessaiera au prochain cycle
-        closing = max(outs, key=lambda d: d.time)
+        closing = max(outs, key=lambda d: (d.time, d.ticket))
         gross = sum(d.profit for d in deals)
         commission = sum(d.commission + d.fee for d in deals)
         swap = sum(d.swap for d in deals)
@@ -133,6 +157,8 @@ class PositionMonitor:
             net_pnl=net,
             r_multiple=r,
             equity_after=acct.equity,
+            mae=min(trade.mae, gross), mfe=max(trade.mfe, gross),
+            excursion_samples=trade.excursion_samples + 1,
         )
         self.run.watchdog.record_closed_pnl(net, closing.time)
         self.manager.persist(self.run)

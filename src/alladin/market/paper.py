@@ -51,6 +51,11 @@ class PaperPosition:
     original_volume: float | None = None
     realized_pnl: float = 0.0
     initial_risk: float = 0.0
+    account_currency: str | None = None
+    price_value_per_lot: float | None = None
+    mae_amount: float | None = None
+    mfe_amount: float | None = None
+    excursion_samples: int = 0
 
     # Filled at close
     exit_price: float | None = None
@@ -68,10 +73,19 @@ class PaperPosition:
         current = bid if self.side == Side.BUY else ask
         entry = self.entry_price
         excursion = (current - entry) / point if self.side == Side.BUY else (entry - current) / point
+        if self.price_value_per_lot is not None:
+            self.observe_amount(self.realized_pnl + excursion * point * self.price_value_per_lot * self.volume)
         if excursion > self.mfe_pips:
             self.mfe_pips = excursion
         if excursion < -self.mae_pips:
             self.mae_pips = -excursion
+
+    def observe_amount(self, amount: float) -> None:
+        if not math.isfinite(amount):
+            raise ValueError("non-finite paper excursion")
+        self.mae_amount = min(self.mae_amount or 0.0, amount)
+        self.mfe_amount = max(self.mfe_amount or 0.0, amount)
+        self.excursion_samples += 1
 
     def check_exit(self, bid: float, ask: float, point: float) -> str | None:
         """Retourne le statut de cloture si SL/TP atteint, sinon None."""
@@ -110,6 +124,11 @@ class PaperPosition:
             "original_volume": self.original_volume or self.volume,
             "realized_pnl": self.realized_pnl,
             "initial_risk": self.initial_risk,
+            "account_currency": self.account_currency,
+            "price_value_per_lot": self.price_value_per_lot,
+            "mae_amount": self.mae_amount,
+            "mfe_amount": self.mfe_amount,
+            "excursion_samples": self.excursion_samples,
             "entry_price": self.entry_price,
             "sl": self.sl,
             "tp": self.tp,
@@ -137,6 +156,11 @@ class PaperPosition:
             "original_volume": self.original_volume or self.volume,
             "realized_pnl": self.realized_pnl,
             "initial_risk": self.initial_risk,
+            "account_currency": self.account_currency,
+            "price_value_per_lot": self.price_value_per_lot,
+            "mae_amount": self.mae_amount,
+            "mfe_amount": self.mfe_amount,
+            "excursion_samples": self.excursion_samples,
             "entry_price": self.entry_price,
             "sl": self.sl,
             "tp": self.tp,
@@ -182,6 +206,10 @@ class PaperPosition:
             original_volume=d.get("original_volume") or d["volume"],
             realized_pnl=d.get("realized_pnl") or 0.0,
             initial_risk=d.get("initial_risk") or 0.0,
+            account_currency=d.get("account_currency"),
+            price_value_per_lot=d.get("price_value_per_lot"),
+            mae_amount=d.get("mae_amount"), mfe_amount=d.get("mfe_amount"),
+            excursion_samples=d.get("excursion_samples") or 0,
         )
 
 
@@ -241,6 +269,8 @@ class PaperExperimentEngine:
         sl = raw_sl if raw_sl is not None else entry * 0.99
         tp = decision.take_profit if decision else intent.take_profit
 
+        spec = self.broker.symbol_spec(intent.instrument)
+        account_currency = self.broker.account_info().currency
         pos = PaperPosition(
             paper_id=f"PAPER-{uuid4().hex[:8]}",
             run_id=self.run_id,
@@ -255,6 +285,9 @@ class PaperExperimentEngine:
             intent=intent.model_dump(mode="json"),
             original_volume=volume,
             initial_risk=decision.risk_amount if decision else 0.0,
+            account_currency=account_currency,
+            price_value_per_lot=(spec.trade_tick_value / spec.trade_tick_size
+                                 if spec and spec.trade_tick_size > 0 else None),
         )
         self._open[pos.paper_id] = pos
         self._persist_open(pos)
@@ -299,6 +332,7 @@ class PaperExperimentEngine:
         spec = self.broker.symbol_spec(pos.symbol)
         point = spec.point if spec else 0.00001
         exit_price = tick.bid if pos.side == Side.BUY else tick.ask
+        pos.mark_price(tick.bid, tick.ask, point)
         pos.close(exit_price, reason, now, point)
         self.realize(pos, exit_price, pos.volume)
         del self._open[paper_id]
@@ -317,6 +351,8 @@ class PaperExperimentEngine:
             raise ValueError("paper P&L requires instrument specification")
         delta = (price - pos.entry_price) * pos.side.sign / spec.trade_tick_size * spec.trade_tick_value * volume
         pos.realized_pnl += delta
+        if volume >= pos.volume - 1e-9:
+            pos.observe_amount(pos.realized_pnl)
         original = pos.original_volume or pos.volume
         factor = spec.point / spec.trade_tick_size * spec.trade_tick_value * original
         pos.pnl_pips = pos.realized_pnl / factor if factor else 0.0
@@ -365,6 +401,7 @@ class PaperExperimentEngine:
             mfe_pips=pos.mfe_pips,
             mae_pips=pos.mae_pips,
             realized_pnl=pos.realized_pnl,
+            mae_amount=pos.mae_amount, mfe_amount=pos.mfe_amount, excursion_samples=pos.excursion_samples,
         )
 
     def _persist_excursion(self, pos: PaperPosition) -> None:
@@ -374,4 +411,5 @@ class PaperExperimentEngine:
             pos.paper_id,
             mfe_pips=pos.mfe_pips,
             mae_pips=pos.mae_pips,
+            mae_amount=pos.mae_amount, mfe_amount=pos.mfe_amount, excursion_samples=pos.excursion_samples,
         )

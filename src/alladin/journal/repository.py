@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Column, Float, Integer, MetaData, String, Table, Text, create_engine, event, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.pool import StaticPool
 
 from alladin.core.workspace import WorkspaceId
@@ -67,6 +68,7 @@ _TRADE_COLS = [
     ("risk_pct_of_wc", Float), ("spread_at_entry", Float), ("slippage", Float), ("opened_at", String),
     ("closed_at", String), ("close_price", Float), ("close_reason", String), ("pnl_gross", Float),
     ("commission", Float), ("swap", Float), ("net_pnl", Float), ("r_multiple", Float),
+    ("account_currency", String), ("price_value_per_lot", Float), ("excursion_samples", Integer),
     ("mae", Float), ("mfe", Float), ("equity_after", Float), ("adopted", Integer), ("cycle_id", String),
 ]  # fmt: skip
 trades = Table(
@@ -100,6 +102,11 @@ paper_positions = Table(
     Column("original_volume", Float),
     Column("realized_pnl", Float, default=0.0),
     Column("initial_risk", Float, default=0.0),
+    Column("account_currency", String),
+    Column("price_value_per_lot", Float),
+    Column("mae_amount", Float),
+    Column("mfe_amount", Float),
+    Column("excursion_samples", Integer, default=0),
 )
 
 _TRIGGERS = [
@@ -169,8 +176,10 @@ class JournalRepository:
     def _migrate(self) -> None:
         """Migration légère : ajoute les colonnes apparues après la création d'une base existante."""
         wanted = {"runs": ["kind", "workspace", "account_binding"], "journal_events": ["cycle_id", "workspace"],
-                  "trades": ["cycle_id", "proposal_id", "opportunity_id", "workspace"],
-                  "paper_positions": ["original_volume", "realized_pnl", "initial_risk", "workspace"]}
+                  "trades": ["cycle_id", "proposal_id", "opportunity_id", "workspace",
+                             "account_currency", "price_value_per_lot", "excursion_samples"],
+                  "paper_positions": ["original_volume", "realized_pnl", "initial_risk", "workspace",
+                                      "account_currency", "price_value_per_lot", "mae_amount", "mfe_amount", "excursion_samples"]}
         with self.engine.begin() as c:
             for table, columns in wanted.items():
                 cols = ({r[1] for r in c.execute(text(f"PRAGMA table_info({table})"))}
@@ -178,7 +187,12 @@ class JournalRepository:
                 for col in columns:
                     if col not in cols:
                         default = " DEFAULT 'RUN' NOT NULL" if col == "kind" else " DEFAULT 'ALLADIN' NOT NULL" if col == "workspace" else ""
-                        type_ = "FLOAT" if table == "paper_positions" and col != "workspace" else "VARCHAR"
+                        if col == "excursion_samples":
+                            type_, default = "INTEGER", " DEFAULT 0"
+                        elif col in ("original_volume", "realized_pnl", "initial_risk", "price_value_per_lot", "mae_amount", "mfe_amount"):
+                            type_ = "FLOAT"
+                        else:
+                            type_ = "VARCHAR"
                         c.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {type_}{default}"))
 
     @classmethod
@@ -276,11 +290,17 @@ class JournalRepository:
         payload: dict[str, Any],
         ts: datetime | None = None,
         cycle_id: str | None = None,
+        *, connection: Connection | None = None,
     ) -> JournalEvent:
-        self.assert_run_scope(run_id)
+        if connection is None:
+            self.assert_run_scope(run_id)
+        else:
+            owner = connection.execute(runs.select().where(runs.c.run_id == run_id)).first()
+            if owner is not None and owner.workspace != self.workspace.value:
+                raise ValueError("run hors workspace")
         ts = ts or datetime.now(UTC)
         body = _canon(payload)
-        with self.engine.begin() as c:
+        with (self.engine.begin() if connection is None else nullcontext(connection)) as c:
             last = c.execute(
                 text("SELECT seq, hash FROM journal_events WHERE run_id=:r ORDER BY seq DESC LIMIT 1"),
                 {"r": run_id},
@@ -387,6 +407,7 @@ class JournalRepository:
         for k in ("opened_at", "closed_at"):
             d[k] = _parse(d[k]) if d[k] else None
         d["adopted"] = bool(d["adopted"])
+        d["excursion_samples"] = d.get("excursion_samples") or 0
         d["mae"], d["mfe"] = d["mae"] or 0.0, d["mfe"] or 0.0
         return TradeRecord.model_validate(d)
 

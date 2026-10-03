@@ -46,6 +46,7 @@ class EventType(StrEnum):
     POSITION_ACTION_REJECTED = "position.action_rejected"
     POSITION_ACTION = "position.action"
     MODE_CHANGE = "mode.change"
+    OUTCOME = "learning.outcome"
 
 
 class JournalEvent(BaseModel):
@@ -114,4 +115,7 @@ class TradeRecord(BaseModel):
     mfe: float = 0.0  # meilleur gain flottant observé (>= 0)
     equity_after: float | None = None
     cycle_id: str | None = None
+    account_currency: str | None = None
+    price_value_per_lot: float | None = None  # frozen opening conversion, modeled counterfactual only
+    excursion_samples: int = 0
     adopted: bool = False  # position retrouvée à la réconciliation sans enregistrement préalable

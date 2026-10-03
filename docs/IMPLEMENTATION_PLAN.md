@@ -740,3 +740,9 @@ accès réseau réel déclaré validé. Prochaine fondation : Lot J.
 Validation H/I : **590 passed, 3 skipped** (MT5), Ruff et mypy propres
 (84 fichiers source). Tests complémentaires du parcours kill/clear/new/run
 également verts. Aucun terminal MT5 ni endpoint crypto réel utilisé.
+
+### Lot J — Outcome/Reward et préparation PC (2026-10-04)
+
+Fondation implémentée : collecte PAPER/DEMO clôturés, snapshots immuables et audit atomique, politique hashée, reprise idempotente, R et excursions monétaires échantillonnées, reward explicite avec statut incomplet, contrefactuels limités NO_TRADE/HOLD brut, consultation offline/API/cockpit. Aucun entraînement ou changement du cerveau actif. Tests couvrent coûts, rebates, clôture partielle/reprise, compte lié, contamination workspace, corruption, rollback et collecteurs concurrents. Recette PC documentée dans `PC_ACCEPTANCE.md`, sauvegarde SQLite cohérente avant contrôles. K reste à implémenter ; validation terminal réelle F/G et accès crypto public toujours ouverts.
+
+Contrôles du checkpoint J : 629 passed / 3 skipped MT5, Ruff propre, mypy 85 sources, Node syntaxe dashboard valide. Exécution Windows/PowerShell non réalisée ici.

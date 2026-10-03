@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     profiles_dir: Path = Field(default=REPO_ROOT / "config" / "challenge_profiles")
     strategies_dir: Path = Field(default=REPO_ROOT / "config" / "strategies")
+    reward_policy_path: Path = Field(default=REPO_ROOT / "config" / "reward_policies" / "outcome_v1.yaml",
+                                     alias="REWARD_POLICY_PATH")
     default_profile: str = Field(default="ftmo_2step_demo", alias="DEFAULT_PROFILE")
 
     mt5_path: str | None = Field(default=None, alias="MT5_PATH")

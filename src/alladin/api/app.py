@@ -214,6 +214,18 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
         }
 
 
+    @app.get("/api/outcomes")
+    def trade_outcomes(run_id: str | None = None, limit: int = Query(200, ge=1, le=1000)) -> dict[str, Any]:
+        from alladin.research.outcomes import OutcomeRepository, outcome_summary
+        rid = latest(run_id).run_id
+        try:
+            rows = OutcomeRepository(repo, read_only=True).list(rid, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(409, "outcome integrity failed") from exc
+        return {"workspace": workspace.value, "run_id": rid, "limit": limit,
+                "summary_scope": "RETURNED_ROWS", "summary": outcome_summary(rows),
+                "outcomes": [row.model_dump(mode="json") for row in rows]}
+
     @app.get("/api/opportunities")
     def opportunities(run_id: str | None = None, cycle_id: str | None = None,
                       limit: int = Query(200, ge=1, le=1000)) -> dict[str, Any]:

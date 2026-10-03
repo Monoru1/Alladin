@@ -17,3 +17,6 @@ __pycache__/
 .ruff_cache/
 build/
 dist/
+
+# Local workstation acceptance logs and SQLite backups
+acceptance_reports/

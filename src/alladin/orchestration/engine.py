@@ -33,6 +33,7 @@ from alladin.market.paper import PaperExperimentEngine
 from alladin.market.scanner import MarketScanner
 from alladin.orchestration.monitor import PositionMonitor
 from alladin.orchestration.state import RunContext, RunManager
+from alladin.research.outcomes import OutcomeEngine
 from alladin.risk import sizing
 from alladin.strategies.base import StrategyContext
 from alladin.strategies.router import StrategyRouter
@@ -69,6 +70,7 @@ class OrchestrationEngine:
         execute: bool = False,  # rétrocompatibilité : remplacé par run_mode
         paper_engine: PaperExperimentEngine | None = None,
         brain: Brain | None = None,
+        outcomes: OutcomeEngine | None = None,
     ) -> None:
         self.broker, self.run, self.manager, self.journal = broker, run, manager, journal
         self.scanner, self.router, self.agent = scanner, router, agent
@@ -82,6 +84,7 @@ class OrchestrationEngine:
         self.execute = run_mode is RunMode.DEMO  # compatibilité interne
         self.paper_engine = paper_engine
         self.brain = brain or ClassicBrainAdapter(agent)
+        self.outcomes = outcomes
         self._cycle = 0
         self._stop_requested = False
 
@@ -99,6 +102,16 @@ class OrchestrationEngine:
                 {"cycle": self._cycle, "agent": self.agent.name, "execute": self.execute},
             )
             outcome = self._run_cycle(cycle_id)
+            if self.outcomes is not None:
+                try:
+                    collected = self.outcomes.collect_run(self.run.run_id, include_existing=False)
+                    if collected.errors:
+                        self.journal.log(self.run.run_id, EventType.INFO,
+                                         {"alert": "outcome collection incomplete", "errors": collected.errors})
+                except Exception as exc:
+                    # Research-side failure must never undo trading/protective execution.
+                    self.journal.log(self.run.run_id, EventType.INFO,
+                                     {"alert": "outcome collection failed", "reason": str(exc)})
             outcome.cycle_id = cycle_id
             self.journal.log(
                 self.run.run_id,

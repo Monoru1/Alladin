@@ -247,6 +247,7 @@ class PositionActions:
                 return PositionActionResult(proposal_id=proposal.proposal_id, action=proposal.action,
                                             status="PENDING_CONFIRMATION", messages=["tick PAPER indisponible"])
             price = tick.bid if pos.side is Side.BUY else tick.ask
+            pos.mark_price(tick.bid, tick.ask, spec.point)
             if proposal.action is Action.CLOSE:
                 pos.close(price, "CLOSED_MANUAL", self.service.clock(), spec.point)
             paper.realize(pos, price, decision.volume)
