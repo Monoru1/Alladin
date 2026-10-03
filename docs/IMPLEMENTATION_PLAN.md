@@ -624,3 +624,42 @@ Tests ciblés : validation du schéma, identité/version, NO_TRADE explicite, ad
 Le socket accepte les actions de gestion mais n'active que HOLD sans ordre. `BrainContext` fournit ticket/ID de trade et liens causaux pour les positions DEMO possédées, mais pas encore une vue canonique unifiée avec PAPER. `BrokerCapabilities` n'annonce pas les primitives de modification/fermeture partielle. L'identité d'une position PAPER reste son `paper_id` distinct du trade DEMO. La persistance de la proposition ne capture pas encore un hash complet des features ni l'état interne d'un cerveau futur.
 
 **NEXT :** implémenter et tester une politique déterministe de gestion par position dans RiskEngine/ExecutionService (ownership, position ID canonique DEMO/PAPER, capacités broker, mode, kill switch, challenge, confirmation de résultat), puis unifier la vue des positions possédées dans BrainContext. Préserver les sorties protectrices indépendantes. Après cette preuve seulement, envisager un cerveau SNN expérimental ; ne pas le démarrer dans le Lot E.
+
+
+---
+
+## PLATFORM CHECKPOINT — ALLADIN / JAFAR SHARED CORE — 2026-10-03
+
+**STATUS:** architectural decisions recorded, runtime Jafar not implemented.
+
+### Adopted decisions
+- DECISION-014 — isolated Alladin/Jafar workspaces over shared core.
+- DECISION-015 — broker/account bindings and capabilities; no hardcoded Exness/MT5 domain model.
+- DECISION-016 — future global Command Center with distinct Alladin/Jafar identities and read-only supervision semantics.
+
+### Current invariant
+```text
+Workspace Market/Context
+    -> Brain
+    -> ActionProposal
+    -> deterministic Risk
+    -> Execution
+    -> BrokerAdapter / AccountBinding
+```
+
+### Isolation requirements
+Workspace-scoped mutable state: runs/cycles, universe, strategies, Brain/checkpoints, positions, risk/working-capital/challenge state, research configuration and broker/account binding.
+
+### Jafar direction
+Crypto-oriented workspace with deep-red/crimson UI identity, able to use a crypto-capable MT5 broker when compatible, while preserving the option of future native crypto/exchange adapters. Shared engine does not imply shared learned parameters.
+
+### Real-money boundary
+LIVE remains blocked. Future real-account support requires explicit promotion gates, capability verification, reconciliation, kill switch, auditability and human activation.
+
+### Recommended dependency ordering
+1. Complete deterministic position-management lifecycle: CLOSE / MODIFY_STOP / MODIFY_TARGET / PARTIAL_CLOSE with confirmation semantics.
+2. Unify owned-position identity/view across DEMO/PAPER and extend broker capabilities.
+3. Introduce explicit workspace/account isolation primitives.
+4. Add Jafar runtime skeleton on the shared core.
+5. Add global Command Center and workspace switch.
+6. Only then specialize crypto Brain/research/runtime and evaluate candidate brokers/adapters.
