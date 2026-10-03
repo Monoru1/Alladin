@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from alladin.core.workspace import AccountBinding, WorkspaceId
+
 
 class EventType(StrEnum):
     RUN_CREATED = "run.created"
@@ -47,6 +49,7 @@ class EventType(StrEnum):
 
 
 class JournalEvent(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     id: int
     run_id: str
     seq: int
@@ -58,6 +61,8 @@ class JournalEvent(BaseModel):
 
 
 class RunRecord(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
+    account_binding: AccountBinding | None = None
     run_id: str
     seq: int
     profile_id: str
@@ -74,6 +79,7 @@ class RunRecord(BaseModel):
 
 
 class TradeRecord(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     trade_id: str
     proposal_id: str | None = None
     opportunity_id: str | None = None

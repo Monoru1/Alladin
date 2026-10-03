@@ -166,7 +166,7 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
 
     @app.get("/api/research")
     def research() -> dict[str, Any]:
-        rr = ResearchRepository.from_engine(repo.engine)
+        rr = ResearchRepository.from_engine(repo.engine, repo.workspace)
         sources = [s.model_dump(mode="json") for s in rr.list_sources()]
         findings = [f.model_dump(mode="json") for f in rr.list_findings()]
         hypotheses = [h.model_dump(mode="json") for h in rr.list_hypotheses()]

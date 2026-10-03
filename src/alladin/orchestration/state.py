@@ -12,6 +12,7 @@ from alladin.core.enums import TERMINAL_STATES, RunState
 from alladin.core.errors import AlladinError
 from alladin.core.killswitch import KillSwitch
 from alladin.core.models import AccountSnapshot
+from alladin.core.workspace import AccountBinding, WorkspaceId, magic_for
 from alladin.journal.models import EventType, RunRecord
 from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
@@ -25,13 +26,16 @@ class RunContext:
     profile: ChallengeProfile
     watchdog: ChallengeWatchdog
     broker_name: str
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
+    account_binding: AccountBinding | None = None
 
 
 RUN_KINDS = {"RUN": "RUN", "SYSTEM-TEST": "SYSTEM-TEST"}
 
 
-def run_label(kind: str, n: int) -> str:
-    return f"{RUN_KINDS[kind]}-{n:03d}"
+def run_label(kind: str, n: int, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> str:
+    middle = "" if workspace is WorkspaceId.ALLADIN else f"-{workspace.value}"
+    return f"{RUN_KINDS[kind]}{middle}-{n:03d}"
 
 
 class RunManager:
@@ -56,16 +60,22 @@ class RunManager:
         account: str,
         initial_balance: float,
         kind: str = "RUN",
+        account_binding: AccountBinding | None = None,
     ) -> RunContext:
         seq = (
             self.repo.next_run_seq()
         )  # global : garantit un magic number unique par run, tous types confondus
-        run_id = run_label(kind, self.repo.next_label_no(kind))
+        run_id = run_label(kind, self.repo.next_label_no(kind), self.repo.workspace)
+        magic = magic_for(self.repo.workspace, seq, self.magic_base)
+        if account_binding and account_binding.workspace != self.repo.workspace:
+            raise AlladinError("account binding hors workspace")
         wd = ChallengeWatchdog.create(profile, run_id, initial_balance)
         now = self.clock()
         self.repo.create_run(
             RunRecord(
                 run_id=run_id,
+                workspace=self.repo.workspace,
+                account_binding=account_binding,
                 seq=seq,
                 profile_id=profile.id,
                 state=wd.run_state.value,
@@ -73,7 +83,7 @@ class RunManager:
                 initial_balance=initial_balance,
                 broker=broker_name,
                 account=account,
-                magic=self.magic_base + seq,
+                magic=magic,
                 kind=kind,
                 created_at=now,
                 updated_at=now,
@@ -90,14 +100,18 @@ class RunManager:
                 "account": account,
             },
         )
-        return RunContext(run_id, seq, self.magic_base + seq, profile, wd, broker_name)
+        return RunContext(run_id, seq, magic, profile, wd, broker_name, self.repo.workspace, account_binding)
 
     def load_run(self, run_id: str, profile: ChallengeProfile) -> RunContext:
         rec = self.repo.get_run(run_id)
         if rec is None:
             raise AlladinError(f"run introuvable : {run_id}")
         wd = ChallengeWatchdog(profile, WatchdogState.model_validate(rec.watchdog_state))
-        return RunContext(rec.run_id, rec.seq, rec.magic, profile, wd, rec.broker)
+        if rec.workspace != self.repo.workspace:
+            raise AlladinError("run hors workspace")
+        if rec.magic != magic_for(rec.workspace, rec.seq, self.magic_base):
+            raise AlladinError("magic du run incohérent avec son workspace et sa séquence")
+        return RunContext(rec.run_id, rec.seq, rec.magic, profile, wd, rec.broker, rec.workspace, rec.account_binding)
 
     def latest_run_id(self, *, only_open: bool = False, kind: str | None = "RUN") -> str | None:
         """Dernier run (par défaut de type RUN : les SYSTEM-TEST ne polluent jamais les runs officiels)."""

@@ -18,6 +18,7 @@ from sqlalchemy import Column, Float, Integer, MetaData, String, Table, Text, cr
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import StaticPool
 
+from alladin.core.workspace import WorkspaceId
 from alladin.journal.models import JournalEvent, RunRecord, TradeRecord
 
 metadata = MetaData()
@@ -26,6 +27,8 @@ runs = Table(
     "runs",
     metadata,
     Column("run_id", String, primary_key=True),
+    Column("workspace", String, nullable=False, default="ALLADIN"),
+    Column("account_binding", Text),
     Column("seq", Integer, unique=True, nullable=False),
     Column("profile_id", String, nullable=False),
     Column("state", String, nullable=False),
@@ -44,6 +47,7 @@ journal_events = Table(
     "journal_events",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("workspace", String, nullable=False, default="ALLADIN"),
     Column("run_id", String, nullable=False, index=True),
     Column("seq", Integer, nullable=False),
     Column("ts", String, nullable=False),
@@ -55,7 +59,7 @@ journal_events = Table(
 )
 
 _TRADE_COLS = [
-    ("trade_id", String), ("proposal_id", String), ("opportunity_id", String),
+    ("workspace", String), ("trade_id", String), ("proposal_id", String), ("opportunity_id", String),
     ("run_id", String), ("symbol", String), ("side", String),
     ("strategy_id", String), ("strategy_version", String), ("regime", String), ("agent", String),
     ("status", String), ("ticket", Integer), ("volume", Float), ("entry_requested", Float),
@@ -75,6 +79,7 @@ paper_positions = Table(
     "paper_positions",
     metadata,
     Column("paper_id", String, primary_key=True),
+    Column("workspace", String, nullable=False, default="ALLADIN"),
     Column("run_id", String, nullable=False, index=True),
     Column("cycle_id", String),
     Column("symbol", String, nullable=False),
@@ -92,6 +97,9 @@ paper_positions = Table(
     Column("mfe_pips", Float, default=0.0),
     Column("mae_pips", Float, default=0.0),
     Column("intent_json", Text),
+    Column("original_volume", Float),
+    Column("realized_pnl", Float, default=0.0),
+    Column("initial_risk", Float, default=0.0),
 )
 
 _TRIGGERS = [
@@ -139,8 +147,9 @@ def make_engine(url: str) -> Engine:
 
 
 class JournalRepository:
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> None:
         self.engine = engine
+        self.workspace = WorkspaceId(workspace)
         if engine.dialect.name == "sqlite":
 
             @event.listens_for(engine, "connect")
@@ -159,20 +168,28 @@ class JournalRepository:
 
     def _migrate(self) -> None:
         """Migration légère : ajoute les colonnes apparues après la création d'une base existante."""
-        wanted = {"runs": ["kind"], "journal_events": ["cycle_id"],
-                  "trades": ["cycle_id", "proposal_id", "opportunity_id"]}
+        wanted = {"runs": ["kind", "workspace", "account_binding"], "journal_events": ["cycle_id", "workspace"],
+                  "trades": ["cycle_id", "proposal_id", "opportunity_id", "workspace"],
+                  "paper_positions": ["original_volume", "realized_pnl", "initial_risk", "workspace"]}
         with self.engine.begin() as c:
             for table, columns in wanted.items():
                 cols = ({r[1] for r in c.execute(text(f"PRAGMA table_info({table})"))}
                         if self.engine.dialect.name == "sqlite" else set(columns))
                 for col in columns:
                     if col not in cols:
-                        default = " DEFAULT 'RUN' NOT NULL" if col == "kind" else ""
-                        c.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR{default}"))
+                        default = " DEFAULT 'RUN' NOT NULL" if col == "kind" else " DEFAULT 'ALLADIN' NOT NULL" if col == "workspace" else ""
+                        type_ = "FLOAT" if table == "paper_positions" and col != "workspace" else "VARCHAR"
+                        c.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {type_}{default}"))
 
     @classmethod
-    def from_url(cls, url: str) -> JournalRepository:
-        return cls(make_engine(url))
+    def from_url(cls, url: str, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> JournalRepository:
+        return cls(make_engine(url), workspace)
+
+    def assert_run_scope(self, run_id: str) -> None:
+        with self.engine.connect() as c:
+            owner = c.execute(runs.select().where(runs.c.run_id == run_id)).mappings().first()
+        if owner is not None and owner["workspace"] != self.workspace.value:
+            raise ValueError("run hors workspace")
 
     # ------------------------------------------------------------------ runs
 
@@ -183,14 +200,18 @@ class JournalRepository:
 
     def next_label_no(self, kind: str) -> int:
         with self.engine.connect() as c:
-            v = c.execute(text("SELECT COUNT(*) FROM runs WHERE kind=:k"), {"k": kind}).scalar_one()
+            v = c.execute(text("SELECT COUNT(*) FROM runs WHERE kind=:k AND workspace=:w"), {"k": kind, "w": self.workspace.value}).scalar_one()
         return int(v) + 1
 
     def create_run(self, rec: RunRecord) -> None:
+        if rec.workspace != self.workspace:
+            raise ValueError("run hors workspace")
         with self.engine.begin() as c:
             c.execute(
                 runs.insert().values(
                     run_id=rec.run_id,
+                    workspace=rec.workspace.value,
+                    account_binding=rec.account_binding.model_dump_json() if rec.account_binding else None,
                     seq=rec.seq,
                     profile_id=rec.profile_id,
                     state=rec.state,
@@ -212,7 +233,7 @@ class JournalRepository:
         with self.engine.begin() as c:
             c.execute(
                 runs.update()
-                .where(runs.c.run_id == run_id)
+                .where(runs.c.run_id == run_id, runs.c.workspace == self.workspace.value)
                 .values(state=state, phase=phase, watchdog_state=_canon(watchdog_state), updated_at=_iso(now))
             )
 
@@ -220,6 +241,8 @@ class JournalRepository:
     def _run(row: Any) -> RunRecord:
         return RunRecord(
             run_id=row.run_id,
+            workspace=row.workspace,
+            account_binding=json.loads(row.account_binding) if row.account_binding else None,
             seq=row.seq,
             profile_id=row.profile_id,
             state=row.state,
@@ -236,12 +259,12 @@ class JournalRepository:
 
     def get_run(self, run_id: str) -> RunRecord | None:
         with self.engine.connect() as c:
-            row = c.execute(runs.select().where(runs.c.run_id == run_id)).first()
+            row = c.execute(runs.select().where(runs.c.run_id == run_id, runs.c.workspace == self.workspace.value)).first()
         return self._run(row) if row else None
 
     def list_runs(self) -> list[RunRecord]:
         with self.engine.connect() as c:
-            rows = c.execute(runs.select().order_by(runs.c.seq)).all()
+            rows = c.execute(runs.select().where(runs.c.workspace == self.workspace.value).order_by(runs.c.seq)).all()
         return [self._run(r) for r in rows]
 
     # ------------------------------------------------------------------ événements (append-only)
@@ -254,6 +277,7 @@ class JournalRepository:
         ts: datetime | None = None,
         cycle_id: str | None = None,
     ) -> JournalEvent:
+        self.assert_run_scope(run_id)
         ts = ts or datetime.now(UTC)
         body = _canon(payload)
         with self.engine.begin() as c:
@@ -266,6 +290,7 @@ class JournalRepository:
             res = c.execute(
                 journal_events.insert().values(
                     run_id=run_id,
+                    workspace=self.workspace.value,
                     seq=seq,
                     ts=_iso(ts),
                     type=type_,
@@ -278,6 +303,7 @@ class JournalRepository:
             eid = int(res.inserted_primary_key[0])  # type: ignore[index]
         return JournalEvent(
             id=eid,
+            workspace=self.workspace,
             run_id=run_id,
             seq=seq,
             ts=ts,
@@ -295,7 +321,7 @@ class JournalRepository:
         desc: bool = False,
         cycle_id: str | None = None,
     ) -> list[JournalEvent]:
-        q = journal_events.select().where(journal_events.c.run_id == run_id)
+        q = journal_events.select().where(journal_events.c.run_id == run_id, journal_events.c.workspace == self.workspace.value)
         if cycle_id:
             q = q.where(journal_events.c.cycle_id == cycle_id)
         if types:
@@ -308,6 +334,7 @@ class JournalRepository:
         return [
             JournalEvent(
                 id=r.id,
+                workspace=r.workspace,
                 run_id=r.run_id,
                 seq=r.seq,
                 ts=_parse(r.ts),
@@ -321,6 +348,7 @@ class JournalRepository:
 
     def verify_chain(self, run_id: str) -> tuple[bool, str]:
         """Recalcule la chaîne de hachage ; (False, raison) si une ligne a été altérée/supprimée."""
+        self.assert_run_scope(run_id)
         with self.engine.connect() as c:
             rows = c.execute(
                 journal_events.select()
@@ -329,6 +357,8 @@ class JournalRepository:
             ).all()
         prev = GENESIS
         for i, r in enumerate(rows, start=1):
+            if r.workspace != self.workspace.value:
+                return False, "workspace du journal incohérent"
             if r.seq != i:
                 return False, f"séquence rompue à {i} (trouvé {r.seq})"
             expect = _hash(prev, r.run_id, r.seq, r.ts, r.type, r.payload, r.cycle_id)
@@ -343,9 +373,9 @@ class JournalRepository:
             rows = c.execute(
                 text(
                     "SELECT cycle_id, MIN(ts) AS started, MAX(ts) AS ended, COUNT(*) AS n FROM journal_events "
-                    "WHERE run_id=:r AND cycle_id IS NOT NULL GROUP BY cycle_id ORDER BY MIN(id) DESC"
+                    "WHERE run_id=:r AND workspace=:w AND cycle_id IS NOT NULL GROUP BY cycle_id ORDER BY MIN(id) DESC"
                 ),
-                {"r": run_id},
+                {"r": run_id, "w": self.workspace.value},
             ).all()
         return [{"cycle_id": r.cycle_id, "started": r.started, "ended": r.ended, "events": r.n} for r in rows]
 
@@ -361,6 +391,9 @@ class JournalRepository:
         return TradeRecord.model_validate(d)
 
     def insert_trade(self, t: TradeRecord) -> None:
+        self.assert_run_scope(t.run_id)
+        if t.workspace != self.workspace:
+            raise ValueError("trade hors workspace")
         d = t.model_dump()
         d["opened_at"] = _iso(t.opened_at)
         d["closed_at"] = _iso(t.closed_at) if t.closed_at else None
@@ -369,19 +402,21 @@ class JournalRepository:
             c.execute(trades.insert().values(**d))
 
     def update_trade(self, trade_id: str, **fields: Any) -> None:
+        if {"workspace", "run_id", "trade_id"} & fields.keys():
+            raise ValueError("identité persistée immuable")
         for k in ("closed_at", "opened_at"):
             if isinstance(fields.get(k), datetime):
                 fields[k] = _iso(fields[k])
         with self.engine.begin() as c:
-            c.execute(trades.update().where(trades.c.trade_id == trade_id).values(**fields))
+            c.execute(trades.update().where(trades.c.trade_id == trade_id, trades.c.workspace == self.workspace.value).values(**fields))
 
     def get_trade(self, trade_id: str) -> TradeRecord | None:
         with self.engine.connect() as c:
-            row = c.execute(trades.select().where(trades.c.trade_id == trade_id)).first()
+            row = c.execute(trades.select().where(trades.c.trade_id == trade_id, trades.c.workspace == self.workspace.value)).first()
         return self._trade(row) if row else None
 
     def trades_for_run(self, run_id: str, status: str | None = None) -> list[TradeRecord]:
-        q = trades.select().where(trades.c.run_id == run_id).order_by(trades.c.opened_at)
+        q = trades.select().where(trades.c.run_id == run_id, trades.c.workspace == self.workspace.value).order_by(trades.c.opened_at)
         if status:
             q = q.where(trades.c.status == status)
         with self.engine.connect() as c:
@@ -390,30 +425,34 @@ class JournalRepository:
 
     def all_closed_trades(self) -> list[TradeRecord]:
         with self.engine.connect() as c:
-            rows = c.execute(trades.select().where(trades.c.status == "CLOSED")).all()
+            rows = c.execute(trades.select().where(trades.c.status == "CLOSED", trades.c.workspace == self.workspace.value)).all()
         return [self._trade(r) for r in rows]
 
     # ------------------------------------------------------------------ paper positions
 
     def insert_paper_position(self, d: dict[str, Any]) -> None:
+        self.assert_run_scope(d["run_id"])
+        d = {**d, "workspace": self.workspace.value}
         with self.engine.begin() as c:
             c.execute(paper_positions.insert().values(**d))
 
     def update_paper_position(self, paper_id: str, **fields: Any) -> None:
+        if {"workspace", "run_id", "paper_id"} & fields.keys():
+            raise ValueError("identité persistée immuable")
         with self.engine.begin() as c:
             c.execute(
-                paper_positions.update().where(paper_positions.c.paper_id == paper_id).values(**fields)
+                paper_positions.update().where(paper_positions.c.paper_id == paper_id, paper_positions.c.workspace == self.workspace.value).values(**fields)
             )
 
     def get_paper_position(self, paper_id: str) -> dict[str, Any] | None:
         with self.engine.connect() as c:
             row = c.execute(
-                paper_positions.select().where(paper_positions.c.paper_id == paper_id)
+                paper_positions.select().where(paper_positions.c.paper_id == paper_id, paper_positions.c.workspace == self.workspace.value)
             ).first()
         return dict(row._mapping) if row else None
 
     def list_paper_positions(self, run_id: str, status: str | None = None) -> list[dict[str, Any]]:
-        q = paper_positions.select().where(paper_positions.c.run_id == run_id)
+        q = paper_positions.select().where(paper_positions.c.run_id == run_id, paper_positions.c.workspace == self.workspace.value)
         if status:
             q = q.where(paper_positions.c.status == status)
         q = q.order_by(paper_positions.c.opened_at)

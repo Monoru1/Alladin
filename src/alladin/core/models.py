@@ -20,6 +20,7 @@ from alladin.core.enums import (
     Side,
     SymbolTradeMode,
 )
+from alladin.core.workspace import WorkspaceId
 
 
 def utcnow() -> datetime:
@@ -98,6 +99,7 @@ class InstrumentSpec(BaseModel):
 
 
 class AccountSnapshot(BaseModel):
+    account_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     login_masked: str
     server: str
     currency: str
@@ -133,6 +135,7 @@ class OwnedPosition(BaseModel):
     """Vue métier canonique d'une position ALLADIN, indépendante du broker."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
 
     position_id: str
     run_id: str

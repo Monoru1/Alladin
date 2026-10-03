@@ -166,6 +166,7 @@ class PositionMonitor:
         risk = 0.0
         trade = TradeRecord(
             trade_id=f"adopted-{pos.ticket}",
+            workspace=self.run.workspace,
             run_id=self.run.run_id,
             symbol=pos.symbol,
             side=pos.side.value,

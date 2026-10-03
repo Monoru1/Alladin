@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import random
 from datetime import UTC, datetime, timedelta
@@ -207,6 +208,7 @@ class MockBroker(b.BrokerAdapter):
         equity = self._balance + floating
         margin = sum(self._margin_for(p.symbol, p.volume, p.price_open) for p in self._positions.values())
         return AccountSnapshot(
+            account_fingerprint=hashlib.sha256(f"mock:{self._currency}".encode()).hexdigest(),
             login_masked="****MOCK",
             server="Mock-Server",
             currency=self._currency,

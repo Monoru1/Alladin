@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from alladin.core.enums import Timeframe
 from alladin.core.models import Bar
+from alladin.core.workspace import WorkspaceId
 
 metadata = MetaData()
 
@@ -56,6 +57,9 @@ cycle_input_bars = Table(
     Column("timeframe", String, primary_key=True),
     Column("ts", Integer, primary_key=True),
 )
+
+for _table in metadata.tables.values():
+    _table.append_column(Column("workspace", String, nullable=False, default="ALLADIN", primary_key=True))
 
 _TRIGGERS = [
     "CREATE TRIGGER IF NOT EXISTS bars_no_update BEFORE UPDATE ON market_bars "
@@ -127,18 +131,32 @@ def _available_at(bar: Bar, timeframe: Timeframe) -> datetime:
 
 
 def _fingerprint(rows: Sequence[dict[str, Any]]) -> str:
-    body = json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    canonical = [{k: v for k, v in row.items() if k != "workspace"} for row in rows]
+    body = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 class MarketDataArchive:
-    def __init__(self, engine: Engine, *, read_only: bool = False) -> None:
+    def __init__(self, engine: Engine, *, read_only: bool = False, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> None:
         self.engine = engine
+        self.workspace = WorkspaceId(workspace)
         if not read_only:
             metadata.create_all(engine)
         if not read_only and engine.dialect.name == "sqlite":
             with engine.begin() as c:
+                c.exec_driver_sql("BEGIN IMMEDIATE")
                 self._migrate(c)
+                for table in metadata.tables.values():
+                    columns = {r[1] for r in c.execute(text(f"PRAGMA table_info({table.name})"))}
+                    if "workspace" in columns:
+                        continue
+                    legacy = f"{table.name}_legacy_workspace"
+                    c.execute(text(f"ALTER TABLE {table.name} RENAME TO {legacy}"))
+                    table.create(c)
+                    names = list(table.c.keys())
+                    expressions = [name if name in columns else "'ALLADIN'" for name in names]
+                    c.execute(text(f"INSERT INTO {table.name} ({','.join(names)}) SELECT {','.join(expressions)} FROM {legacy}"))
+                    c.execute(text(f"DROP TABLE {legacy}"))
                 for ddl in _TRIGGERS:
                     c.execute(text(ddl))
         self._last: dict[tuple[str, str], int | None] = {}
@@ -160,7 +178,7 @@ class MarketDataArchive:
         if key not in self._last:
             with self.engine.connect() as c:
                 v = c.execute(
-                    select(market_bars.c.ts)
+                    select(market_bars.c.ts).where(market_bars.c.workspace == self.workspace.value)
                     .where((market_bars.c.symbol == symbol) & (market_bars.c.timeframe == tf))
                     .order_by(market_bars.c.ts.desc()).limit(1)
                 ).scalar_one_or_none()
@@ -176,7 +194,7 @@ class MarketDataArchive:
             raise ValueError("un cycle archivé exige un cutoff de décision explicite")
         if not bars:
             if cycle_id is not None:
-                key = {"cycle_id": cycle_id, "symbol": symbol, "timeframe": timeframe.value}
+                key = {"workspace": self.workspace.value, "cycle_id": cycle_id, "symbol": symbol, "timeframe": timeframe.value}
                 window = {**key, "n_bars": 0, "first_ts": 0, "last_ts": 0,
                           "fingerprint": _fingerprint([]), "decision_at": _iso(decision_at)}
                 with self.engine.begin() as c:
@@ -189,7 +207,7 @@ class MarketDataArchive:
         tf = timeframe.value
         by_ts: dict[int, dict[str, Any]] = {}
         for bar in bars:
-            row = _bar_row(symbol, tf, bar)
+            row = {**_bar_row(symbol, tf, bar), "workspace": self.workspace.value}
             ts = row["ts"]
             if ts in by_ts and row != by_ts[ts]:
                 raise ArchiveConflictError(f"barre contradictoire dans le lot : {symbol} {tf} {ts}")
@@ -205,7 +223,7 @@ class MarketDataArchive:
             existing = {
                 row.ts: dict(row._mapping)
                 for row in c.execute(
-                    select(market_bars).where(
+                    select(market_bars).where(market_bars.c.workspace == self.workspace.value).where(
                         (market_bars.c.symbol == symbol)
                         & (market_bars.c.timeframe == tf)
                         & market_bars.c.ts.in_(by_ts)
@@ -228,7 +246,7 @@ class MarketDataArchive:
                 c.execute(insert(market_bars), new_rows)
             if cycle_id:
                 digest = _fingerprint(ordered)
-                key = {"cycle_id": cycle_id, "symbol": symbol, "timeframe": tf}
+                key = {"workspace": self.workspace.value, "cycle_id": cycle_id, "symbol": symbol, "timeframe": tf}
                 window = {
                     **key, "n_bars": len(ordered), "first_ts": ordered[0]["ts"],
                     "last_ts": ordered[-1]["ts"], "fingerprint": digest,
@@ -246,7 +264,7 @@ class MarketDataArchive:
                         raise ArchiveIncompleteError(f"fenêtre de cycle incomplète : {cycle_id} {symbol} {tf}")
         with self.engine.connect() as c:
             self._last[(symbol, tf)] = c.execute(
-                select(market_bars.c.ts)
+                select(market_bars.c.ts).where(market_bars.c.workspace == self.workspace.value)
                 .where((market_bars.c.symbol == symbol) & (market_bars.c.timeframe == tf))
                 .order_by(market_bars.c.ts.desc()).limit(1)
             ).scalar_one()
@@ -262,7 +280,7 @@ class MarketDataArchive:
         *,
         available_until: datetime | None = None,
     ) -> list[Bar]:
-        q = select(market_bars).where(
+        q = select(market_bars).where(market_bars.c.workspace == self.workspace.value).where(
             (market_bars.c.symbol == symbol) & (market_bars.c.timeframe == timeframe.value)
         )
         if since is not None:
@@ -299,7 +317,7 @@ class MarketDataArchive:
             for window in windows:
                 symbol = str(window["symbol"])
                 tf = Timeframe(window["timeframe"])
-                key = {"cycle_id": cycle_id, "symbol": symbol, "timeframe": tf.value}
+                key = {"workspace": self.workspace.value, "cycle_id": cycle_id, "symbol": symbol, "timeframe": tf.value}
                 try:
                     members = list(c.execute(
                         select(cycle_input_bars.c.ts).filter_by(**key).order_by(cycle_input_bars.c.ts)
@@ -316,7 +334,7 @@ class MarketDataArchive:
                     continue
                 try:
                     rows = list(c.execute(
-                        select(market_bars)
+                        select(market_bars).where(market_bars.c.workspace == self.workspace.value)
                         .where((market_bars.c.symbol == symbol) & (market_bars.c.timeframe == tf.value)
                                & market_bars.c.ts.in_(members))
                         .order_by(market_bars.c.ts)
@@ -340,7 +358,7 @@ class MarketDataArchive:
     def cycle_inputs(self, cycle_id: str) -> list[dict[str, Any]]:
         try:
             with self.engine.connect() as c:
-                rows = c.execute(select(cycle_inputs).where(cycle_inputs.c.cycle_id == cycle_id)
+                rows = c.execute(select(cycle_inputs).where(cycle_inputs.c.workspace == self.workspace.value, cycle_inputs.c.cycle_id == cycle_id)
                                  .order_by(cycle_inputs.c.symbol, cycle_inputs.c.timeframe)).all()
         except SQLAlchemyError as exc:
             raise ArchiveIncompleteError(f"archive absente ou incompatible pour le cycle {cycle_id}") from exc
@@ -348,6 +366,6 @@ class MarketDataArchive:
 
     def stats(self) -> dict[str, Any]:
         with self.engine.connect() as c:
-            n = c.execute(text("SELECT COUNT(*) FROM market_bars")).scalar_one()
-            s = c.execute(text("SELECT COUNT(DISTINCT symbol) FROM market_bars")).scalar_one()
+            n = c.execute(text("SELECT COUNT(*) FROM market_bars WHERE workspace=:w"), {"w": self.workspace.value}).scalar_one()
+            s = c.execute(text("SELECT COUNT(DISTINCT symbol) FROM market_bars WHERE workspace=:w"), {"w": self.workspace.value}).scalar_one()
         return {"bars": int(n), "symbols": int(s)}

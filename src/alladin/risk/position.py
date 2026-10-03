@@ -16,6 +16,7 @@ from alladin.brain import Action, ActionProposal
 from alladin.brokers.base import BrokerCapabilities
 from alladin.core.enums import AccountType, RunMode, RunState, Side
 from alladin.core.models import InstrumentSpec, OwnedPosition, Tick
+from alladin.core.workspace import WorkspaceId
 from alladin.risk.models import RejectCode, RiskDecision, RiskReason
 
 MAX_CONTEXT_AGE = timedelta(seconds=60)
@@ -23,6 +24,7 @@ MAX_CONTEXT_AGE = timedelta(seconds=60)
 
 class PositionActionContext(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
 
     run_id: str
     mode: RunMode
@@ -56,7 +58,7 @@ def evaluate_position_action(proposal: ActionProposal, ctx: PositionActionContex
     management = (Action.HOLD, Action.CLOSE, Action.MODIFY_STOP, Action.MODIFY_TARGET, Action.PARTIAL_CLOSE)
     if proposal.action not in management:
         reject(RejectCode.POSITION_ACTION_UNSUPPORTED, "action hors gestion de position")
-    if (proposal.run_id != ctx.run_id or pos.run_id != ctx.run_id):
+    if (proposal.run_id != ctx.run_id or pos.run_id != ctx.run_id or pos.workspace != ctx.workspace):
         reject(RejectCode.RUN_MISMATCH, "position/proposition/contexte de runs différents")
     if (pos.status != "OPEN" or pos.symbol != proposal.symbol
             or (p.position_id is not None and p.position_id != pos.position_id)

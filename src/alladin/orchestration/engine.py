@@ -114,6 +114,9 @@ class OrchestrationEngine:
     def _run_cycle(self, cycle_id: str) -> CycleOutcome:
         rid = self.run.run_id
 
+        # Read-only reconciliation never retries a management order.
+        self.execution.position_actions.reconcile_pending(self.paper_engine)
+
         # 0. PAPER : tick les positions paper avant le scan (SL/TP auto)
         if self.run_mode is RunMode.PAPER and self.paper_engine is not None:
             for pc in self.paper_engine.tick_all():
@@ -225,27 +228,17 @@ class OrchestrationEngine:
                 shortlist, proposal.proposal_id,
             )
         if proposal.action not in (Action.LONG, Action.SHORT):
-            decision = self.execution.risk.evaluate_position_action(
-                proposal, mode=self.run_mode, account_type=acct.account_type,
-                positions=self.execution.my_positions(),
-                kill_switch_active=self.execution.killswitch.is_active(),
-                run_state=self.run.watchdog.run_state,
-            )
-            self.journal.log(rid, EventType.RISK_DECISION,
-                             {"proposal_id": proposal.proposal_id, "opportunity_id": proposal.opportunity_id,
-                              "action": proposal.action.value, "status": decision.status,
-                              **decision.model_dump(mode="json"), "reason_lines": decision.reason_lines()})
-            if decision.approved:
-                self.journal.log(rid, EventType.POSITION_ACTION,
-                                 {"proposal_id": proposal.proposal_id, "opportunity_id": proposal.opportunity_id,
-                                  "position_ticket": proposal.parameters.position_ticket,
-                                  "action": "HOLD", "status": "APPROVED"})
+            management_result = self.execution.submit_position_action(proposal, self.run_mode, self.paper_engine)
+            if management_result.confirmed:
+                # Reconcile trades and watchdog from actual broker deals after confirmation.
+                if self.run_mode is RunMode.DEMO:
+                    self.monitor.sync()
                 return CycleOutcome(cycle=self._cycle, run_state=self.run.watchdog.run_state.value,
-                                    decision="HOLD", reason="HOLD validé", shortlist=shortlist)
-            self.journal.log(rid, EventType.POSITION_ACTION_REJECTED,
-                             {"proposal_id": proposal.proposal_id, "reasons": decision.reason_lines()})
-            return self._no_trade(scan, evaluated, self.agent.name, "; ".join(decision.reason_lines()), shortlist,
-                                  proposal.proposal_id)
+                                    decision=proposal.action.value,
+                                    reason="HOLD validé" if proposal.action is Action.HOLD else "action confirmée",
+                                    shortlist=shortlist, management_result=management_result.model_dump(mode="json"))
+            return self._no_trade(scan, evaluated, self.agent.name,
+                                  "; ".join(management_result.messages) or management_result.status, shortlist, proposal.proposal_id)
 
         # 6. validation avant le même TradeIntent / RiskEngine que le chemin historique.
         intent, problems = self._intent_from_proposal(proposal, shortlist)

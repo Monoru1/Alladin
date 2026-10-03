@@ -792,7 +792,7 @@ def archive_stats() -> None:
     from alladin.market.archive import MarketDataArchive
 
     repo = JournalRepository.from_url(get_settings().db_url)
-    arch = MarketDataArchive(repo.engine)
+    arch = MarketDataArchive(repo.engine, workspace=repo.workspace)
     s = arch.stats()
     out(f"Barres archivees : {s['bars']:,}")
     out(f"Symboles         : {s['symbols']}")
@@ -805,7 +805,7 @@ def archive_inspect(cycle_id: str) -> None:
     from alladin.market.archive import MarketDataArchive
 
     repo = JournalRepository.from_url(get_settings().db_url)
-    arch = MarketDataArchive(repo.engine)
+    arch = MarketDataArchive(repo.engine, workspace=repo.workspace)
     inputs = arch.cycle_inputs(cycle_id)
     if not inputs:
         out(f"Aucune donnée archivée pour le cycle {cycle_id}")

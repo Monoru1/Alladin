@@ -703,3 +703,21 @@ Validation : 108 nouveaux tests couvrent les plans BUY/SELL dans les deux modes,
 **Lot F toujours incomplet / activation inchangée :** la porte runtime historique n'approuve encore que HOLD DEMO par ticket. La nouvelle politique n'est volontairement pas branchée sur cette porte, car l'orchestrateur interprète aujourd'hui toute approbation de gestion comme HOLD. Les nouveaux plans ne sont pas des exécutions. L'exécution, la confirmation, la réconciliation, l'idempotence persistante et le journal des actions intermédiaires restent à intégrer avant activation. PAPER ne simule pas encore les modifications/fermetures partielles ; son volume original correspond donc au volume de sa position actuellement ouverte, à préserver dans sa future migration. Pas de changement UI/SNN/Jafar.
 
 **Prochain incrément exact :** ajouter un résultat d'action de position distinct de HOLD, une réclamation persistante unique par proposal_id et la confirmation de l'état post-action ; implémenter mutations PAPER atomiques et restauration avant de connecter `plan_position_action` au chemin Brain. Ne jamais convertir une approbation en succès sans observation du résultat.
+
+### Lots F et G — validation logicielle terminée (2026-10-03)
+
+| Lot | Critère | Preuve |
+| --- | --- | --- |
+| F | Gestion autonome des cinq actions via Risk/Execution | tests/test_position_lifecycle.py ; tests/test_position_risk.py |
+| F | Confirmation, claim durable, aucune répétition ambiguë | reprise sur fichier SQLite, réponse perdue, transaction PAPER annulée |
+| F | Cycle ouverture, maintien, modification, clôture | intégration OrchestrationEngine DEMO mock et PAPER |
+| G | Workspace, binding compte et plages magic | tests/test_workspaces.py |
+| G | Isolation journal, positions, recherche, archive/replay | même base et mêmes identifiants, requêtes scoped |
+| G | Compatibilité historique | migrations des bases legacy, hashes et immutabilité conservés |
+
+Recette MT5 réelle encore requise sur compte DEMO. La suite porte sur les lots
+suivants de la plateforme ; aucune capacité LIVE ni stratégie Jafar n'est
+ouverte implicitement par cette validation.
+
+Contrôles finaux : **552 passed, 3 skipped** (intégration MT5), Ruff sans
+erreur, mypy sans erreur sur 81 fichiers source, git diff --check propre.

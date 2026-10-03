@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from alladin.core.workspace import WorkspaceId
+
 
 class SourceType(StrEnum):
     ACADEMIC = "ACADEMIC"
@@ -32,6 +34,7 @@ class StrategyStatus(StrEnum):
 
 
 class ResearchSource(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     source_id: str
     url: str | None = None
     title: str
@@ -43,6 +46,7 @@ class ResearchSource(BaseModel):
 
 
 class ResearchFinding(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     finding_id: str
     source_ids: list[str]
     claim: str
@@ -54,6 +58,7 @@ class ResearchFinding(BaseModel):
 
 
 class StrategyHypothesis(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     hypothesis_id: str
     finding_ids: list[str]
     statement: str
@@ -65,6 +70,7 @@ class StrategyHypothesis(BaseModel):
 
 
 class StrategyVersion(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     strategy_id: str
     version: str
     parent_version: str | None = None
@@ -77,6 +83,7 @@ class StrategyVersion(BaseModel):
 
 
 class StrategyExperiment(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     experiment_id: str
     strategy_id: str
     strategy_version: str
@@ -98,6 +105,7 @@ class StrategyExperiment(BaseModel):
 
 
 class ExperimentResult(BaseModel):
+    workspace: WorkspaceId = WorkspaceId.ALLADIN
     experiment_id: str
     trades: int = Field(ge=0)
     wins: int = Field(ge=0)

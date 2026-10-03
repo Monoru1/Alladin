@@ -11,6 +11,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from alladin.brain import ActionProposal
 from alladin.brokers.base import BrokerAdapter
 from alladin.challenge.models import WatchdogReport
 from alladin.core.approval import issue_close_token
@@ -26,6 +27,7 @@ from alladin.core.models import (
     TradeIntent,
 )
 from alladin.execution.models import ExecStatus, ExecutionResult, comment_matches, make_comment
+from alladin.execution.position_actions import PositionActionResult, PositionActions
 from alladin.journal.models import EventType, TradeRecord
 from alladin.journal.service import JournalService
 from alladin.orchestration.state import RunContext, RunManager
@@ -58,6 +60,27 @@ class ExecutionService:
         self.clock = clock or (lambda: datetime.now(UTC))
         self.deviation = deviation_points
         self.correlations = correlations
+        self.position_actions = PositionActions(self)
+
+    def owned_broker_comment(self, ticket: int | None) -> str:
+        if ticket is None:
+            return make_comment(self.run.run_id, self.run.magic)
+        pos = next((p for p in self.my_positions() if p.ticket == ticket), None)
+        if pos is None:
+            raise ExecutionBlockedError("position disparue avant construction de requête")
+        return pos.comment
+
+    def submit_position_action(
+        self, proposal: ActionProposal, mode: RunMode, paper: PaperExperimentEngine | None = None,
+    ) -> PositionActionResult:
+        try:
+            return self.position_actions.submit(proposal, mode, paper)
+        except Exception as exc:
+            self.journal.log(self.run.run_id, EventType.POSITION_ACTION_REJECTED,
+                             {"proposal_id": proposal.proposal_id, "reason": str(exc)})
+            row = self.position_actions._row(proposal.proposal_id)
+            return PositionActionResult(proposal_id=proposal.proposal_id, action=proposal.action,
+                                        status="PENDING_CONFIRMATION" if row else "BLOCKED", messages=[str(exc)])
 
     # ------------------------------------------------------------------ identification ALLADIN
 
@@ -66,6 +89,14 @@ class ExecutionService:
         return pos.magic == self.run.magic and comment_matches(
             pos.comment, self.run.run_id, self.run.magic
         )
+
+    def assert_account_binding(self, account: AccountSnapshot) -> None:
+        binding = self.run.account_binding
+        if binding and (binding.workspace != self.run.workspace or binding.broker != self.broker.name
+                        or binding.account_ref != account.login_masked or binding.server != account.server
+                        or (binding.account_fingerprint is not None
+                            and binding.account_fingerprint != account.account_fingerprint)):
+            raise ExecutionBlockedError("compte/broker hors binding du workspace")
 
     def my_positions(self) -> list[Position]:
         return [p for p in self.broker.positions() if self.owns(p)]
@@ -83,11 +114,11 @@ class ExecutionService:
             if paper_engine is None or paper_engine.run_id != rid:
                 return ()
             return tuple(OwnedPosition(
-                position_id=f"POS-PAPER-{rid}-{p.paper_id}", run_id=rid,
+                position_id=f"POS-PAPER-{rid}-{p.paper_id}", run_id=rid, workspace=self.run.workspace,
                 trade_id=str(p.intent.get("intent_id") or p.paper_id),
                 opportunity_id=p.intent.get("opportunity_id"), proposal_id=p.intent.get("proposal_id"),
                 paper_id=p.paper_id, symbol=p.symbol, side=p.side,
-                original_volume=p.volume, remaining_volume=p.volume, entry_price=p.entry_price,
+                original_volume=p.original_volume or p.volume, remaining_volume=p.volume, entry_price=p.entry_price,
                 stop_loss=p.sl, take_profit=p.tp, mode=RunMode.PAPER,
             ) for p in paper_engine.open_positions() if p.run_id == rid and p.status == "OPEN")
         trades = {t.ticket: t for t in self.manager.repo.trades_for_run(rid, "OPEN") if t.ticket is not None}
@@ -97,7 +128,7 @@ class ExecutionService:
             if t is None or t.symbol != p.symbol or t.side != p.side.value:
                 continue
             result.append(OwnedPosition(
-                position_id=f"POS-DEMO-{rid}-{t.trade_id}", run_id=rid, trade_id=t.trade_id,
+                position_id=f"POS-DEMO-{rid}-{t.trade_id}", run_id=rid, workspace=self.run.workspace, trade_id=t.trade_id,
                 opportunity_id=t.opportunity_id, proposal_id=t.proposal_id, broker_ticket=p.ticket,
                 symbol=p.symbol, side=p.side, original_volume=t.volume, remaining_volume=p.volume,
                 entry_price=p.price_open, stop_loss=p.sl, take_profit=p.tp, mode=RunMode.DEMO,
@@ -113,6 +144,7 @@ class ExecutionService:
         # 1. DEMO uniquement — avant toute autre chose, fail closed
         try:
             account = self.broker.assert_demo()
+            self.assert_account_binding(account)
         except ExecutionBlockedError as exc:
             return self._blocked(intent, str(exc))
 
@@ -252,6 +284,7 @@ class ExecutionService:
         account_after = self.broker.account_info()
         trade = TradeRecord(
             trade_id=intent.intent_id,
+            workspace=self.run.workspace,
             proposal_id=intent.proposal_id,
             opportunity_id=intent.opportunity_id,
             run_id=rid,
@@ -347,6 +380,10 @@ class ExecutionService:
     # ------------------------------------------------------------------ fermeture
 
     def _close(self, pos: Position, reason: str) -> bool:
+        try:
+            self.assert_account_binding(self.broker.assert_demo())
+        except ExecutionBlockedError:
+            return False
         rid = self.run.run_id
         tick = self.broker.tick(pos.symbol)
         request = OrderRequest(
@@ -384,7 +421,13 @@ class ExecutionService:
                     "reason": reason,
                 },
             )
-        return result.accepted
+        if not result.accepted:
+            return False
+        # A protective send is successful only if the owned position is actually gone.
+        try:
+            return not any(p.ticket == pos.ticket for p in self.my_positions())
+        except Exception:
+            return False
 
     def close_position(self, ticket: int, reason: str = "fermeture manuelle") -> bool:
         pos = next((p for p in self.my_positions() if p.ticket == ticket), None)

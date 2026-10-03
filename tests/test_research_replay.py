@@ -78,9 +78,9 @@ def test_replay_fails_when_a_referenced_historical_bar_is_missing(svc: Component
     MarketDataArchive(svc.repo.engine)
     stamp = int((svc.broker.now() - timedelta(hours=2)).timestamp())
     with svc.repo.engine.begin() as conn:
-        conn.execute(text("INSERT INTO cycle_inputs VALUES (:cycle, 'EURUSD', 'H1', 1, :ts, :ts, :hash, :cutoff)"),
+        conn.execute(text("INSERT INTO cycle_inputs (cycle_id,symbol,timeframe,n_bars,first_ts,last_ts,fingerprint,decision_at,workspace) VALUES (:cycle, 'EURUSD', 'H1', 1, :ts, :ts, :hash, :cutoff, 'ALLADIN')"),
                      {"cycle": "CYC-MISSING", "ts": stamp, "hash": "missing", "cutoff": svc.broker.now().isoformat()})
-        conn.execute(text("INSERT INTO cycle_input_bars VALUES ('CYC-MISSING', 'EURUSD', 'H1', :ts)"), {"ts": stamp})
+        conn.execute(text("INSERT INTO cycle_input_bars (cycle_id,symbol,timeframe,ts,workspace) VALUES ('CYC-MISSING', 'EURUSD', 'H1', :ts, 'ALLADIN')"), {"ts": stamp})
     svc.journal.current_cycle = "CYC-MISSING"
     svc.journal.log(svc.run.run_id, "market.scan", {"analysed": 1})
     svc.journal.current_cycle = None

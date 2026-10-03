@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import time
 from datetime import UTC, datetime, timedelta
@@ -236,6 +237,7 @@ class MT5Broker(b.BrokerAdapter):
             raise BrokerConnectionError(f"aucun compte de trading actif : {explain_error(mt5.last_error())}")
         login = str(a.login)
         return AccountSnapshot(
+            account_fingerprint=hashlib.sha256(f"mt5:{a.server}:{a.login}".encode()).hexdigest(),
             login_masked="*" * max(0, len(login) - 3) + login[-3:],
             server=str(a.server),
             currency=str(a.currency),

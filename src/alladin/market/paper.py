@@ -10,6 +10,7 @@ et restaurees au redemarrage.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -47,6 +48,9 @@ class PaperPosition:
     tp: float | None
     opened_at: datetime
     intent: dict[str, Any] = field(default_factory=dict)
+    original_volume: float | None = None
+    realized_pnl: float = 0.0
+    initial_risk: float = 0.0
 
     # Filled at close
     exit_price: float | None = None
@@ -103,6 +107,9 @@ class PaperPosition:
             "symbol": self.symbol,
             "side": self.side.value,
             "volume": self.volume,
+            "original_volume": self.original_volume or self.volume,
+            "realized_pnl": self.realized_pnl,
+            "initial_risk": self.initial_risk,
             "entry_price": self.entry_price,
             "sl": self.sl,
             "tp": self.tp,
@@ -127,6 +134,9 @@ class PaperPosition:
             "symbol": self.symbol,
             "side": self.side.value,
             "volume": self.volume,
+            "original_volume": self.original_volume or self.volume,
+            "realized_pnl": self.realized_pnl,
+            "initial_risk": self.initial_risk,
             "entry_price": self.entry_price,
             "sl": self.sl,
             "tp": self.tp,
@@ -169,6 +179,9 @@ class PaperPosition:
             mfe_pips=d.get("mfe_pips", 0.0),
             mae_pips=d.get("mae_pips", 0.0),
             intent=intent,
+            original_volume=d.get("original_volume") or d["volume"],
+            realized_pnl=d.get("realized_pnl") or 0.0,
+            initial_risk=d.get("initial_risk") or 0.0,
         )
 
 
@@ -193,6 +206,8 @@ class PaperExperimentEngine:
         """Restaure les positions ouvertes depuis la persistance. Retourne le nombre restaure."""
         if self._repo is None:
             return 0
+        self._open.clear()
+        self._closed.clear()
         rows = self._repo.list_paper_positions(self.run_id, status="OPEN")
         for row in rows:
             pos = PaperPosition.from_persistence(row)
@@ -238,6 +253,8 @@ class PaperExperimentEngine:
             tp=tp,
             opened_at=now,
             intent=intent.model_dump(mode="json"),
+            original_volume=volume,
+            initial_risk=decision.risk_amount if decision else 0.0,
         )
         self._open[pos.paper_id] = pos
         self._persist_open(pos)
@@ -261,6 +278,7 @@ class PaperExperimentEngine:
             if exit_status:
                 exit_price = tick.bid if pos.side == Side.BUY else tick.ask
                 pos.close(exit_price, exit_status, now, point)
+                self.realize(pos, exit_price, pos.volume)
                 del self._open[paper_id]
                 self._closed.append(pos)
                 newly_closed.append(pos)
@@ -282,6 +300,7 @@ class PaperExperimentEngine:
         point = spec.point if spec else 0.00001
         exit_price = tick.bid if pos.side == Side.BUY else tick.ask
         pos.close(exit_price, reason, now, point)
+        self.realize(pos, exit_price, pos.volume)
         del self._open[paper_id]
         self._closed.append(pos)
         self._persist_close(pos)
@@ -289,6 +308,19 @@ class PaperExperimentEngine:
 
     def open_positions(self) -> list[PaperPosition]:
         return list(self._open.values())
+
+    def realize(self, pos: PaperPosition, price: float, volume: float) -> float:
+        spec = self.broker.symbol_spec(pos.symbol)
+        if (spec is None or not all(math.isfinite(v) and v > 0 for v in
+                                    (price, volume, pos.entry_price, spec.trade_tick_size, spec.trade_tick_value, spec.point))
+                or volume > pos.volume):
+            raise ValueError("paper P&L requires instrument specification")
+        delta = (price - pos.entry_price) * pos.side.sign / spec.trade_tick_size * spec.trade_tick_value * volume
+        pos.realized_pnl += delta
+        original = pos.original_volume or pos.volume
+        factor = spec.point / spec.trade_tick_size * spec.trade_tick_value * original
+        pos.pnl_pips = pos.realized_pnl / factor if factor else 0.0
+        return delta
 
     def closed_positions(self) -> list[PaperPosition]:
         return list(self._closed)
@@ -332,6 +364,7 @@ class PaperExperimentEngine:
             pnl_pips=pos.pnl_pips,
             mfe_pips=pos.mfe_pips,
             mae_pips=pos.mae_pips,
+            realized_pnl=pos.realized_pnl,
         )
 
     def _persist_excursion(self, pos: PaperPosition) -> None:

@@ -742,3 +742,41 @@ Le registre contient désormais explicitement les décisions transversales qui �
 - DECISION-022 : Strategy Harvester gouverné par provenance/licence, audit lookahead/repaint et expérimentation clean-room.
 
 Ces décisions sont des contraintes pour les prochains lots, pas des fonctionnalités toutes déjà implémentées.
+
+## Validation logicielle des lots F et G — 2026-10-03
+
+F est activé dans OrchestrationEngine : HOLD, MODIFY_STOP, MODIFY_TARGET,
+PARTIAL_CLOSE et CLOSE suivent Risk -> Execution avec une vue canonique de la
+position. Une proposition approuvée est persistée avant tout envoi. La réponse
+du broker seule ne vaut pas confirmation : protections/volume et nouveaux deals
+de sortie sont réconciliés. Une réponse absente ou ambiguë reste
+PENDING_CONFIRMATION, verrouille la position et n'est jamais renvoyée au
+redémarrage. Chaque claim et résultat est journalisé. Le kill switch, le compte
+DEMO et son binding sont revérifiés avant l'envoi. PAPER confirme et modifie sa
+position dans une même transaction ; le P&L réalisé des fractions est conservé.
+
+G introduit WorkspaceId ALLADIN/JAFAR, des plages de magic disjointes,
+AccountBinding avec empreinte de compte MT5, et les scopes des runs, trades,
+événements, positions PAPER, recherches, archives et replay. Les identifiants
+research/archive identiques restent indépendants dans une base commune. Les
+répertoires et kill switches par défaut sont distincts. Ce lot fournit les
+fondations Jafar ; ses stratégies, adapters crypto et son cockpit restent les
+lots suivants.
+
+Les migrations SQLite attribuent ALLADIN aux anciennes données sans réécrire
+les hashes historiques. Les tables research/archive sont reconstruites avec
+des clés incluant workspace ; les protections d'immutabilité sont rétablies.
+Avant de lancer cette version sur une base existante, sauvegarder la base :
+revenir au code précédent après migration nécessite aussi restaurer cette
+sauvegarde. Les migrations ont été testées sur des bases temporaires, aucun
+compte réel ni base de production n'a été manipulé.
+
+Validation : cycles OPEN -> HOLD -> MODIFY -> CLOSE en DEMO mock et PAPER,
+BUY/SELL, clôture partielle, anti-doublon, reprise SQLite après réponse perdue,
+annulation transactionnelle PAPER, isolation et migrations historiques.
+Les trois tests d'intégration du terminal MT5 restent explicitement ignorés
+sans --run-mt5 : la recette sur un terminal connecté à un compte DEMO demeure
+à réaliser sur le poste utilisateur. LIVE reste bloqué.
+
+Contrôles finaux : **552 passed, 3 skipped** (intégration MT5), Ruff sans
+erreur, mypy sans erreur sur 81 fichiers source, git diff --check propre.

@@ -31,6 +31,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+from alladin.core.workspace import WorkspaceId
 from alladin.research.models import (
     ExperimentResult,
     ResearchFinding,
@@ -105,8 +106,8 @@ _hypotheses = Table(
 _versions = Table(
     "research_strategy_versions",
     _meta,
-    Column("strategy_id", String, nullable=False),
-    Column("version", String, nullable=False),
+    Column("strategy_id", String, nullable=False, primary_key=True),
+    Column("version", String, nullable=False, primary_key=True),
     Column("parent_version", String, nullable=True),
     Column("source_ids", Text, default="[]"),
     Column("hypothesis_ids", Text, default="[]"),
@@ -153,6 +154,10 @@ _results = Table(
 )
 
 
+# Composite identities allow the same source/strategy/experiment IDs in isolated workspaces.
+for _table in _meta.tables.values():
+    _table.append_column(Column("workspace", String, nullable=False, default="ALLADIN", primary_key=True))
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -173,6 +178,7 @@ def _as_utc(value: datetime) -> datetime:
 def _experiment_from_row(row: Any) -> StrategyExperiment:
     return StrategyExperiment(
         experiment_id=row.experiment_id,
+        workspace=row.workspace,
         strategy_id=row.strategy_id,
         strategy_version=row.strategy_version,
         dataset=row.dataset,
@@ -190,6 +196,7 @@ def _experiment_from_row(row: Any) -> StrategyExperiment:
 def _result_from_row(row: Any) -> ExperimentResult:
     return ExperimentResult(
         experiment_id=row.experiment_id,
+        workspace=row.workspace,
         trades=int(row.trades), wins=int(row.wins), losses=int(row.losses),
         win_rate=row.win_rate, expectancy=row.expectancy,
         profit_factor=row.profit_factor, max_drawdown=row.max_drawdown,
@@ -200,9 +207,11 @@ def _result_from_row(row: Any) -> ExperimentResult:
 class ResearchRepository:
     """Dépôt SQLAlchemy pour les modèles Research (SQLite)."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> None:
         self.engine = engine
+        self.workspace = WorkspaceId(workspace)
         _meta.create_all(engine)
+        self._migrate_workspaces()
         if engine.dialect.name == "sqlite":
             with engine.begin() as conn:
                 columns = {row[1] for row in conn.execute(text("PRAGMA table_info(research_experiments)"))}
@@ -219,22 +228,46 @@ class ResearchRepository:
                         "BEGIN SELECT RAISE(ABORT, 'research records are immutable'); END"
                     ))
 
-    @classmethod
-    def from_url(cls, db_url: str) -> ResearchRepository:
-        return cls(create_engine(db_url, connect_args={"check_same_thread": False}))
+    def _migrate_workspaces(self) -> None:
+        if self.engine.dialect.name != "sqlite":
+            return
+        # Rebuild legacy primary keys transactionally; history is copied unchanged.
+        with self.engine.begin() as conn:
+            conn.exec_driver_sql("BEGIN IMMEDIATE")
+            for table in _meta.tables.values():
+                columns = {r[1] for r in conn.execute(text(f"PRAGMA table_info({table.name})"))}
+                if "workspace" in columns:
+                    continue
+                legacy = f"{table.name}_legacy_workspace"
+                conn.execute(text(f"ALTER TABLE {table.name} RENAME TO {legacy}"))
+                table.create(conn)
+                names = list(table.c.keys())
+                expressions = [name if name in columns else "'ALLADIN'" if name == "workspace" else "NULL" for name in names]
+                conn.execute(text(f"INSERT INTO {table.name} ({','.join(names)}) SELECT {','.join(expressions)} FROM {legacy}"))
+                conn.execute(text(f"DROP TABLE {legacy}"))
+
+    def _check_workspace(self, record: Any) -> None:
+        if record.workspace != self.workspace:
+            raise ValueError("research record hors workspace")
 
     @classmethod
-    def from_engine(cls, engine: Engine) -> ResearchRepository:
-        return cls(engine)
+    def from_url(cls, db_url: str, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> ResearchRepository:
+        return cls(create_engine(db_url, connect_args={"check_same_thread": False}), workspace)
+
+    @classmethod
+    def from_engine(cls, engine: Engine, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> ResearchRepository:
+        return cls(engine, workspace)
 
     # ------------------------------------------------------------------ sources
 
     def save_source(self, source: ResearchSource) -> None:
+        self._check_workspace(source)
         with self.engine.begin() as conn:
             conn.execute(
                 sqlite_insert(_sources).on_conflict_do_nothing(),
                 {
                     "source_id": source.source_id,
+                    "workspace": self.workspace.value,
                     "url": source.url,
                     "title": source.title,
                     "author": source.author,
@@ -249,12 +282,13 @@ class ResearchRepository:
     def get_source(self, source_id: str) -> ResearchSource | None:
         with self.engine.connect() as conn:
             row = conn.execute(
-                _sources.select().where(_sources.c.source_id == source_id)
+                _sources.select().where(_sources.c.workspace == self.workspace.value).where(_sources.c.source_id == source_id)
             ).first()
         if row is None:
             return None
         return ResearchSource(
             source_id=row.source_id,
+            workspace=row.workspace,
             url=row.url,
             title=row.title,
             author=row.author,
@@ -266,10 +300,11 @@ class ResearchRepository:
 
     def list_sources(self) -> list[ResearchSource]:
         with self.engine.connect() as conn:
-            rows = conn.execute(_sources.select().order_by(_sources.c.created_at)).all()
+            rows = conn.execute(_sources.select().where(_sources.c.workspace == self.workspace.value).order_by(_sources.c.created_at)).all()
         return [
             ResearchSource(
                 source_id=r.source_id,
+                workspace=r.workspace,
                 url=r.url,
                 title=r.title,
                 author=r.author,
@@ -284,11 +319,13 @@ class ResearchRepository:
     # ------------------------------------------------------------------ findings
 
     def save_finding(self, finding: ResearchFinding) -> None:
+        self._check_workspace(finding)
         with self.engine.begin() as conn:
             conn.execute(
                 sqlite_insert(_findings).on_conflict_do_nothing(),
                 {
                     "finding_id": finding.finding_id,
+                    "workspace": self.workspace.value,
                     "source_ids": _j(finding.source_ids),
                     "claim": finding.claim,
                     "market": finding.market,
@@ -302,10 +339,11 @@ class ResearchRepository:
 
     def list_findings(self) -> list[ResearchFinding]:
         with self.engine.connect() as conn:
-            rows = conn.execute(_findings.select().order_by(_findings.c.created_at)).all()
+            rows = conn.execute(_findings.select().where(_findings.c.workspace == self.workspace.value).order_by(_findings.c.created_at)).all()
         return [
             ResearchFinding(
                 finding_id=r.finding_id,
+                workspace=r.workspace,
                 source_ids=_from_j(r.source_ids),
                 claim=r.claim,
                 market=r.market,
@@ -320,11 +358,13 @@ class ResearchRepository:
     # ------------------------------------------------------------------ hypotheses
 
     def save_hypothesis(self, hyp: StrategyHypothesis) -> None:
+        self._check_workspace(hyp)
         with self.engine.begin() as conn:
             conn.execute(
                 sqlite_insert(_hypotheses).on_conflict_do_nothing(),
                 {
                     "hypothesis_id": hyp.hypothesis_id,
+                    "workspace": self.workspace.value,
                     "finding_ids": _j(hyp.finding_ids),
                     "statement": hyp.statement,
                     "entry_logic": hyp.entry_logic,
@@ -338,10 +378,11 @@ class ResearchRepository:
 
     def list_hypotheses(self) -> list[StrategyHypothesis]:
         with self.engine.connect() as conn:
-            rows = conn.execute(_hypotheses.select().order_by(_hypotheses.c.created_at)).all()
+            rows = conn.execute(_hypotheses.select().where(_hypotheses.c.workspace == self.workspace.value).order_by(_hypotheses.c.created_at)).all()
         return [
             StrategyHypothesis(
                 hypothesis_id=r.hypothesis_id,
+                workspace=r.workspace,
                 finding_ids=_from_j(r.finding_ids),
                 statement=r.statement,
                 entry_logic=r.entry_logic,
@@ -356,10 +397,11 @@ class ResearchRepository:
     # ------------------------------------------------------------------ strategy versions
 
     def save_version(self, version: StrategyVersion) -> None:
+        self._check_workspace(version)
         now = _now()
         with self.engine.begin() as conn:
             existing = conn.execute(
-                _versions.select()
+                _versions.select().where(_versions.c.workspace == self.workspace.value)
                 .where(_versions.c.strategy_id == version.strategy_id)
                 .where(_versions.c.version == version.version)
             ).first()
@@ -370,6 +412,7 @@ class ResearchRepository:
                     _versions.insert(),
                     {
                         "strategy_id": version.strategy_id,
+                    "workspace": self.workspace.value,
                         "version": version.version,
                         "parent_version": version.parent_version,
                         "source_ids": _j(version.source_ids),
@@ -385,7 +428,7 @@ class ResearchRepository:
                 # Seul le status peut être mis à jour
                 _validate_transition(StrategyStatus(existing.status), version.status)
                 conn.execute(
-                    _versions.update()
+                    _versions.update().where(_versions.c.workspace == self.workspace.value)
                     .where(_versions.c.strategy_id == version.strategy_id)
                     .where(_versions.c.version == version.version),
                     {"status": version.status.value, "updated_at": now},
@@ -394,21 +437,21 @@ class ResearchRepository:
     def update_status(self, strategy_id: str, version: str, status: StrategyStatus) -> None:
         with self.engine.begin() as conn:
             row = conn.execute(
-                _versions.select().where(_versions.c.strategy_id == strategy_id)
+                _versions.select().where(_versions.c.workspace == self.workspace.value).where(_versions.c.strategy_id == strategy_id)
                 .where(_versions.c.version == version)
             ).first()
             if row is None:
                 raise ValueError("unknown strategy version")
             _validate_transition(StrategyStatus(row.status), status)
             conn.execute(
-                _versions.update()
+                _versions.update().where(_versions.c.workspace == self.workspace.value)
                 .where(_versions.c.strategy_id == strategy_id)
                 .where(_versions.c.version == version),
                 {"status": status.value, "updated_at": _now()},
             )
 
     def list_versions(self, strategy_id: str | None = None) -> list[StrategyVersion]:
-        q = _versions.select().order_by(_versions.c.created_at)
+        q = _versions.select().where(_versions.c.workspace == self.workspace.value).order_by(_versions.c.created_at)
         if strategy_id:
             q = q.where(_versions.c.strategy_id == strategy_id)
         with self.engine.connect() as conn:
@@ -416,6 +459,7 @@ class ResearchRepository:
         return [
             StrategyVersion(
                 strategy_id=r.strategy_id,
+                workspace=r.workspace,
                 version=r.version,
                 parent_version=r.parent_version,
                 source_ids=_from_j(r.source_ids),
@@ -431,8 +475,9 @@ class ResearchRepository:
     # ------------------------------------------------------------------ experiments
 
     def save_experiment(self, exp: StrategyExperiment) -> None:
+        self._check_workspace(exp)
         with self.engine.begin() as conn:
-            existing = conn.execute(_experiments.select().where(_experiments.c.experiment_id == exp.experiment_id)).first()
+            existing = conn.execute(_experiments.select().where(_experiments.c.workspace == self.workspace.value).where(_experiments.c.experiment_id == exp.experiment_id)).first()
             if existing is not None:
                 stored = _experiment_from_row(existing)
                 if stored != exp.model_copy(update={
@@ -445,6 +490,7 @@ class ResearchRepository:
                 _experiments.insert(),
                 {
                     "experiment_id": exp.experiment_id,
+                    "workspace": self.workspace.value,
                     "strategy_id": exp.strategy_id,
                     "strategy_version": exp.strategy_version,
                     "dataset": exp.dataset,
@@ -461,7 +507,7 @@ class ResearchRepository:
             )
 
     def list_experiments(self, strategy_id: str | None = None) -> list[StrategyExperiment]:
-        q = _experiments.select().order_by(_experiments.c.created_at)
+        q = _experiments.select().where(_experiments.c.workspace == self.workspace.value).order_by(_experiments.c.created_at)
         if strategy_id:
             q = q.where(_experiments.c.strategy_id == strategy_id)
         with self.engine.connect() as conn:
@@ -471,8 +517,9 @@ class ResearchRepository:
     # ------------------------------------------------------------------ results
 
     def save_result(self, result: ExperimentResult) -> None:
+        self._check_workspace(result)
         with self.engine.begin() as conn:
-            existing = conn.execute(_results.select().where(_results.c.experiment_id == result.experiment_id)).first()
+            existing = conn.execute(_results.select().where(_results.c.workspace == self.workspace.value).where(_results.c.experiment_id == result.experiment_id)).first()
             if existing is not None:
                 if _result_from_row(existing) != result:
                     raise ValueError(f"conflicting experiment result: {result.experiment_id}")
@@ -481,6 +528,7 @@ class ResearchRepository:
                 _results.insert(),
                 {
                     "experiment_id": result.experiment_id,
+                    "workspace": self.workspace.value,
                     "trades": result.trades,
                     "wins": result.wins,
                     "losses": result.losses,
@@ -498,7 +546,7 @@ class ResearchRepository:
     def get_result(self, experiment_id: str) -> ExperimentResult | None:
         with self.engine.connect() as conn:
             row = conn.execute(
-                _results.select().where(_results.c.experiment_id == experiment_id)
+                _results.select().where(_results.c.workspace == self.workspace.value).where(_results.c.experiment_id == experiment_id)
             ).first()
         if row is None:
             return None
@@ -507,10 +555,10 @@ class ResearchRepository:
     def stats(self) -> dict[str, int]:
         with self.engine.connect() as conn:
             return {
-                "sources": conn.execute(text("SELECT COUNT(*) FROM research_sources")).scalar() or 0,
-                "findings": conn.execute(text("SELECT COUNT(*) FROM research_findings")).scalar() or 0,
-                "hypotheses": conn.execute(text("SELECT COUNT(*) FROM research_hypotheses")).scalar() or 0,
-                "versions": conn.execute(text("SELECT COUNT(*) FROM research_strategy_versions")).scalar() or 0,
-                "experiments": conn.execute(text("SELECT COUNT(*) FROM research_experiments")).scalar() or 0,
-                "results": conn.execute(text("SELECT COUNT(*) FROM research_experiment_results")).scalar() or 0,
+                "sources": conn.execute(text("SELECT COUNT(*) FROM research_sources WHERE workspace=:w"), {"w": self.workspace.value}).scalar() or 0,
+                "findings": conn.execute(text("SELECT COUNT(*) FROM research_findings WHERE workspace=:w"), {"w": self.workspace.value}).scalar() or 0,
+                "hypotheses": conn.execute(text("SELECT COUNT(*) FROM research_hypotheses WHERE workspace=:w"), {"w": self.workspace.value}).scalar() or 0,
+                "versions": conn.execute(text("SELECT COUNT(*) FROM research_strategy_versions WHERE workspace=:w"), {"w": self.workspace.value}).scalar() or 0,
+                "experiments": conn.execute(text("SELECT COUNT(*) FROM research_experiments WHERE workspace=:w"), {"w": self.workspace.value}).scalar() or 0,
+                "results": conn.execute(text("SELECT COUNT(*) FROM research_experiment_results WHERE workspace=:w"), {"w": self.workspace.value}).scalar() or 0,
             }
