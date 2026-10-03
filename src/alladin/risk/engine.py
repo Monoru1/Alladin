@@ -7,10 +7,11 @@ volume calculé par le PositionSizer ET un jeton d'approbation, seul sésame acc
 
 from __future__ import annotations
 
+from alladin.brain import Action, ActionProposal
 from alladin.challenge.models import RiskRules
 from alladin.core.approval import issue_open_token
-from alladin.core.enums import AccountType, EntryType, Side, SymbolTradeMode
-from alladin.core.models import TradeIntent
+from alladin.core.enums import AccountType, EntryType, RunMode, RunState, Side, SymbolTradeMode
+from alladin.core.models import Position, TradeIntent
 from alladin.risk import sizing
 from alladin.risk.exposure import compute_exposure, currency_legs
 from alladin.risk.models import RejectCode, RiskContext, RiskDecision, RiskReason
@@ -29,6 +30,27 @@ class RiskEngine:
         self.rules = rules
         self.sizer = sizer or PositionSizer()
         self.supported_entry_types = supported_entry_types
+
+    def evaluate_position_action(
+        self, proposal: ActionProposal, *, mode: RunMode, account_type: AccountType,
+        positions: list[Position], kill_switch_active: bool, run_state: RunState,
+    ) -> RiskDecision:
+        """Porte déterministe conservatrice. HOLD seul est sans effet broker dans ce lot."""
+        reasons: list[RiskReason] = []
+        pos = next((p for p in positions if p.ticket == proposal.parameters.position_ticket), None)
+        if pos is None or pos.symbol != proposal.symbol:
+            reasons.append(RiskReason(code=RejectCode.POSITION_NOT_OWNED,
+                                      message="position absente ou non possédée par ce run"))
+        if kill_switch_active or run_state not in (RunState.RUNNING, RunState.TARGET_REACHED):
+            reasons.append(RiskReason(code=RejectCode.KILL_SWITCH,
+                                      message="gestion Brain bloquée par état du run ou kill switch"))
+        if mode is not RunMode.DEMO or account_type is not AccountType.DEMO:
+            reasons.append(RiskReason(code=RejectCode.MODE_SAFETY,
+                                      message="gestion de position broker autorisée en DEMO uniquement"))
+        if proposal.action is not Action.HOLD:
+            reasons.append(RiskReason(code=RejectCode.POSITION_ACTION_UNSUPPORTED,
+                                      message="action de gestion non activée sans capacités broker et contrat de risque"))
+        return RiskDecision(intent_id=proposal.proposal_id, approved=not reasons, reasons=reasons)
 
     def evaluate(self, intent: TradeIntent, ctx: RiskContext) -> RiskDecision:  # noqa: C901 (liste de contrôles)
         r = self.rules

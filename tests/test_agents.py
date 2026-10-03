@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -16,6 +17,14 @@ from alladin.agents.claude import ClaudeAdapter
 from alladin.agents.cli import sanitized_env
 from alladin.agents.codex import CodexAdapter
 from alladin.agents.mock import MockAgent
+from alladin.brain import (
+    Action,
+    ActionProposal,
+    BrainContext,
+    ClassicBrainAdapter,
+    ProposalParameters,
+    proposal_identity,
+)
 from alladin.core.enums import DecisionKind
 
 GOOD = {
@@ -25,6 +34,76 @@ GOOD = {
                "requested_risk_pct_of_working_capital": 4.5, "confidence": 0.76, "reason": "x"},
 }  # fmt: skip
 REQ = AgentRequest(run_id="RUN-001", context={"shortlist": [], "signals": []})
+
+
+def _proposal(action: Action = Action.NO_TRADE, **changes: Any) -> dict[str, Any]:
+    run, cycle, source, opp = "RUN-001", "CYC-001", "baseline", "OPP-001"
+    data: dict[str, Any] = dict(
+        proposal_id=proposal_identity(run, cycle, opp, source), source_id=source,
+        source_version="1", run_id=run, cycle_id=cycle, opportunity_id=opp,
+        symbol="EURUSD", action=action, timestamp=datetime(2026, 3, 2, tzinfo=UTC),
+    )
+    data.update(changes)
+    return data
+
+
+def test_action_proposal_validation_and_stable_identity() -> None:
+    p = ActionProposal.model_validate(_proposal())
+    assert p.action is Action.NO_TRADE
+    assert ActionProposal.model_validate(p.model_dump()).proposal_id == p.proposal_id
+    assert proposal_identity("RUN-001", "CYC-001", "OPP-001", "baseline") == p.proposal_id
+    assert proposal_identity("RUN-001", "CYC-001", "OPP-001", "baseline", "2") != p.proposal_id
+    for changes in ({"action": "UNKNOWN"}, {"schema_version": 2},
+                    {"schema_version": "1"}, {"confidence": -0.1}, {"confidence": 1.1},
+                    {"confidence": "0.5"},
+                    {"proposal_id": "fabricated"}, {"timestamp": datetime(2026, 3, 2)}):
+        with pytest.raises(ValueError):
+            ActionProposal.model_validate(_proposal(**changes))
+
+
+def test_entry_and_position_actions_fail_closed_on_bad_parameters() -> None:
+    entry = ProposalParameters(strategy_id="TREND-01", strategy_version="1.0.0",
+                               requested_risk_pct_of_working_capital=3, entry=1.1,
+                               stop_loss=1.09, take_profit=1.12)
+    assert ActionProposal.model_validate(_proposal(Action.LONG, parameters=entry)).action is Action.LONG
+    for action, params in (
+        (Action.LONG, entry.model_copy(update={"stop_loss": 1.11})),
+        (Action.SHORT, entry),
+        (Action.MODIFY_STOP, ProposalParameters(position_ticket=12)),
+        (Action.MODIFY_TARGET, ProposalParameters(position_ticket=12)),
+        (Action.PARTIAL_CLOSE, {"position_ticket": 12, "partial_fraction": -0.1}),
+        (Action.PARTIAL_CLOSE, {"position_ticket": 12, "partial_fraction": 1.1}),
+        (Action.PARTIAL_CLOSE, {"position_ticket": "12", "partial_fraction": 0.5}),
+        (Action.CLOSE, ProposalParameters()),
+    ):
+        with pytest.raises(ValueError):
+            ActionProposal.model_validate(_proposal(action, parameters=params))
+    for action, params in (
+        (Action.HOLD, {"position_ticket": 12}),
+        (Action.CLOSE, {"position_ticket": 12}),
+        (Action.MODIFY_STOP, {"position_ticket": 12, "stop_loss": 1.0}),
+        (Action.MODIFY_TARGET, {"position_ticket": 12, "take_profit": 1.3}),
+        (Action.PARTIAL_CLOSE, {"position_ticket": 12, "partial_fraction": 0.5}),
+    ):
+        assert ActionProposal.model_validate(_proposal(action, parameters=params)).action is action
+    with pytest.raises(ValueError):
+        ActionProposal.model_validate(_proposal(Action.CLOSE, symbol=None, parameters={"position_ticket": 12}))
+
+
+def test_classic_brain_adapter_preserves_agent_choice_without_broker() -> None:
+    agent = MockAgent()
+    context = BrainContext(run_id="RUN-001", cycle_id="CYC-001",
+                           timestamp=datetime(2026, 3, 2, tzinfo=UTC),
+                           opportunities={"GBPJPY": "OPP-001"},
+                           market={"signals": [{"draft": GOOD["intent"], "candidate_score": 0.8}]})
+    brain = ClassicBrainAdapter(agent)
+    p = brain.decide(context)
+    assert p.action is Action.LONG and p.symbol == "GBPJPY" and p.opportunity_id == "OPP-001"
+    assert p.parameters.strategy_id == "TREND-01" and p.confidence == 0.76
+    assert "broker" not in brain.__dict__ and "execution" not in brain.__dict__
+    with pytest.raises(ValueError):
+        BrainContext(run_id="RUN-001", cycle_id="CYC-001", timestamp=context.timestamp,
+                     opportunities={}, market={"broker": object()})
 
 
 def test_extract_json_handles_fences_and_chatter() -> None:

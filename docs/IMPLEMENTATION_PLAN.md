@@ -585,3 +585,42 @@ NEXT EXACT ACTION: Adapter `BTCThreeWayEngine` pour produire des `FillRecord` co
 - Le purge/embargo est configurable mais pas contraint au niveau du repository
 
 **NEXT EXACT LOT:** Lot E — Brain API et lifecycle.
+
+---
+
+## CODEX CHECKPOINT — LOT E : Brain interface et cycle décision/position (2026-10-03)
+
+**État :** frontière architecturale livrée ; aucune implémentation SNN.
+
+### Audit du code avant changement
+
+- Le runtime réel était `MarketScanner → StrategyRouter → Strategy.evaluate → AgentAdapter.propose → AgentIntentDraft → TradeIntent → ExecutionService.submit → RiskEngine → broker`. Le `TradeIntent` est la proposition d'entrée historique ; `RiskDecision.intent_id` reliait le risque à l'intention.
+- Les `Opportunity` étaient journalisées avec des IDs aléatoires, sans lien enregistré dans `TradeIntent`, `RiskDecision` ou `TradeRecord`. Un `cycle_id` existait dans le journal et les trades.
+- Les protections (SL retiré, close d'urgence, watchdog) s'exécutaient hors chemin de décision de l'agent. OBSERVE/PAPER étaient sans ordres broker dans les cycles testés ; DEMO passait par token et vérification de compte.
+- La documentation SNN/DECISION-011 décrit la gestion autonome des positions comme cible ; le code ne possède pas encore de politique RiskEngine ni de capacités broker pour MODIFY_STOP, MODIFY_TARGET et PARTIAL_CLOSE. Le CLI conserve les anciens agents LLM optionnels, malgré la cible « runtime H24 sans LLM » de DECISION-006. Ce lot ne change pas ces modes de lancement.
+
+### Contrat v1
+
+`src/alladin/brain.py` définit `Brain.decide(BrainContext) -> ActionProposal` et `ClassicBrainAdapter`. `BrainContext` contient run, cycle, timestamp, mapping symbole → opportunité qualifiée et snapshot JSON de marché/contexte ; aucun objet broker, service d'exécution, secret ou jeton n'est transmis. Le `ClassicBrainAdapter` appelle l'agent historique sans changer son classement ou sa sélection et transforme `TRADE`/`NO_TRADE` en proposition explicite.
+
+`ActionProposal` est immuable, interdit les champs inconnus et exige `schema_version=1`, `proposal_id`, `source_id`, `source_version`, `run_id`, `cycle_id`, `opportunity_id` pour une action de marché, `symbol`, `action`, `timestamp`, raisons structurées (`list[str]`), confiance facultative et `ProposalParameters` validés. Actions : LONG, SHORT, NO_TRADE, HOLD, CLOSE, MODIFY_STOP, MODIFY_TARGET, PARTIAL_CLOSE. L'identité `AP-uuid5(run, cycle, opportunité, source, version source)` est stable pour un même point de décision ; une version de source émet au plus une proposition par opportunité et cycle. Les opportunités utilisent désormais `OPP-uuid5(run, cycle, symbole)`. Version inconnue, action inconnue, symbole absent, confiance/fraction invalide, valeur de modification absente, paramètres contradictoires et ID forgé sont rejetés.
+
+### Flux et échec
+
+Une entrée valide est convertie en `TradeIntent` avec `intent_id=proposal_id`, puis évaluée par **le RiskEngine existant**, sans règle de sizing ni voie d'évaluation spéciale. Le contrôle de shortlist et de version de stratégie reste en place. La confiance du `TradeIntent` est désormais facultative comme dans le contrat Brain ; le RiskEngine ne l'utilise pas. `ExecutionService` écrit `proposal_id`/`opportunity_id` dans la décision de risque et dans `TradeRecord`; une migration SQLite additive nullable préserve les anciennes lignes. Les événements append-only `decision.action_proposal`, `decision.brain_failure`, `position.action` et `position.action_rejected` complètent le journal. Les événements de position PAPER exposent les IDs tirés de leur intention persistée ; les clôtures DEMO journalisent les IDs du trade.
+
+`NO_TRADE` intentionnel est une proposition persistée et liée à `decision.no_trade`. Exception, indisponibilité, proposition malformée ou incohérence run/cycle/source/opportunité produisent un événement d'échec et `NO_TRADE`, sans appel d'exécution. Les propositions de gestion traversent une porte déterministe `RiskEngine.evaluate_position_action` : ownership, mode DEMO, type de compte, kill switch et état du run sont vérifiés ; seul HOLD peut être approuvé, sans ordre. CLOSE/MODIFY_STOP/MODIFY_TARGET/PARTIAL_CLOSE sont rejetés avec motif `POSITION_ACTION_UNSUPPORTED` tant que les capacités et règles d'exécution n'existent pas. Le monitor/close protecteur DEMO précède l'appel Brain et reste indépendant de sa disponibilité. OBSERVE reste lecture stricte, PAPER passe par simulation, DEMO garde le broker sécurisé, LIVE reste interdit.
+
+### Replay et compatibilité
+
+L'archive et `ReplayContext.from_cycle` restent inchangés : le replay restitue les barres archivées et l'événement de proposition, sans fetch broker. Les IDs utilisent run/cycle/opportunité/source, sans donnée future ; les mêmes entrées archivées peuvent être comparées plus tard avec une version de cerveau fixée. Le banc Lot D (`CostModel`, `FillRecord`, R, splits OOS) n'a pas été modifié. Les fixtures classiques conservent TRADE/NO_TRADE, risque et mode d'exécution ; seules les représentations/IDs/journaux causaux s'ajoutent.
+
+### Validation
+
+Tests ciblés : validation du schéma, identité/version, NO_TRADE explicite, adaptateur classique, erreur/malformation/horodatage Brain, risque/rejet, DEMO/PAPER/OBSERVE, HOLD et propriété de position, liens journal et replay, protection indépendante, migration SQLite additive. Référence avant Lot E : 36 tests orchestration/modes passés. Validation finale : 368 tests passés, 3 tests d'intégration MT5 sautés ; `ruff check src tests`, `mypy src` et `git diff --check` passés. Aucun ordre réel pendant les tests (MockBroker).
+
+### Limites et prochain lot exact
+
+Le socket accepte les actions de gestion mais n'active que HOLD sans ordre. `BrainContext` fournit ticket/ID de trade et liens causaux pour les positions DEMO possédées, mais pas encore une vue canonique unifiée avec PAPER. `BrokerCapabilities` n'annonce pas les primitives de modification/fermeture partielle. L'identité d'une position PAPER reste son `paper_id` distinct du trade DEMO. La persistance de la proposition ne capture pas encore un hash complet des features ni l'état interne d'un cerveau futur.
+
+**NEXT :** implémenter et tester une politique déterministe de gestion par position dans RiskEngine/ExecutionService (ownership, position ID canonique DEMO/PAPER, capacités broker, mode, kill switch, challenge, confirmation de résultat), puis unifier la vue des positions possédées dans BrainContext. Préserver les sorties protectrices indépendantes. Après cette preuve seulement, envisager un cerveau SNN expérimental ; ne pas le démarrer dans le Lot E.

@@ -59,6 +59,7 @@ class JournalService:
         rejections: dict[str, list[str]],
         agent: str | None,
         reason: str,
+        proposal_id: str | None = None,
     ) -> JournalEvent:
         """NO TRADE est une décision valide : on journalise tout ce qui l'explique."""
         return self.log(
@@ -72,6 +73,7 @@ class JournalService:
                 "agent_consulted": agent,
                 "final_decision": "NO_TRADE",
                 "reason": reason,
+                "proposal_id": proposal_id,
             },
         )
 

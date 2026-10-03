@@ -97,6 +97,8 @@ class ExecutionService:
             EventType.RISK_DECISION,
             {
                 "status": decision.status,
+                "proposal_id": intent.proposal_id,
+                "opportunity_id": intent.opportunity_id,
                 **decision.model_dump(mode="json"),
                 "reason_lines": decision.reason_lines(),
             },
@@ -205,6 +207,8 @@ class ExecutionService:
         account_after = self.broker.account_info()
         trade = TradeRecord(
             trade_id=intent.intent_id,
+            proposal_id=intent.proposal_id,
+            opportunity_id=intent.opportunity_id,
             run_id=rid,
             symbol=intent.instrument,
             side=intent.side.value,

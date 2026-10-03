@@ -141,6 +141,8 @@ class PositionMonitor:
             EventType.POSITION_CLOSED,
             {
                 "trade_id": trade.trade_id,
+                "proposal_id": trade.proposal_id,
+                "opportunity_id": trade.opportunity_id,
                 "ticket": trade.ticket,
                 "symbol": trade.symbol,
                 "side": trade.side,

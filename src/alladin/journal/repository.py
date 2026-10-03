@@ -55,7 +55,8 @@ journal_events = Table(
 )
 
 _TRADE_COLS = [
-    ("trade_id", String), ("run_id", String), ("symbol", String), ("side", String),
+    ("trade_id", String), ("proposal_id", String), ("opportunity_id", String),
+    ("run_id", String), ("symbol", String), ("side", String),
     ("strategy_id", String), ("strategy_version", String), ("regime", String), ("agent", String),
     ("status", String), ("ticket", Integer), ("volume", Float), ("entry_requested", Float),
     ("entry_executed", Float), ("stop_loss", Float), ("take_profit", Float), ("risk_amount", Float),
@@ -158,17 +159,16 @@ class JournalRepository:
 
     def _migrate(self) -> None:
         """Migration légère : ajoute les colonnes apparues après la création d'une base existante."""
-        wanted = {"runs": "kind", "journal_events": "cycle_id", "trades": "cycle_id"}
+        wanted = {"runs": ["kind"], "journal_events": ["cycle_id"],
+                  "trades": ["cycle_id", "proposal_id", "opportunity_id"]}
         with self.engine.begin() as c:
-            for table, col in wanted.items():
-                cols = (
-                    {r[1] for r in c.execute(text(f"PRAGMA table_info({table})"))}
-                    if self.engine.dialect.name == "sqlite"
-                    else {col}
-                )
-                if col not in cols:
-                    default = " DEFAULT 'RUN' NOT NULL" if col == "kind" else ""
-                    c.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR{default}"))
+            for table, columns in wanted.items():
+                cols = ({r[1] for r in c.execute(text(f"PRAGMA table_info({table})"))}
+                        if self.engine.dialect.name == "sqlite" else set(columns))
+                for col in columns:
+                    if col not in cols:
+                        default = " DEFAULT 'RUN' NOT NULL" if col == "kind" else ""
+                        c.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} VARCHAR{default}"))
 
     @classmethod
     def from_url(cls, url: str) -> JournalRepository:

@@ -10,14 +10,16 @@ import logging
 import signal
 import time
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from alladin.agents.base import AgentAdapter, AgentIntentDraft, AgentRequest
+from alladin.agents.base import AgentAdapter, AgentIntentDraft
+from alladin.brain import Action, ActionProposal, Brain, BrainContext, ClassicBrainAdapter
 from alladin.brokers.base import BrokerAdapter
-from alladin.core.enums import DecisionKind, RunMode, RunState
+from alladin.core.enums import RunMode, RunState, Side
 from alladin.core.errors import AlladinError
 from alladin.core.models import TradeIntent
 from alladin.execution.models import ExecStatus
@@ -25,7 +27,7 @@ from alladin.execution.service import ExecutionService
 from alladin.journal.models import EventType
 from alladin.journal.service import JournalService
 from alladin.market.models import ScanReport
-from alladin.market.opportunity import Opportunity, OpportunityStatus
+from alladin.market.opportunity import Opportunity, OpportunityStatus, opportunity_identity
 from alladin.market.paper import PaperExperimentEngine
 from alladin.market.scanner import MarketScanner
 from alladin.orchestration.monitor import PositionMonitor
@@ -42,7 +44,7 @@ _CTX_METRICS = ("atr", "er20", "rsi14", "dist_ema50_atr", "momentum_atr", "atr_p
 class CycleOutcome(BaseModel):
     cycle: int
     run_state: str
-    decision: str  # TRADE | NO_TRADE | HALTED
+    decision: str  # TRADE | NO_TRADE | HOLD | HALTED
     reason: str = ""
     shortlist: list[str] = []
     result: dict[str, Any] | None = None
@@ -65,6 +67,7 @@ class OrchestrationEngine:
         run_mode: RunMode = RunMode.OBSERVE,
         execute: bool = False,  # rétrocompatibilité : remplacé par run_mode
         paper_engine: PaperExperimentEngine | None = None,
+        brain: Brain | None = None,
     ) -> None:
         self.broker, self.run, self.manager, self.journal = broker, run, manager, journal
         self.scanner, self.router, self.agent = scanner, router, agent
@@ -75,6 +78,7 @@ class OrchestrationEngine:
         self.run_mode = run_mode
         self.execute = run_mode is RunMode.DEMO  # compatibilité interne
         self.paper_engine = paper_engine
+        self.brain = brain or ClassicBrainAdapter(agent)
         self._cycle = 0
         self._stop_requested = False
 
@@ -159,42 +163,101 @@ class OrchestrationEngine:
         self.journal.log(rid, EventType.SCAN, scan.summary())
 
         # 3. créer les Opportunity objects à partir du scan
-        self._build_opportunities(scan, cycle_id)
+        opportunities = self._build_opportunities(scan, cycle_id)
 
         # 4. régime -> routeur -> signaux de stratégies
         signals, evaluated = self._signals(scan)
 
-        # 5. agent
-        request = AgentRequest(run_id=rid, context=self._context(scan, signals))
-        self.journal.log(rid, EventType.AGENT_REQUEST, {"agent": self.agent.name, "context": request.context})
-        response = self.agent.propose(request)
-        self.journal.log(rid, EventType.AGENT_RESPONSE, response.model_dump(mode="json"))
-
+        # 5. cerveau : le contexte ne contient ni broker ni service d'exécution.
         shortlist = [c.symbol for c in scan.candidates]
-        if not response.ok or response.decision is None:
-            return self._no_trade(
-                scan,
-                evaluated,
-                response.agent,
-                f"réponse agent inexploitable : {'; '.join(response.errors)}",
-                shortlist,
+        try:
+            context = BrainContext(
+                run_id=rid, cycle_id=cycle_id, timestamp=self.broker.now(),
+                opportunities={o.symbol: o.opportunity_id for o in opportunities
+                               if o.status is OpportunityStatus.QUALIFIED},
+                market=self._context(scan, signals),
             )
-        dec = response.decision
-        if dec.decision is DecisionKind.NO_TRADE or dec.intent is None:
+            if isinstance(self.brain, ClassicBrainAdapter):
+                self.journal.log(rid, EventType.AGENT_REQUEST,
+                                 {"agent": self.agent.name, "context": context.market})
+            raw = self.brain.decide(context)
+            if isinstance(self.brain, ClassicBrainAdapter) and self.brain.last_response is not None:
+                self.journal.log(rid, EventType.AGENT_RESPONSE,
+                                 self.brain.last_response.model_dump(mode="json"))
+            proposal = ActionProposal.model_validate(raw.model_dump(mode="python"))
+            position_links = {p["ticket"]: p for p in context.market["account"]["open_positions"]}
+            if (proposal.run_id != rid or proposal.cycle_id != cycle_id
+                    or proposal.source_id != self.brain.source_id
+                    or proposal.source_version != self.brain.source_version
+                    or proposal.timestamp != context.timestamp
+                    or (proposal.action in (Action.LONG, Action.SHORT)
+                        and context.opportunities.get(proposal.symbol or "") != proposal.opportunity_id)
+                    or (proposal.action is Action.NO_TRADE and proposal.opportunity_id is not None
+                        and context.opportunities.get(proposal.symbol or "") != proposal.opportunity_id)
+                    or (proposal.action in (Action.HOLD, Action.CLOSE, Action.MODIFY_STOP,
+                                            Action.MODIFY_TARGET, Action.PARTIAL_CLOSE)
+                        and proposal.parameters.position_ticket in position_links
+                        and (position_links[proposal.parameters.position_ticket]["symbol"] != proposal.symbol
+                             or position_links[proposal.parameters.position_ticket]["opportunity_id"]
+                             != proposal.opportunity_id))):
+                raise ValueError("identité ou opportunité de proposition incohérente")
+        except Exception as exc:
+            if isinstance(self.brain, ClassicBrainAdapter) and self.brain.last_response is not None:
+                self.journal.log(rid, EventType.AGENT_RESPONSE,
+                                 self.brain.last_response.model_dump(mode="json"))
+                dec = self.brain.last_response.decision
+                if dec is not None and dec.intent is not None and dec.intent.instrument not in shortlist:
+                    reason = f"intent refusé : instrument {dec.intent.instrument} absent de la shortlist scannée"
+                    self.journal.log(rid, EventType.INTENT_REJECTED_SCHEMA,
+                                     {"agent": self.agent.name, "errors": [reason]})
+                    return self._no_trade(scan, evaluated, self.agent.name, reason, shortlist)
+            self.journal.log(rid, EventType.BRAIN_FAILURE,
+                             {"source_id": self.brain.source_id, "reason": str(exc)})
             return self._no_trade(
-                scan, evaluated, response.agent, dec.reason or "l'agent ne propose aucun trade", shortlist
+                scan, evaluated, self.agent.name, f"réponse agent inexploitable : {exc}", shortlist,
             )
+        self.journal.log(rid, EventType.ACTION_PROPOSAL, proposal.model_dump(mode="json"))
+        if proposal.action is Action.NO_TRADE:
+            return self._no_trade(
+                scan, evaluated, self.agent.name,
+                proposal.reasons[0] if proposal.reasons else "l'agent ne propose aucun trade",
+                shortlist, proposal.proposal_id,
+            )
+        if proposal.action not in (Action.LONG, Action.SHORT):
+            decision = self.execution.risk.evaluate_position_action(
+                proposal, mode=self.run_mode, account_type=acct.account_type,
+                positions=self.execution.my_positions(),
+                kill_switch_active=self.execution.killswitch.is_active(),
+                run_state=self.run.watchdog.run_state,
+            )
+            self.journal.log(rid, EventType.RISK_DECISION,
+                             {"proposal_id": proposal.proposal_id, "opportunity_id": proposal.opportunity_id,
+                              "action": proposal.action.value, "status": decision.status,
+                              **decision.model_dump(mode="json"), "reason_lines": decision.reason_lines()})
+            if decision.approved:
+                self.journal.log(rid, EventType.POSITION_ACTION,
+                                 {"proposal_id": proposal.proposal_id, "opportunity_id": proposal.opportunity_id,
+                                  "position_ticket": proposal.parameters.position_ticket,
+                                  "action": "HOLD", "status": "APPROVED"})
+                return CycleOutcome(cycle=self._cycle, run_state=self.run.watchdog.run_state.value,
+                                    decision="HOLD", reason="HOLD validé", shortlist=shortlist)
+            self.journal.log(rid, EventType.POSITION_ACTION_REJECTED,
+                             {"proposal_id": proposal.proposal_id, "reasons": decision.reason_lines()})
+            return self._no_trade(scan, evaluated, self.agent.name, "; ".join(decision.reason_lines()), shortlist,
+                                  proposal.proposal_id)
 
-        # 6. validation de l'intention (rien de ce que dit l'agent n'est digne de confiance)
-        intent, problems = self._intent_from_draft(dec.intent, response.agent, shortlist)
+        # 6. validation avant le même TradeIntent / RiskEngine que le chemin historique.
+        intent, problems = self._intent_from_proposal(proposal, shortlist)
         if intent is None:
             self.journal.log(
                 rid,
                 EventType.INTENT_REJECTED_SCHEMA,
-                {"agent": response.agent, "errors": problems, "draft": dec.intent.model_dump(mode="json")},
+                {"agent": self.agent.name, "proposal_id": proposal.proposal_id,
+                 "errors": problems, "proposal": proposal.model_dump(mode="json")},
             )
             return self._no_trade(
-                scan, evaluated, response.agent, f"intent refusé : {'; '.join(problems)}", shortlist
+                scan, evaluated, self.agent.name, f"intent refusé : {'; '.join(problems)}", shortlist,
+                proposal.proposal_id,
             )
 
         # 6. exécution (ou dry-run ou paper)
@@ -240,6 +303,7 @@ class OrchestrationEngine:
         agent: str | None,
         reason: str,
         shortlist: list[str],
+        proposal_id: str | None = None,
     ) -> CycleOutcome:
         self.journal.no_trade(
             self.run.run_id,
@@ -249,6 +313,7 @@ class OrchestrationEngine:
             rejections=scan.rejected,
             agent=agent,
             reason=reason,
+            proposal_id=proposal_id,
         )
         return CycleOutcome(
             cycle=self._cycle,
@@ -266,7 +331,7 @@ class OrchestrationEngine:
         # Candidats rejetés -> FILTERED
         for sym, reasons in scan.rejected.items():
             opp = Opportunity(
-                opportunity_id=f"OPP-{uuid4().hex[:8]}",
+                opportunity_id=opportunity_identity(rid, cycle_id, sym),
                 cycle_id=cycle_id,
                 run_id=rid,
                 symbol=sym,
@@ -284,7 +349,7 @@ class OrchestrationEngine:
         # Candidats shortlistés -> QUALIFIED
         for cand in scan.candidates:
             opp = Opportunity(
-                opportunity_id=f"OPP-{uuid4().hex[:8]}",
+                opportunity_id=opportunity_identity(rid, cycle_id, cand.symbol),
                 cycle_id=cycle_id,
                 run_id=rid,
                 symbol=cand.symbol,
@@ -354,6 +419,9 @@ class OrchestrationEngine:
         wd = self.run.watchdog
         rules = self.run.profile.risk
         wc = sizing.working_capital(acct.equity, rules.working_capital_pct)
+        owned = self.execution.my_positions()
+        trades = {t.ticket: t for t in self.manager.repo.trades_for_run(self.run.run_id, "OPEN")
+                  if t.ticket is not None}
         return {
             "now": self.broker.now().isoformat(),
             "account": {
@@ -367,8 +435,12 @@ class OrchestrationEngine:
                 "phase_target_pct": self.run.profile.phases[wd.state.phase_index].profit_target_pct,
                 "run_state": wd.run_state.value,
                 "open_positions": [
-                    {"symbol": p.symbol, "side": p.side.value, "profit": round(p.profit, 2)}
-                    for p in self.execution.my_positions()
+                    {"ticket": p.ticket, "symbol": p.symbol, "side": p.side.value,
+                     "profit": round(p.profit, 2),
+                     "trade_id": trades[p.ticket].trade_id if p.ticket in trades else None,
+                     "proposal_id": trades[p.ticket].proposal_id if p.ticket in trades else None,
+                     "opportunity_id": trades[p.ticket].opportunity_id if p.ticket in trades else None}
+                    for p in owned
                 ],
             },
             "rules": {
@@ -419,6 +491,40 @@ class OrchestrationEngine:
         try:
             return draft.to_intent(run_id=self.run.run_id, agent=agent, now=self.broker.now()), []
         except ValueError as exc:
+            return None, [str(exc)]
+
+    def _intent_from_proposal(
+        self, proposal: ActionProposal, shortlist: list[str]
+    ) -> tuple[TradeIntent | None, list[str]]:
+        p = proposal.parameters
+        problems: list[str] = []
+        if p.requested_risk_pct_of_working_capital is None:
+            problems.append("risque demandé absent")
+        if proposal.symbol not in shortlist:
+            problems.append(f"instrument {proposal.symbol} absent de la shortlist scannée")
+        strat = self.router.registry.get(p.strategy_id or "")
+        if strat is None:
+            problems.append(f"stratégie {p.strategy_id} inconnue ou désactivée")
+        elif strat.version != p.strategy_version:
+            problems.append(f"version {p.strategy_version} != {strat.version} pour {p.strategy_id}")
+        if problems:
+            return None, problems
+        try:
+            return TradeIntent(
+                intent_id=proposal.proposal_id, proposal_id=proposal.proposal_id,
+                opportunity_id=proposal.opportunity_id, cycle_id=proposal.cycle_id,
+                run_id=proposal.run_id,
+                agent=proposal.source_id.removeprefix("classic:"),
+                instrument=proposal.symbol or "", side=Side.BUY if proposal.action is Action.LONG else Side.SELL,
+                strategy_id=p.strategy_id or "", strategy_version=p.strategy_version or "",
+                market_regime=p.market_regime, entry_type=p.entry_type, entry=p.entry,
+                stop_loss=p.stop_loss, take_profit=p.take_profit,
+                requested_risk_pct_of_working_capital=p.requested_risk_pct_of_working_capital,
+                confidence=proposal.confidence,
+                reason="; ".join(proposal.reasons), sources=p.sources,
+                created_at=proposal.timestamp, expires_at=proposal.timestamp + timedelta(minutes=15),
+            ), []
+        except (ValueError, ValidationError) as exc:
             return None, [str(exc)]
 
     # ------------------------------------------------------------------ boucle

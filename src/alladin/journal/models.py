@@ -39,6 +39,10 @@ class EventType(StrEnum):
     INFO = "info"
     OPPORTUNITY_CREATED = "opportunity.created"
     OPPORTUNITY_REJECTED = "opportunity.rejected"
+    ACTION_PROPOSAL = "decision.action_proposal"
+    BRAIN_FAILURE = "decision.brain_failure"
+    POSITION_ACTION_REJECTED = "position.action_rejected"
+    POSITION_ACTION = "position.action"
     MODE_CHANGE = "mode.change"
 
 
@@ -71,6 +75,8 @@ class RunRecord(BaseModel):
 
 class TradeRecord(BaseModel):
     trade_id: str
+    proposal_id: str | None = None
+    opportunity_id: str | None = None
     run_id: str
     symbol: str
     side: str

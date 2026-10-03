@@ -223,6 +223,9 @@ class TradeIntent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     intent_id: str = Field(default_factory=lambda: uuid4().hex[:12])
+    proposal_id: str | None = None
+    opportunity_id: str | None = None
+    cycle_id: str | None = None
     run_id: str
     agent: str
     instrument: str = Field(min_length=3, max_length=32)
@@ -235,7 +238,7 @@ class TradeIntent(BaseModel):
     stop_loss: float | None = Field(default=None, allow_inf_nan=False, gt=0)
     take_profit: float | None = Field(default=None, allow_inf_nan=False, gt=0)
     requested_risk_pct_of_working_capital: float = Field(allow_inf_nan=False, gt=0, le=100)
-    confidence: float = Field(allow_inf_nan=False, ge=0, le=1)
+    confidence: float | None = Field(default=None, allow_inf_nan=False, ge=0, le=1)
     reason: str = ""
     created_at: datetime = Field(default_factory=utcnow)
     expires_at: datetime

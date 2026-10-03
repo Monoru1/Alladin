@@ -96,6 +96,8 @@ class PaperPosition:
     def to_dict(self) -> dict[str, Any]:
         return {
             "paper_id": self.paper_id,
+            "proposal_id": self.intent.get("proposal_id"),
+            "opportunity_id": self.intent.get("opportunity_id"),
             "run_id": self.run_id,
             "cycle_id": self.cycle_id,
             "symbol": self.symbol,

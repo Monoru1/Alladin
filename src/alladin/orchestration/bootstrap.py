@@ -11,6 +11,7 @@ from alladin.agents.base import AgentAdapter
 from alladin.agents.claude import ClaudeAdapter
 from alladin.agents.codex import CodexAdapter
 from alladin.agents.mock import MockAgent
+from alladin.brain import Brain
 from alladin.brokers.base import BrokerAdapter
 from alladin.brokers.mock import MockBroker
 from alladin.brokers.mt5 import MT5Broker
@@ -82,6 +83,7 @@ class Components:
         *,
         execute: bool = False,
         run_mode: RunMode = RunMode.OBSERVE,
+        brain: Brain | None = None,
     ) -> OrchestrationEngine:
         registry = StrategyRegistry.from_config(self.settings.strategies_dir)
         effective_mode = RunMode.DEMO if execute and run_mode is RunMode.OBSERVE else run_mode
@@ -115,6 +117,7 @@ class Components:
             run_mode=run_mode,
             execute=execute,
             paper_engine=paper_engine,
+            brain=brain,
         )
 
 

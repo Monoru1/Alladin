@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 
 from alladin.journal.models import EventType
-from alladin.journal.repository import JournalRepository
+from alladin.journal.repository import JournalRepository, make_engine
 from alladin.orchestration.bootstrap import Components
 from tests.conftest import make_intent
 
@@ -22,6 +22,20 @@ def test_journal_is_append_only(svc: Components) -> None:
         c.execute(text("DELETE FROM journal_events"))
     with svc.repo.engine.begin() as c, pytest.raises(DatabaseError, match="never deleted"):
         c.execute(text("DELETE FROM runs"))
+
+
+def test_lot_e_trade_links_migrate_additively_from_legacy_sqlite() -> None:
+    engine = make_engine("sqlite://")
+    with engine.begin() as c:
+        c.execute(text("CREATE TABLE trades (trade_id VARCHAR PRIMARY KEY, status VARCHAR, cycle_id VARCHAR)"))
+        c.execute(text("INSERT INTO trades (trade_id, status, cycle_id) VALUES ('legacy', 'OPEN', 'CYC-OLD')"))
+    JournalRepository(engine)
+    with engine.connect() as c:
+        columns = {row[1] for row in c.execute(text("PRAGMA table_info(trades)"))}
+        legacy = c.execute(text("SELECT trade_id, status, cycle_id, proposal_id, opportunity_id "
+                                "FROM trades WHERE trade_id='legacy'")).one()
+    assert {"proposal_id", "opportunity_id"} <= columns
+    assert tuple(legacy) == ("legacy", "OPEN", "CYC-OLD", None, None)
 
 
 def test_hash_chain_detects_tampering(tmp_path: Path) -> None:

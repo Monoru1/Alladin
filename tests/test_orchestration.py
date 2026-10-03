@@ -8,10 +8,12 @@ import pytest
 
 from alladin.agents.base import AgentDecision, AgentIntentDraft
 from alladin.agents.mock import MockAgent
+from alladin.brain import Action, ActionProposal, BrainContext, ProposalParameters, proposal_identity
 from alladin.brokers.mock import MockBroker
-from alladin.core.enums import DecisionKind, MarketRegime, RunState, Side
+from alladin.core.enums import DecisionKind, MarketRegime, RunMode, RunState, Side
 from alladin.journal.models import EventType
 from alladin.orchestration.bootstrap import Components
+from alladin.replay import ReplayContext
 from alladin.research.models import StrategyStatus, StrategyVersion
 from alladin.research.repository import ResearchRepository
 
@@ -184,3 +186,153 @@ def test_positions_are_monitored_each_cycle(svc: Components, broker: MockBroker)
     eng.run_cycle()
     (t,) = svc.repo.trades_for_run(svc.run.run_id)
     assert t.status == "CLOSED" and t.close_reason == "TP"
+
+
+def test_proposal_journal_links_opportunity_risk_trade_and_replay(svc: Components) -> None:
+    sym = shortlist(svc)[0]
+    agent = MockAgent([AgentDecision(decision=DecisionKind.TRADE, intent=draft_for(svc, sym))])
+    out = svc.engine(agent, run_mode=RunMode.DEMO).run_cycle()
+    assert out.decision == "TRADE"
+    events = svc.repo.events(svc.run.run_id, cycle_id=out.cycle_id)
+    proposal = next(e.payload for e in events if e.type == EventType.ACTION_PROPOSAL)
+    opp = next(e.payload for e in events if e.type == EventType.OPPORTUNITY_CREATED
+               and e.payload["symbol"] == sym)
+    risk = next(e.payload for e in events if e.type == EventType.RISK_DECISION)
+    trade = svc.repo.trades_for_run(svc.run.run_id)[0]
+    assert proposal["opportunity_id"] == opp["opportunity_id"] == trade.opportunity_id
+    assert proposal["proposal_id"] == risk["proposal_id"] == trade.proposal_id == trade.trade_id
+    replay = ReplayContext.from_cycle(svc.repo, out.cycle_id)
+    assert any(e["type"] == EventType.ACTION_PROPOSAL for e in replay.events)
+    assert replay.market_bars.get(sym)
+
+
+def test_explicit_no_trade_proposal_is_persisted(svc: Components) -> None:
+    out = svc.engine(MockAgent([AgentDecision(decision=DecisionKind.NO_TRADE, reason="abstention")])).run_cycle()
+    assert out.decision == "NO_TRADE"
+    proposal = svc.repo.events(svc.run.run_id, [EventType.ACTION_PROPOSAL])[0].payload
+    no = svc.repo.events(svc.run.run_id, [EventType.NO_TRADE])[0].payload
+    assert proposal["action"] == "NO_TRADE" and proposal["proposal_id"] == no["proposal_id"]
+
+
+class StaticBrain:
+    source_id = "baseline"
+    source_version = "1"
+
+    def __init__(self, action: Action = Action.LONG, *, bad: bool = False, raises: bool = False,
+                 entry: ProposalParameters | None = None, wrong_time: bool = False) -> None:
+        self.action, self.bad, self.raises, self.entry, self.wrong_time = action, bad, raises, entry, wrong_time
+
+    def decide(self, context: BrainContext) -> ActionProposal:
+        if self.raises:
+            raise RuntimeError("brain offline")
+        symbol, opp = next(iter(context.opportunities.items()))
+        if self.action is Action.LONG:
+            params = self.entry or ProposalParameters(strategy_id="TREND-01", strategy_version="1.0.0",
+                                                      requested_risk_pct_of_working_capital=3)
+        else:
+            params = ProposalParameters(position_ticket=999)
+        return ActionProposal(
+            proposal_id=proposal_identity(context.run_id, context.cycle_id, opp,
+                                          self.source_id, self.source_version),
+            source_id=self.source_id, source_version=self.source_version,
+            run_id=context.run_id, cycle_id=context.cycle_id, opportunity_id=opp,
+            symbol=None if self.bad else symbol, action=self.action,
+            timestamp=context.timestamp + timedelta(days=1) if self.wrong_time else context.timestamp,
+            parameters=params,
+        )
+
+
+def test_brain_exception_and_invalid_output_fail_closed(svc: Components) -> None:
+    for brain in (StaticBrain(raises=True), StaticBrain(bad=True), StaticBrain(wrong_time=True)):
+        out = svc.engine(MockAgent(), brain=brain, run_mode=RunMode.DEMO).run_cycle()
+        assert out.decision == "NO_TRADE"
+    assert len(svc.repo.events(svc.run.run_id, [EventType.BRAIN_FAILURE])) == 3
+    assert svc.broker.sent_orders == []  # type: ignore[attr-defined]
+
+
+def test_management_proposal_is_recorded_and_never_executes_without_policy(svc: Components) -> None:
+    out = svc.engine(MockAgent(), brain=StaticBrain(Action.CLOSE), run_mode=RunMode.DEMO).run_cycle()
+    assert out.decision == "NO_TRADE"
+    assert svc.repo.events(svc.run.run_id, [EventType.POSITION_ACTION_REJECTED])
+    assert svc.broker.sent_orders == []  # type: ignore[attr-defined]
+
+
+def test_brain_failure_does_not_block_protective_close(svc: Components, broker: MockBroker) -> None:
+    sym = shortlist(svc)[0]
+    svc.engine(MockAgent([AgentDecision(decision=DecisionKind.TRADE, intent=draft_for(svc, sym))]),
+               run_mode=RunMode.DEMO).run_cycle()
+    (pos,) = broker.positions()
+    broker._positions[pos.ticket].sl = None
+    out = svc.engine(MockAgent(), brain=StaticBrain(raises=True), run_mode=RunMode.DEMO).run_cycle()
+    assert out.decision == "NO_TRADE"
+    assert broker.positions() == []
+
+
+def test_baseline_brain_uses_same_risk_engine_and_rejection_blocks_order(svc: Components,
+                                                                         monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+    original = svc.risk.evaluate
+
+    def evaluate(intent, context):  # type: ignore[no-untyped-def]
+        seen.append(intent)
+        return original(intent, context)
+
+    monkeypatch.setattr(svc.risk, "evaluate", evaluate)
+    out = svc.engine(MockAgent(), brain=StaticBrain(), run_mode=RunMode.DEMO).run_cycle()
+    assert out.decision == "NO_TRADE" and "NO SL" in out.reason
+    assert len(seen) == 1 and seen[0].proposal_id
+    assert svc.repo.events(svc.run.run_id, [EventType.RISK_DECISION])[0].payload["proposal_id"]
+    assert svc.broker.sent_orders == []  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("mode,expected", [
+    (RunMode.OBSERVE, "DRY_RUN_APPROVED"),
+    (RunMode.PAPER, "PAPER_EXECUTED"),
+    (RunMode.DEMO, "EXECUTED"),
+])
+def test_baseline_brain_valid_entry_preserves_mode_safety(svc: Components, mode: RunMode,
+                                                          expected: str) -> None:
+    sym = shortlist(svc)[0]
+    draft = draft_for(svc, sym)
+    params = ProposalParameters(
+        strategy_id=draft.strategy_id, strategy_version=draft.strategy_version,
+        market_regime=draft.market_regime, entry_type=draft.entry_type, entry=draft.entry,
+        stop_loss=draft.stop_loss, take_profit=draft.take_profit,
+        requested_risk_pct_of_working_capital=draft.requested_risk_pct_of_working_capital,
+    )
+    out = svc.engine(MockAgent(), brain=StaticBrain(entry=params), run_mode=mode).run_cycle()
+    assert out.decision == "TRADE" and expected in out.reason
+    assert len(svc.broker.sent_orders) == (1 if mode is RunMode.DEMO else 0)  # type: ignore[attr-defined]
+
+
+class HoldBrain:
+    source_id = "hold-baseline"
+    source_version = "1"
+
+    def decide(self, context: BrainContext) -> ActionProposal:
+        pos = context.market["account"]["open_positions"][0]
+        return ActionProposal(
+            proposal_id=proposal_identity(context.run_id, context.cycle_id,
+                                          pos["opportunity_id"], self.source_id, self.source_version),
+            source_id=self.source_id, source_version=self.source_version,
+            run_id=context.run_id, cycle_id=context.cycle_id,
+            opportunity_id=pos["opportunity_id"], symbol=pos["symbol"], action=Action.HOLD,
+            timestamp=context.timestamp, parameters=ProposalParameters(position_ticket=pos["ticket"]),
+        )
+
+
+def test_position_hold_passes_deterministic_risk_without_order(svc: Components) -> None:
+    sym = shortlist(svc)[0]
+    svc.engine(MockAgent([AgentDecision(decision=DecisionKind.TRADE, intent=draft_for(svc, sym))]),
+               run_mode=RunMode.DEMO).run_cycle()
+    sent = len(svc.broker.sent_orders)  # type: ignore[attr-defined]
+    out = svc.engine(MockAgent(), brain=HoldBrain(), run_mode=RunMode.DEMO).run_cycle()
+    assert out.decision == "HOLD" and "HOLD validé" in out.reason
+    risk = svc.repo.events(svc.run.run_id, [EventType.RISK_DECISION])[-1].payload
+    assert risk["action"] == "HOLD" and risk["status"] == "APPROVED"
+    assert svc.repo.events(svc.run.run_id, [EventType.POSITION_ACTION])[-1].payload["action"] == "HOLD"
+    assert len(svc.broker.sent_orders) == sent  # type: ignore[attr-defined]
+    out = svc.engine(MockAgent(), brain=HoldBrain(), run_mode=RunMode.OBSERVE).run_cycle()
+    assert out.decision == "NO_TRADE"
+    assert svc.repo.events(svc.run.run_id, [EventType.POSITION_ACTION_REJECTED])
+    assert len(svc.broker.sent_orders) == sent  # type: ignore[attr-defined]

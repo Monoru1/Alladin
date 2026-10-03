@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +31,10 @@ class OpportunityStatus(StrEnum):
     PAPER = "PAPER"
     EXECUTED = "EXECUTED"
     EXPIRED = "EXPIRED"
+
+
+def opportunity_identity(run_id: str, cycle_id: str, symbol: str) -> str:
+    return f"OPP-{uuid5(NAMESPACE_URL, f'alladin:opportunity:v1:{run_id}:{cycle_id}:{symbol}').hex}"
 
 
 class Opportunity(BaseModel):
