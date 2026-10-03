@@ -22,6 +22,8 @@ _MAJORS_QUOTE = "USD"
 
 def classify_symbol(spec: InstrumentSpec) -> AssetCategory:
     """Classe un instrument d'après ses devises broker (et non d'après son nom) : robuste aux suffixes."""
+    if spec.category in (AssetCategory.CRYPTO_SPOT, AssetCategory.CRYPTO_PERP):
+        return spec.category  # explicit adapter metadata, never infer spot/perp from a name
     base, quote = spec.currency_base.upper(), spec.currency_profit.upper()
     if base in _METALS:
         return AssetCategory.METAL
@@ -73,6 +75,9 @@ class MarketUniverse:
         )
 
     def _exclusion_reason(self, spec: InstrumentSpec, forced: set[str]) -> str | None:
+        if (spec.category in (AssetCategory.CRYPTO_SPOT, AssetCategory.CRYPTO_PERP)
+                and spec.category not in self.broker.capabilities().supported_asset_categories):
+            return "catégorie crypto non déclarée par les capacités broker"
         if spec.symbol in self.rules.exclude_symbols:
             return "exclu par le profil"
         if not spec.is_tradable:

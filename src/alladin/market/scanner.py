@@ -124,6 +124,9 @@ class MarketScanner:
 
         for member in uni.members:
             sym = member.symbol
+            if not self.rules.sessions.allows(now, is_24_7=self.broker.capabilities().is_24_7):
+                rejected[sym] = ["hors session configurée ou capacité 24/7 absente"]
+                continue
             try:
                 if not self.broker.select_symbol(sym):
                     rejected[sym] = ["symbole non sélectionnable"]
@@ -201,7 +204,7 @@ class MarketScanner:
                     regime_confidence=assess.confidence,
                     regime_reasons=assess.reasons,
                     score=0.0,
-                    session=session_label(now),
+                    session="24_7" if self.broker.capabilities().is_24_7 else session_label(now),
                     spread_points=tick.spread / spec.point if spec.point else 0.0,
                     spread_atr_ratio=ratio,
                     metrics=assess.metrics,

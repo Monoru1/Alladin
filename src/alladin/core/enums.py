@@ -93,6 +93,8 @@ class SymbolTradeMode(StrEnum):
 
 
 class AssetCategory(StrEnum):
+    CRYPTO_SPOT = "CRYPTO_SPOT"
+    CRYPTO_PERP = "CRYPTO_PERP"
     FOREX_MAJOR = "FOREX_MAJOR"
     FOREX_MINOR = "FOREX_MINOR"  # crosses sans JPY
     FOREX_JPY = "FOREX_JPY"

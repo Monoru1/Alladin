@@ -1,0 +1,17 @@
+id: jafar_observe
+name: Jafar — observation only
+description: >
+  Technical observation envelope with a virtual reference budget.
+  No real account, no FTMO challenge, no strategy or execution enabled.
+initial_balance: 100000
+phases:
+  - {name: Observation envelope, profit_target_pct: 100}
+official_rules:
+  min_trading_days: 0
+  reset_timezone: UTC
+extra_rules:
+  max_days_per_phase: null
+  soft_daily_loss_pct: null
+  consistency: {enabled: false}
+  close_positions_on_fail: false
+universe_ref: jafar_observe

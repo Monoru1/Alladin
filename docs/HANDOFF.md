@@ -780,3 +780,57 @@ sans --run-mt5 : la recette sur un terminal connecté à un compte DEMO demeure
 
 Contrôles finaux : **552 passed, 3 skipped** (intégration MT5), Ruff sans
 erreur, mypy sans erreur sur 81 fichiers source, git diff --check propre.
+
+## Lots H/I — fondations crypto et Jafar OBSERVE (2026-10-04)
+
+H ajoute CRYPTO_SPOT/CRYPTO_PERP et les capabilities 24/7, funding, frais
+maker/taker et ouverture. Une catégorie crypto doit être déclarée par l'adapter,
+jamais déduite du nom. Les sessions configurables (timezone/jours/fenêtres,
+fin exclusive) filtrent scan et nouvelles entrées ; les sorties protectrices
+restent possibles. Alladin conserve son comportement sans configuration.
+
+CostModel exige des taux maker/taker explicites avec provenance : aucun zéro
+implicite, un taux maker négatif représente une remise. Les settlements funding
+fournis ont identité, timestamp, notional déjà converti en devise de compte et
+provenance. Convention du banc : (open, close], sans périodicité ni couverture
+inventée. Cashflow signé distinct du swap, intégré à compute_r. Ce n'est pas
+un collecteur de funding ni une tarification réelle d'exchange. Le banc BTC
+antérieur conserve ses frais fixes ; aucun backtest n'est requalifié en silence.
+
+I fournit profil, runtime et catalogue Jafar propres, Brain NO_TRADE, CLI
+new/run/serve/kill et cockpit rouge GET-only scoped. OBSERVE uniquement :
+PAPER/DEMO, execute legacy, entrées directes, gestion Brain et fermetures broker
+sont bloqués, même avec un mock DEMO. CryptoObserveBroker expose BTCUSDT spot
+via crypto-mock, crypto-testnet ou crypto-public. Aucun compte ni credential :
+AccountType.UNKNOWN, budget de référence virtuel USDT, aucune méthode d'envoi.
+Le budget n'est ni un solde réel ni un challenge FTMO. Le watchdog sert
+uniquement d'enveloppe technique d'observation, pas de politique crypto finale.
+
+La source publique lit exchangeInfo (PRICE_FILTER/LOT_SIZE/MIN_NOTIONAL ou
+NOTIONAL) au lieu de specs BTC codées en dur. Réponse incomplète, non-spot ou
+non négociable : instrument indisponible. Parseurs testés sur fixtures, accès
+réseau réel encore à vérifier depuis le poste. Références techniques :
+https://github.com/binance/binance-spot-api-docs/blob/master/filters.md et
+https://developers.binance.com/en/docs/products/spot/rest-api.
+Le mock conserve des bougies stables entre fenêtres/reprises, timestamps
+alignés. Settings.for_workspace est idempotent : pas de répertoires imbriqués
+lors d'une reprise depuis des settings déjà scoped.
+
+Commandes (même --broker à la création et à la reprise) :
+
+    python -m alladin jafar new --broker crypto-mock
+    python -m alladin jafar run --broker crypto-mock --cycles 3 --interval 0
+    python -m alladin jafar serve --broker crypto-mock --port 8002
+    python -m alladin jafar kill --broker crypto-mock
+
+crypto-public = données spot publiques ; crypto-testnet = source testnet.
+Les sources ont des bindings distincts : nouveau run pour changer de source.
+Après kill : jafar kill --clear, puis jafar new. Les anciens runs KILLED restent
+terminaux ; le kill switch Alladin reste indépendant.
+
+Suite prévue : J Outcome/Reward, puis K SNN expérimental. Recette MT5 DEMO F/G
+et accès crypto public réel restent distincts de la validation logicielle H/I.
+
+Validation H/I : **590 passed, 3 skipped** (MT5), Ruff et mypy propres
+(84 fichiers source). Tests complémentaires du parcours kill/clear/new/run
+également verts. Aucun terminal MT5 ni endpoint crypto réel utilisé.

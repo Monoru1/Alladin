@@ -6,6 +6,7 @@ Toute metrique est exprimee en R pour etre comparable entre symboles, tailles et
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -33,6 +34,31 @@ class CostModel:
     commission: CostCategory = CostCategory.ZERO
     swap: CostCategory = CostCategory.ZERO
     label: str = ""
+    maker_rate: float | None = None  # fraction of account-currency notional; negative = rebate
+    taker_rate: float | None = None
+    funding: CostCategory = CostCategory.ZERO
+    fee_provenance: str = ""
+
+    def __post_init__(self) -> None:
+        for rate in (self.maker_rate, self.taker_rate):
+            if rate is not None and (not math.isfinite(rate) or abs(rate) > 1):
+                raise ValueError("fee rate must be finite and expressed as a fraction")
+        if (self.maker_rate is not None or self.taker_rate is not None) and (
+            self.commission is CostCategory.ZERO or not self.fee_provenance.strip()
+        ):
+            raise ValueError("maker/taker fees require classification and provenance")
+
+    def fee(self, notional_account: float, liquidity: str) -> float:
+        """One fill only. Account-currency conversion must precede this call."""
+        if not math.isfinite(notional_account) or notional_account <= 0:
+            raise ValueError("notional must be finite and positive")
+        if liquidity not in ("MAKER", "TAKER"):
+            raise ValueError("liquidity must be MAKER or TAKER")
+        rate = self.maker_rate if liquidity == "MAKER" else self.taker_rate
+        if rate is None:
+            raise ValueError("maker/taker fee unknown; zero cannot be inferred")
+        return notional_account * rate
+
 
 
 @dataclass(frozen=True)
@@ -68,13 +94,14 @@ class FillRecord:
     swap: float
     # Economics (account currency)
     gross_pnl: float  # price movement * position value, before transaction costs
-    net_pnl: float  # gross_pnl - slippage - commission + swap
+    net_pnl: float  # gross_pnl - slippage - commission + swap + funding_cashflow
     initial_risk: float  # monetary risk at protective stop
     r_multiple: float  # net_pnl / initial_risk
     # Cost transparency
     cost_model: CostModel
     # Optional provenance
     experiment_id: str = ""
+    funding_cashflow: float = 0.0  # signed account-currency transfer; separate from swap
 
 
 @dataclass(frozen=True)
@@ -91,6 +118,7 @@ class RMetrics:
     slippage_r: float  # slippage en R
     commission_r: float  # commission en R
     swap_r: float  # swap en R
+    funding_r: float = 0.0  # signed cashflow, distinct from swap
 
 
 def compute_r(
@@ -108,6 +136,7 @@ def compute_r(
     slippage: float = 0.0,
     commission: float = 0.0,
     swap: float = 0.0,
+    funding: float = 0.0,
     loss_per_lot: float | None = None,
     price_value_per_lot: float | None = None,
     estimated_commission: float = 0.0,
@@ -147,7 +176,9 @@ def compute_r(
 
     # PnL brut en prix (sans costs)
     pnl_price = (exit_price - entry) * side_sign
-    realized_pnl = (pnl_price - abs(slippage)) * price_value - abs(commission) + swap
+    if not math.isfinite(funding):
+        raise ValueError("funding cashflow must be finite")
+    realized_pnl = (pnl_price - abs(slippage)) * price_value - abs(commission) + swap + funding
 
     realized_r = realized_pnl / risk
 
@@ -186,4 +217,50 @@ def compute_r(
         slippage_r=round(slip_r, 4),
         commission_r=round(comm_r, 4),
         swap_r=round(swap_r, 4),
+        funding_r=round(funding / risk, 4),
     )
+
+
+@dataclass(frozen=True)
+class FundingSettlement:
+    """Actual supplied settlement, never extrapolated from a constant interval.
+
+    Positive rate means longs pay shorts. Notional is valued in account currency
+    at this settlement; quantity changes require their actual settlement notional.
+    """
+    settlement_id: str
+    settled_at: datetime
+    rate: float
+    notional_account: float
+    provenance: str
+
+    def __post_init__(self) -> None:
+        if not self.settlement_id or not self.provenance.strip():
+            raise ValueError("funding requires identity and provenance")
+        if self.settled_at.tzinfo is None or self.settled_at.utcoffset() is None:
+            raise ValueError("funding timestamp must be timezone aware")
+        if not math.isfinite(self.rate) or abs(self.rate) > 1:
+            raise ValueError("funding rate must be a finite fraction")
+        if not math.isfinite(self.notional_account) or self.notional_account <= 0:
+            raise ValueError("funding notional must be finite and positive")
+
+
+def funding_cashflow(settlements: list[FundingSettlement], *, side_sign: int,
+                     opened_at: datetime, closed_at: datetime, model: CostModel) -> float:
+    """Bench convention: charge settlements in (open, close], no implicit schedule.
+
+    Missing data must be handled by the caller as incomplete coverage. An empty
+    list means no supplied settlements, never proof of zero funding.
+    """
+    if side_sign not in (-1, 1):
+        raise ValueError("side must be +1 or -1")
+    if any(t.tzinfo is None or t.utcoffset() is None for t in (opened_at, closed_at)):
+        raise ValueError("funding interval must be timezone aware")
+    if closed_at < opened_at:
+        raise ValueError("funding interval reversed")
+    if model.funding is CostCategory.ZERO:
+        raise ValueError("funding not modeled; zero cannot be inferred")
+    if len({s.settlement_id for s in settlements}) != len(settlements):
+        raise ValueError("duplicate funding settlement")
+    return sum(-side_sign * s.notional_account * s.rate for s in settlements
+               if opened_at < s.settled_at <= closed_at)

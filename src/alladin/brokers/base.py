@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from alladin.core.approval import ApprovalToken, verify_token
-from alladin.core.enums import AccountType, Timeframe
+from alladin.core.enums import AccountType, AssetCategory, Timeframe
 from alladin.core.errors import ExecutionBlockedError
 from alladin.core.models import (
     AccountSnapshot,
@@ -62,6 +62,11 @@ class BrokerCapabilities:
     can_modify_stop: bool = False
     can_modify_target: bool = False
     reliable_position_reconciliation: bool = False
+    is_24_7: bool = False
+    has_funding_rate: bool = False
+    has_maker_taker_fees: bool = False
+    supported_asset_categories: frozenset[AssetCategory] = field(default_factory=frozenset)
+    can_open_position: bool = True  # legacy trading adapters; data-only adapters must override
 
 
 def block_message(account_type: AccountType) -> str:

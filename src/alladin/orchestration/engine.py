@@ -22,6 +22,7 @@ from alladin.brokers.base import BrokerAdapter
 from alladin.core.enums import RunMode, RunState, Side
 from alladin.core.errors import AlladinError
 from alladin.core.models import TradeIntent
+from alladin.core.workspace import WorkspaceId
 from alladin.execution.models import ExecStatus
 from alladin.execution.service import ExecutionService
 from alladin.journal.models import EventType
@@ -75,6 +76,8 @@ class OrchestrationEngine:
         # run_mode prend le dessus sur le flag legacy execute
         if execute and run_mode is RunMode.OBSERVE:
             run_mode = RunMode.DEMO
+        if run.workspace is WorkspaceId.JAFAR and run_mode is not RunMode.OBSERVE:
+            raise AlladinError("Jafar skeleton autorise OBSERVE uniquement")
         self.run_mode = run_mode
         self.execute = run_mode is RunMode.DEMO  # compatibilité interne
         self.paper_engine = paper_engine
@@ -113,6 +116,8 @@ class OrchestrationEngine:
 
     def _run_cycle(self, cycle_id: str) -> CycleOutcome:
         rid = self.run.run_id
+        if self.run.workspace is WorkspaceId.JAFAR and (self.run_mode is not RunMode.OBSERVE or self.execute):
+            raise AlladinError("Jafar skeleton autorise OBSERVE uniquement")
 
         # Read-only reconciliation never retries a management order.
         self.execution.position_actions.reconcile_pending(self.paper_engine)

@@ -5,14 +5,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from alladin.core.workspace import WorkspaceId
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", extra="ignore", populate_by_name=True)
+
+    _workspace_scope: WorkspaceId = PrivateAttr(default=WorkspaceId.ALLADIN)
+    _workspace_root: Settings | None = PrivateAttr(default=None)
 
     # REAL MONEY TRADING = INTERDIT : "demo" est la seule valeur acceptée dans cette version.
     trading_mode: Literal["demo"] = Field(default="demo", alias="TRADING_MODE")
@@ -49,6 +54,23 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_to_none(cls, v: object) -> object:
         return None if v == "" else v
+
+    def for_workspace(self, workspace: WorkspaceId) -> Settings:
+        """Idempotent scope: passing component settings back cannot nest directories."""
+        workspace = WorkspaceId(workspace)
+        if self._workspace_scope is workspace:
+            return self
+        base = self._workspace_root or self
+        if workspace is WorkspaceId.ALLADIN:
+            return base
+        scoped = base.model_copy(update={
+            "data_dir": base.resolved_data_dir / "workspaces" / workspace.value,
+            "default_profile": "jafar_observe",
+            "strategies_dir": base.strategies_dir / "jafar",
+        })
+        scoped._workspace_scope = workspace
+        scoped._workspace_root = base
+        return scoped
 
     @property
     def resolved_data_dir(self) -> Path:

@@ -14,6 +14,7 @@ from alladin.risk.correlation import CorrelationMatrix
 
 
 class RejectCode(StrEnum):
+    SESSION_CLOSED = "SESSION_CLOSED"
     POSITION_NOT_OWNED = "POSITION_NOT_OWNED"
     POSITION_ACTION_UNSUPPORTED = "POSITION_ACTION_UNSUPPORTED"
     MODE_SAFETY = "MODE_SAFETY"
@@ -62,6 +63,8 @@ class RiskContext(BaseModel):
 
     now: datetime
     trading_mode: str = "demo"
+    session_allowed: bool = True
+    can_open_position: bool = True
     account: AccountSnapshot
     spec: InstrumentSpec
     tick: Tick

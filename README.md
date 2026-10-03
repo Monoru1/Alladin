@@ -47,3 +47,20 @@ ruff check src tests && mypy src
 - [docs/RISK_MODEL.md](docs/RISK_MODEL.md) — capital de travail, plafonds, sizing, exposition
 - [docs/CHALLENGE_RULES.md](docs/CHALLENGE_RULES.md) — profils, règles officielles vs ALLADIN, états du run
 - [docs/AGENTS.md](docs/AGENTS.md) — adapters Claude/Codex (sans clé API)
+
+## Jafar — observation crypto isolée
+
+Données spot avec budget de référence **virtuel**, sans stratégie active,
+compte connecté ni ordre. Seul OBSERVE est autorisé. Journal, archive, runtime
+et kill switch sont isolés d'Alladin.
+
+    python -m alladin jafar new --broker crypto-mock
+    python -m alladin jafar run --broker crypto-mock --cycles 3 --interval 0
+    python -m alladin jafar serve --broker crypto-mock --port 8002
+    python -m alladin jafar kill --broker crypto-mock
+
+Choisir --broker crypto-public à la création ET à la reprise pour les données
+spot publiques, ou crypto-testnet pour la source testnet. Aucun secret ni
+abonnement API requis. Nouveau run pour changer de source. Après kill,
+utiliser jafar kill --clear puis créer un nouveau run. Les accès réseau réels
+restent à vérifier sur le poste ; mock et parseurs sont testés sans réseau.

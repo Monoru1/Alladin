@@ -26,6 +26,7 @@ from alladin.core.models import (
     Position,
     TradeIntent,
 )
+from alladin.core.workspace import WorkspaceId
 from alladin.execution.models import ExecStatus, ExecutionResult, comment_matches, make_comment
 from alladin.execution.position_actions import PositionActionResult, PositionActions
 from alladin.journal.models import EventType, TradeRecord
@@ -139,6 +140,8 @@ class ExecutionService:
 
     def submit(self, intent: TradeIntent, *, dry_run: bool = False) -> ExecutionResult:
         rid = self.run.run_id
+        if self.run.workspace is WorkspaceId.JAFAR:
+            return self._blocked(intent, "Jafar skeleton: OBSERVE only")
         self.journal.log(rid, EventType.TRADE_INTENT, intent.model_dump(mode="json"))
 
         # 1. DEMO uniquement — avant toute autre chose, fail closed
@@ -364,6 +367,9 @@ class ExecutionService:
         return (
             RiskContext(
                 now=self.clock(),
+                session_allowed=self.run.profile.universe.sessions.allows(
+                    self.clock(), is_24_7=self.broker.capabilities().is_24_7),
+                can_open_position=self.broker.capabilities().can_open_position,
                 account=account,
                 spec=spec,
                 tick=tick,
@@ -380,6 +386,8 @@ class ExecutionService:
     # ------------------------------------------------------------------ fermeture
 
     def _close(self, pos: Position, reason: str) -> bool:
+        if self.run.workspace is WorkspaceId.JAFAR:
+            return False
         try:
             self.assert_account_binding(self.broker.assert_demo())
         except ExecutionBlockedError:

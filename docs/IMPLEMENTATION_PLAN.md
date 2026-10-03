@@ -721,3 +721,22 @@ ouverte implicitement par cette validation.
 
 Contrôles finaux : **552 passed, 3 skipped** (intégration MT5), Ruff sans
 erreur, mypy sans erreur sur 81 fichiers source, git diff --check propre.
+
+### Lots H/I — implémentation et recette logicielle (2026-10-04)
+
+| Lot | Livrable | Validation |
+| --- | --- | --- |
+| H | Catégories crypto et capabilities honnêtes | source publique sans droits d'exécution |
+| H | Maker/taker, remises et funding signé | inconnus/NaN refusés, bornes et identités, R séparé du swap |
+| H | Sessions configurables | timezone/jours/fenêtres, scan/entrée bloqués, sortie protectrice permise |
+| I | Runtime Jafar OBSERVE | scan spot, archive/replay, reprise SQLite, Brain NO_TRADE |
+| I | CLI et cockpit scoped | new/run/serve/kill/clear, rouge, GET-only, budget virtuel explicite |
+| I | Fail-closed | PAPER/DEMO/execute/entry/management refusés |
+
+Aucune stratégie crypto ni compte d'exchange activé. Funding : settlements
+fournis, couverture non inventée. Tests public-provider sur fixtures ; aucun
+accès réseau réel déclaré validé. Prochaine fondation : Lot J.
+
+Validation H/I : **590 passed, 3 skipped** (MT5), Ruff et mypy propres
+(84 fichiers source). Tests complémentaires du parcours kill/clear/new/run
+également verts. Aucun terminal MT5 ni endpoint crypto réel utilisé.

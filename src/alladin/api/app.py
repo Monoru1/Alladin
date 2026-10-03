@@ -14,6 +14,7 @@ from alladin.challenge.profiles import load_profile
 from alladin.challenge.watchdog import ChallengeWatchdog
 from alladin.core.config import Settings, get_settings
 from alladin.core.enums import AccountType
+from alladin.core.workspace import WorkspaceId
 from alladin.execution.models import comment_matches
 from alladin.journal.models import EventType
 from alladin.journal.repository import JournalRepository
@@ -34,7 +35,8 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
     repo = repo or JournalRepository.from_url(settings.db_url)
     journal = JournalService(repo)
     market_cache: dict[str, Any] = {}
-    app = FastAPI(title="ALLADIN Mission Control", description="Lecture seule — aucune route de trading.")
+    workspace = repo.workspace
+    app = FastAPI(title=f"{workspace.value} Mission Control", description="Lecture seule — aucune route de trading.")
 
     def latest(run_id: str | None = None) -> Any:
         records = repo.list_runs()
@@ -45,7 +47,25 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
-        return INDEX.read_text(encoding="utf-8")
+        html = INDEX.read_text(encoding="utf-8")
+        if workspace is WorkspaceId.JAFAR:
+            html = html.replace("ALLADIN", "JAFAR")
+            theme = "<style>:root{--accent:#ef5350;--accent-dim:#ef535018;--cyan:#ff8a80;--cyan-dim:#ff8a8018}</style>"
+            banner = '<div role="status" style="padding:12px;color:#ff8a80;text-align:center">JAFAR · OBSERVE uniquement · budget de référence virtuel · aucune stratégie active</div>'
+            html = html.replace("</head>", theme + "</head>").replace("<body>", "<body>" + banner)
+        return html
+
+    @app.get("/api/workspace")
+    def workspace_info() -> dict[str, Any]:
+        caps = broker.capabilities() if broker else None
+        return {"workspace": workspace.value, "allowed_modes": ["OBSERVE"] if workspace is WorkspaceId.JAFAR
+                else ["OBSERVE", "PAPER", "DEMO"],
+                "account_semantics": "virtual_reference_budget" if workspace is WorkspaceId.JAFAR else "broker_account",
+                "capabilities": {"is_24_7": caps.is_24_7, "can_open_position": caps.can_open_position,
+                                 "has_funding_rate": caps.has_funding_rate,
+                                 "has_maker_taker_fees": caps.has_maker_taker_fees,
+                                 "asset_categories": sorted(c.value for c in caps.supported_asset_categories)}
+                if caps else None}
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -66,6 +86,9 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
         stale = last_dt is None or observed_at - last_dt.astimezone(UTC) > timedelta(minutes=2)
         return {
             "status": "ok",
+            "workspace": workspace.value,
+            "observe_only": workspace is WorkspaceId.JAFAR,
+            "reference_budget_virtual": workspace is WorkspaceId.JAFAR,
             "run_id": rec.run_id if rec else None,
             "run_kind": rec.kind if rec else None,
             "run_mode": run_mode,
@@ -158,6 +181,8 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
 
     @app.get("/api/strategies")
     def strategies() -> list[dict[str, Any]]:
+        if workspace is WorkspaceId.JAFAR:
+            return []
         rows = StrategyRegistry.from_config(settings.strategies_dir).catalogue()
         stats = {s.key: s for s in journal.stats("strategy")}
         for row in rows:

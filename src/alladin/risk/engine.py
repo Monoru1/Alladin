@@ -68,6 +68,10 @@ class RiskEngine:
         acct, spec, wd = ctx.account, ctx.spec, ctx.watchdog
 
         # ---- 1. garde-fous globaux ------------------------------------------------------
+        if not ctx.session_allowed:
+            reject(RejectCode.SESSION_CLOSED, "hors session configurée")
+        if not ctx.can_open_position:
+            reject(RejectCode.MODE_SAFETY, "adapter sans capacité d’ouverture")
         if ctx.trading_mode != "demo":
             reject(RejectCode.TRADING_MODE, f"trading mode '{ctx.trading_mode}' interdit : DEMO uniquement")
         if acct.account_type is AccountType.LIVE:

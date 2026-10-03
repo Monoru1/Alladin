@@ -529,13 +529,13 @@ Chaque étape ajoute des tests avant merge.
 Lot E (COMPLETE)
   Brain API, ActionProposal, ClassicBrainAdapter, lifecycle identity
 
-Lot F — Position lifecycle complet (FONDATION)
+Lot F — Position lifecycle complet (VALIDÉ LOGICIELLEMENT)
   CLOSE / MODIFY_STOP / MODIFY_TARGET / PARTIAL_CLOSE routés en engine
   Position monitoring autonome dans OrchestrationEngine
   Tests d'intégration : position ouverte → HOLD → MODIFY_SL → CLOSE
   [Bloquant pour : Lot G, SNN real, Reward]
 
-Lot G — Workspace identity + state isolation (ARCHITECTURE)
+Lot G — Workspace identity + state isolation (VALIDÉ LOGICIELLEMENT)
   WorkspaceId enum
   workspace dans RunRecord, TradeRecord, Experiment
   Journal queries filtrées par workspace
@@ -543,14 +543,14 @@ Lot G — Workspace identity + state isolation (ARCHITECTURE)
   AccountBinding model
   [Bloquant pour : Lot I Jafar skeleton]
 
-Lot H — BrokerCapabilities + CostModel enrichis (BROKER)
+Lot H — BrokerCapabilities + CostModel enrichis (FONDATIONS VALIDÉES LOGICIELLEMENT)
   BrokerCapabilities crypto (is_24_7, has_funding_rate, ...)
   AssetCategory crypto (CRYPTO_SPOT, CRYPTO_PERP)
   CostModel maker/taker + funding
   Session rules configurables
   [Bloquant pour : Lot I]
 
-Lot I — Jafar skeleton (WORKSPACE)
+Lot I — Jafar skeleton (OBSERVE VALIDÉ LOGICIELLEMENT)
   WorkspaceId = JAFAR instancié
   Config profile JAFAR
   OrchestrationEngine JAFAR isolé
@@ -577,7 +577,10 @@ F (lifecycle) → G (workspace) → H (broker) → I (Jafar) ↘
                                                           └→ J (outcome) → K (SNN)
 ```
 
-**F est le lot suivant obligatoire.** Sans position lifecycle complet :
+**F/G sont validés logiciellement ; H/I fournissent les fondations crypto et Jafar OBSERVE.**
+La recette terminal MT5 et l’accès public crypto réel restent à effectuer.
+Le prochain lot de développement est J (Outcome/Reward).
+Rappel des dépendances résolues par F :
 - le Brain ne peut pas gérer ses positions
 - PAPER simulation est incomplète
 - le feedback loop Outcome → Reward est vide
@@ -638,7 +641,7 @@ JAFAR    : Session rules 24/7 · FundingRateTracker
            Exchange adapter natif (futur)
 
 Non-implémenté (cible) :
-           AccountBinding · WorkspaceId propagation
+           Collecte funding et frais réels, adapters crypto de trading
            BrokerCapabilities crypto complet
            OrchestrationEngine multi-workspace
            Command Center

@@ -16,6 +16,7 @@ from alladin.brain import Action, ActionProposal
 from alladin.core.approval import issue_position_token
 from alladin.core.enums import DealEntry, OrderAction, RunMode, Side
 from alladin.core.models import OrderRequest, OwnedPosition
+from alladin.core.workspace import WorkspaceId
 from alladin.journal.models import EventType
 from alladin.journal.repository import paper_positions
 from alladin.risk.models import RiskDecision
@@ -74,6 +75,9 @@ class PositionActions:
     def submit(self, proposal: ActionProposal, mode: RunMode,
                paper: PaperExperimentEngine | None = None) -> PositionActionResult:
         s, rid = self.service, self.service.run.run_id
+        if s.run.workspace is WorkspaceId.JAFAR:
+            return PositionActionResult(proposal_id=proposal.proposal_id, action=proposal.action,
+                                        status="BLOCKED", messages=["Jafar skeleton: OBSERVE only"])
         fingerprint = hashlib.sha256(proposal.model_dump_json().encode()).hexdigest()
         existing = self._row(proposal.proposal_id)
         if existing:

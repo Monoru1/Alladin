@@ -19,6 +19,7 @@ from alladin.core.enums import AccountType, EntryType, MarketRegime, RunMode, Ru
 from alladin.core.errors import AlladinError, BrokerConnectionError
 from alladin.core.logging import setup_logging
 from alladin.core.models import TradeIntent
+from alladin.core.workspace import WorkspaceId
 from alladin.market.scanner import MarketScanner
 from alladin.market.universe import MarketUniverse
 from alladin.orchestration.bootstrap import Components, build_services, make_agent, make_broker
@@ -49,6 +50,8 @@ app.add_typer(runs_app, name="runs")
 app.add_typer(positions_app, name="positions")
 app.add_typer(replay_app, name="replay")
 app.add_typer(archive_app, name="archive")
+jafar_app = typer.Typer(no_args_is_help=True, help="Jafar — crypto OBSERVE uniquement, aucun ordre.")
+app.add_typer(jafar_app, name="jafar")
 
 console = Console(markup=False, highlight=False)
 BrokerOpt = Annotated[str, typer.Option("--broker", help="mt5 | mock")]
@@ -836,6 +839,71 @@ def serve(
     _connect(broker)
     uvicorn.run(create_app(settings, JournalRepository.from_url(settings.db_url), broker), host=host, port=port)
 
+
+
+def _jafar_components(kind: str, *, create: bool = False, run_id: str | None = None) -> Components:
+    if kind not in ("crypto-mock", "crypto-public", "crypto-testnet"):
+        raise die("Jafar: --broker crypto-mock | crypto-public | crypto-testnet", 2)
+    settings = get_settings()
+    broker = make_broker(kind, settings)
+    _connect(broker)
+    try:
+        comps = build_services(settings, broker, workspace=WorkspaceId.JAFAR,
+                               create_run=create, run_id=run_id)
+    except AlladinError as exc:
+        raise die(str(exc), 2) from exc
+    if comps is None:
+        raise die("Créer un run: python -m alladin jafar new --broker " + kind, 2)
+    return comps
+
+
+@jafar_app.command("new")
+def jafar_new(broker_kind: BrokerOpt = "crypto-mock") -> None:
+    """Crée un run isolé, avec budget virtuel et aucune stratégie."""
+    comps = _jafar_components(broker_kind, create=True)
+    out(f"{comps.run.run_id} | JAFAR | OBSERVE uniquement | budget virtuel {comps.profile.initial_balance:g} USDT")
+
+
+@jafar_app.command("run")
+def jafar_run(broker_kind: BrokerOpt = "crypto-mock", run: RunOpt = None,
+              interval: float = 300, cycles: int = 1,
+              mode: str = "OBSERVE") -> None:
+    """Observe les données spot et archive les cycles, sans appel à un agent payant."""
+    if mode.upper() != "OBSERVE":
+        raise die("Jafar skeleton: OBSERVE uniquement", 2)
+    if interval < 0 or cycles < 1:
+        raise die("interval >= 0 et cycles >= 1 requis", 2)
+    comps = _jafar_components(broker_kind, run_id=run)
+    if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
+        comps.manager.start(comps.run, comps.broker.account_info())
+    engine = comps.engine(make_agent("mock", comps.settings))
+    engine.run_loop(interval, max_cycles=cycles, on_cycle=lambda o: out(
+        f"{comps.run.run_id} | OBSERVE | {o.decision} | {o.reason} | {', '.join(o.shortlist) or '-'}"))
+
+
+@jafar_app.command("serve")
+def jafar_serve(broker_kind: BrokerOpt = "crypto-mock", host: str = "127.0.0.1", port: int = 8002) -> None:
+    """Cockpit Jafar rouge en lecture seule ; seules les données Jafar sont exposées."""
+    import uvicorn
+
+    from alladin.api.app import create_app
+
+    comps = _jafar_components(broker_kind)
+    uvicorn.run(create_app(comps.settings, comps.repo, comps.broker), host=host, port=port)
+
+
+@jafar_app.command("kill")
+def jafar_kill(broker_kind: BrokerOpt = "crypto-mock", reason: str = "arrêt Jafar", clear: bool = False) -> None:
+    """Arrête le workspace Jafar sans toucher au kill switch Alladin."""
+    if clear:
+        from alladin.core.killswitch import KillSwitch
+
+        KillSwitch(get_settings().for_workspace(WorkspaceId.JAFAR).kill_switch_path).clear()
+        out("Kill switch Jafar levé ; les runs KILLED restent terminaux. Créer un nouveau run.")
+        return
+    comps = _jafar_components(broker_kind)
+    comps.manager.kill(comps.run, reason)
+    out(f"{comps.run.run_id} KILLED — Alladin indépendant")
 
 def main() -> None:
     app()

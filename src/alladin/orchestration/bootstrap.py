@@ -13,6 +13,8 @@ from alladin.agents.codex import CodexAdapter
 from alladin.agents.mock import MockAgent
 from alladin.brain import Brain
 from alladin.brokers.base import BrokerAdapter
+from alladin.brokers.crypto import BinancePublicProvider, CryptoMockProvider
+from alladin.brokers.crypto_observe import CryptoObserveBroker
 from alladin.brokers.mock import MockBroker
 from alladin.brokers.mt5 import MT5Broker
 from alladin.challenge.models import ChallengeProfile
@@ -40,6 +42,9 @@ from alladin.strategies.router import StrategyRouter
 
 
 def make_broker(kind: str, settings: Settings, profile: ChallengeProfile | None = None) -> BrokerAdapter:
+    if kind in ("crypto-mock", "crypto-public", "crypto-testnet"):
+        provider = CryptoMockProvider() if kind == "crypto-mock" else BinancePublicProvider(testnet=kind == "crypto-testnet")
+        return CryptoObserveBroker(provider, provenance=f"crypto:{kind}")
     if kind == "mock":
         return MockBroker(balance=profile.initial_balance if profile else 100_000.0)
     if kind == "mt5":
@@ -86,7 +91,15 @@ class Components:
         run_mode: RunMode = RunMode.OBSERVE,
         brain: Brain | None = None,
     ) -> OrchestrationEngine:
-        registry = StrategyRegistry.from_config(self.settings.strategies_dir)
+        if self.run.workspace is WorkspaceId.JAFAR:
+            if execute or run_mode is not RunMode.OBSERVE:
+                raise AlladinError("Jafar skeleton autorise OBSERVE uniquement")
+            from alladin.orchestration.jafar import JafarObserveBrain
+
+            registry = StrategyRegistry()  # no inherited FX strategies
+            brain = brain or JafarObserveBrain()
+        else:
+            registry = StrategyRegistry.from_config(self.settings.strategies_dir)
         effective_mode = RunMode.DEMO if execute and run_mode is RunMode.OBSERVE else run_mode
         if effective_mode in (RunMode.DEMO, RunMode.PAPER):
             versions = ResearchRepository.from_engine(self.repo.engine, self.run.workspace).list_versions()
@@ -137,8 +150,7 @@ def build_services(
 ) -> Components | None:
     """Retourne None si aucun run n'existe et que `create_run` est faux."""
     workspace = WorkspaceId(workspace)
-    if workspace is not WorkspaceId.ALLADIN:
-        settings = settings.model_copy(update={"data_dir": settings.resolved_data_dir / "workspaces" / workspace.value})
+    settings = settings.for_workspace(workspace)
     repo = JournalRepository.from_url(db_url or settings.db_url, workspace)
     clk = clock or broker.now
     journal = JournalService(repo, clk)
@@ -153,6 +165,8 @@ def build_services(
         profile = load_profile(rec.profile_id, settings.profiles_dir)
         run = manager.load_run(existing, profile)
     elif create_run:
+        if workspace is WorkspaceId.JAFAR and profile_id not in (None, "jafar_observe"):
+            raise AlladinError("Jafar skeleton exige le profil jafar_observe")
         profile = load_profile(profile_id or settings.default_profile, settings.profiles_dir)
         account = broker.account_info()
         run = manager.create_run(

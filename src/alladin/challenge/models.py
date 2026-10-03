@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from alladin.core.enums import AssetCategory, RuleSource, RunState
+from alladin.market.sessions import SessionRules
 
 
 class DailyLossReference(StrEnum):
@@ -81,6 +82,7 @@ class UniverseRules(BaseModel):
     exclude_symbols: list[str] = []
     max_spread_atr_ratio: float = 0.15
     shortlist_size: int = 10
+    sessions: SessionRules = SessionRules()
 
 
 class ChallengeProfile(BaseModel):

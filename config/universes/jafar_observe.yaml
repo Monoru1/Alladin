@@ -1,0 +1,11 @@
+id: jafar_observe
+description: Public crypto spot observation, USDT reference currency.
+allowed_categories: [CRYPTO_SPOT]
+include_symbols: []
+exclude_symbols: []
+max_spread_atr_ratio: 0.15
+shortlist_size: 10
+sessions:
+  timezone: UTC
+  weekdays: [0, 1, 2, 3, 4, 5, 6]
+  require_24_7: true

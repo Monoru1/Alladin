@@ -51,7 +51,22 @@ def test_shared_database_run_position_journal_and_kill_isolation(pair: tuple[Com
         lower, upper = MAGIC_RANGES[svc.run.workspace]
         assert lower <= svc.run.magic < upper
         assert svc.run.account_binding and svc.run.account_binding.workspace == svc.run.workspace
-        assert svc.execution.submit(make_intent(svc, opportunity_id="OPP-entry", proposal_id="AP-entry")).executed
+        intent = make_intent(svc, opportunity_id="OPP-entry", proposal_id="AP-entry")
+        if svc is a:
+            assert svc.execution.submit(intent).executed
+        else:
+            assert svc.execution.submit(intent).status.value == "BLOCKED"
+            # Historical position fixture: isolation still applies even though the
+            # Jafar skeleton can no longer open positions.
+            from alladin.execution.models import make_comment
+            original = a.execution.my_positions()[0]
+            copied = original.model_copy(update={"ticket": original.ticket + 1, "magic": j.run.magic,
+                                                "comment": make_comment(j.run.run_id, j.run.magic)})
+            a.broker._positions[copied.ticket] = copied
+            trade = a.repo.trades_for_run(a.run.run_id)[0]
+            j.repo.insert_trade(trade.model_copy(update={"trade_id": "JAFAR-history", "run_id": j.run.run_id,
+                                                        "workspace": WorkspaceId.JAFAR, "ticket": copied.ticket,
+                                                        "magic": j.run.magic}))
     assert len(a.broker.positions()) == 2
     assert len(a.execution.my_positions()) == len(j.execution.my_positions()) == 1
     assert a.execution.owned_positions(RunMode.DEMO)[0].workspace is WorkspaceId.ALLADIN

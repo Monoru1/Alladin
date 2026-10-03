@@ -12,6 +12,7 @@ Ce module fournit uniquement des donnees pour les experiences BTC.
 from __future__ import annotations
 
 import logging
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -69,6 +70,8 @@ class CryptoInstrument:
     tick_size: float = 0.01  # minimum price increment
     lot_size: float = 0.00001  # minimum qty increment
     min_notional: float = 10.0  # minimum order value
+    min_qty: float = 0.00001
+    max_qty: float = 1000.0
 
 
 class CryptoDataProvider(ABC):
@@ -107,31 +110,26 @@ class CryptoMockProvider(CryptoDataProvider):
         self._seed = seed
 
     def klines(self, symbol: str, timeframe: Timeframe, count: int) -> list[Bar]:
-        import random as _rng
-        _rng.seed(self._seed)
+        from random import Random
+        if symbol != "BTCUSDT":
+            return []
         bars: list[Bar] = []
-        tf_minutes = timeframe.minutes
-        price = self._base_price
-        t = self._time - timedelta(minutes=tf_minutes * count)
-        for _ in range(count):
-            change = _rng.gauss(0, price * 0.002)  # ~0.2% volatility per bar
-            o = price
-            c = price + change
-            h = max(o, c) + abs(_rng.gauss(0, price * 0.001))
-            low = min(o, c) - abs(_rng.gauss(0, price * 0.001))
+        seconds = timeframe.minutes * 60
+        end = int(self._time.timestamp()) // seconds
+        for index in range(end - count, end):
+            # Absolute identities survive changes in count, time and process.
+            rng = Random(f"{self._seed}:{timeframe.value}:{index}")
+            t = datetime.fromtimestamp(index * seconds, UTC)
+            o = self._base_price * (1 + 0.02 * math.sin(index / 20) + 0.005 * math.sin(index / 3))
+            c = o * (1 + rng.gauss(0, 0.002))
+            h = max(o, c) + abs(rng.gauss(0, o * 0.001))
+            low = min(o, c) - abs(rng.gauss(0, o * 0.001))
             bars.append(Bar(
-                time=t,
-                close_time=t + timedelta(minutes=tf_minutes),
-                is_closed=True,
-                open=round(o, 2),
-                high=round(h, 2),
-                low=round(low, 2),
-                close=round(c, 2),
-                tick_volume=_rng.uniform(50, 500),
-                spread=round(price * self._spread_bps / 10000, 2),
+                time=t, close_time=t + timedelta(seconds=seconds), is_closed=True,
+                open=round(o, 2), high=round(h, 2), low=round(low, 2), close=round(c, 2),
+                tick_volume=rng.uniform(50, 500),
+                spread=round(o * self._spread_bps / 10000, 2),
             ))
-            price = c
-            t += timedelta(minutes=tf_minutes)
         return bars
 
     def ticker(self, symbol: str) -> CryptoTick:
@@ -145,7 +143,9 @@ class CryptoMockProvider(CryptoDataProvider):
             volume_24h=15000.0,
         )
 
-    def instrument(self, symbol: str) -> CryptoInstrument:
+    def instrument(self, symbol: str) -> CryptoInstrument | None:
+        if symbol != "BTCUSDT":
+            return None
         return CryptoInstrument(
             symbol=symbol,
             base_asset="BTC",
@@ -236,17 +236,32 @@ class BinancePublicProvider(CryptoDataProvider):
         )
 
     def instrument(self, symbol: str) -> CryptoInstrument | None:
-        # Hardcoded pour BTCUSDT - evite un appel exchangeInfo a chaque fois
-        if symbol == "BTCUSDT":
-            return CryptoInstrument(
-                symbol="BTCUSDT",
-                base_asset="BTC",
-                quote_asset="USDT",
-                tick_size=0.01,
-                lot_size=0.00001,
-                min_notional=10.0,
-            )
-        return None
+        import json
+        import urllib.parse
+        import urllib.request
+
+        url = f"{self._base}/api/v3/exchangeInfo?" + urllib.parse.urlencode({"symbol": symbol})
+        try:
+            with urllib.request.urlopen(url, timeout=10) as response:
+                data = json.loads(response.read())
+            row = next(r for r in data["symbols"] if r["symbol"] == symbol)
+            if row["status"] != "TRADING" or not row.get("isSpotTradingAllowed", False):
+                return None
+            filters = {f["filterType"]: f for f in row["filters"]}
+            tick = float(filters["PRICE_FILTER"]["tickSize"])
+            lot = filters["LOT_SIZE"]
+            step, low, high = (float(lot[k]) for k in ("stepSize", "minQty", "maxQty"))
+            notional = filters.get("NOTIONAL", filters.get("MIN_NOTIONAL"))
+            if notional is None:
+                return None
+            minimum = float(notional["minNotional"])
+            if not all(math.isfinite(v) and v > 0 for v in (tick, step, low, high, minimum)) or low > high:
+                return None
+            return CryptoInstrument(symbol=symbol, base_asset=row["baseAsset"], quote_asset=row["quoteAsset"],
+                                    tick_size=tick, lot_size=step, min_qty=low, max_qty=high, min_notional=minimum)
+        except Exception:
+            log.warning("Binance instrument metadata unavailable for %s", symbol)
+            return None
 
     def now(self) -> datetime:
         return datetime.now(UTC)
