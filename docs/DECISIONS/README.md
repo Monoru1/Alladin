@@ -48,6 +48,12 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 14. [DECISION-014 — Alladin et Jafar sont deux workspaces isolés sur un core partagé (ADOPTED)](./DECISION-014-ALLADIN-JAFAR-WORKSPACES.md)
 15. [DECISION-015 — Broker et compte sont des bindings, pas l'identité d'un workspace (ADOPTED)](./DECISION-015-BROKER-ACCOUNT-ABSTRACTION.md)
 16. [DECISION-016 — Command Center global et identités visuelles distinctes (ADOPTED)](./DECISION-016-GLOBAL-COMMAND-CENTER.md)
+17. [DECISION-017 — Vérité marché causale, archivée et rejouable (ADOPTED)](./DECISION-017-CAUSAL-MARKET-TRUTH-REPLAY.md)
+18. [DECISION-018 — Économie expérimentale commune (ADOPTED)](./DECISION-018-COMMON-EXPERIMENTAL-ECONOMICS.md)
+19. [DECISION-019 — Frontière Brain / ActionProposal (ADOPTED)](./DECISION-019-BRAIN-ACTION-PROPOSAL-BOUNDARY.md)
+20. [DECISION-020 — Apprentissage et promotion contrôlés (ADOPTED)](./DECISION-020-CONTROLLED-LEARNING-PROMOTION.md)
+21. [DECISION-021 — Univers broker dynamique et filtré (ADOPTED)](./DECISION-021-DYNAMIC-BROKER-UNIVERSE.md)
+22. [DECISION-022 — Strategy Harvester : provenance, licence et clean-room (ADOPTED)](./DECISION-022-STRATEGY-HARVESTER-GOVERNANCE.md)
 
 ## Source de vérité
 
