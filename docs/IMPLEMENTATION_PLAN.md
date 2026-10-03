@@ -663,3 +663,8 @@ LIVE remains blocked. Future real-account support requires explicit promotion ga
 4. Add Jafar runtime skeleton on the shared core.
 5. Add global Command Center and workspace switch.
 6. Only then specialize crypto Brain/research/runtime and evaluate candidate brokers/adapters.
+
+
+### Decision-registry audit — 2026-10-03
+
+Après audit croisé des décisions de conception déjà prises et du registre, les décisions 017 à 022 ont été ajoutées pour rendre explicites les contraintes déjà utilisées par les lots C/D/E et la roadmap : causal replay, parité expérimentale, frontière Brain/ActionProposal, promotion contrôlée, univers broker dynamique et gouvernance Strategy Harvester. Voir `docs/DECISIONS/README.md`.
