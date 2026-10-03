@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from alladin.agents.base import AgentAdapter, AgentRequest, AgentResponse
 from alladin.core.enums import DecisionKind, EntryType, MarketRegime
+from alladin.core.models import OwnedPosition
 
 
 class Action(StrEnum):
@@ -39,6 +40,7 @@ class ProposalParameters(BaseModel):
         default=None, strict=True, allow_inf_nan=False, gt=0, le=100
     )
     position_ticket: int | None = Field(default=None, strict=True, gt=0)
+    position_id: str | None = Field(default=None, min_length=1)
     partial_fraction: float | None = Field(default=None, strict=True, allow_inf_nan=False, gt=0, le=1)
     sources: tuple[str, ...] = ()
 
@@ -86,7 +88,7 @@ class ActionProposal(BaseModel):
         if entry:
             if not p.strategy_id or not p.strategy_version or p.requested_risk_pct_of_working_capital is None:
                 raise ValueError("paramètres de stratégie et risque requis pour une entrée")
-            if p.position_ticket is not None or p.partial_fraction is not None:
+            if p.position_ticket is not None or p.position_id is not None or p.partial_fraction is not None:
                 raise ValueError("paramètres de position interdits pour une entrée")
             if p.entry_type is not EntryType.MARKET and p.entry is None:
                 raise ValueError("prix requis pour LIMIT/STOP")
@@ -98,8 +100,8 @@ class ActionProposal(BaseModel):
                                                  or (self.action is Action.SHORT and p.take_profit >= p.entry)):
                     raise ValueError("target contradictoire avec le sens d'entrée")
         elif management:
-            if p.position_ticket is None:
-                raise ValueError("position_ticket requis")
+            if p.position_ticket is None and p.position_id is None:
+                raise ValueError("position_id ou position_ticket requis")
             if self.action is Action.MODIFY_STOP and p.stop_loss is None:
                 raise ValueError("stop_loss requis")
             if self.action is Action.MODIFY_TARGET and p.take_profit is None:
@@ -132,6 +134,7 @@ class BrainContext(BaseModel):
     timestamp: datetime
     opportunities: dict[str, str]  # symbol -> ID qualifié
     market: dict[str, Any]  # snapshot sans broker ni secrets
+    positions: tuple[OwnedPosition, ...] = ()
 
     @field_validator("market")
     @classmethod

@@ -668,3 +668,11 @@ LIVE remains blocked. Future real-account support requires explicit promotion ga
 ### Decision-registry audit — 2026-10-03
 
 Après audit croisé des décisions de conception déjà prises et du registre, les décisions 017 à 022 ont été ajoutées pour rendre explicites les contraintes déjà utilisées par les lots C/D/E et la roadmap : causal replay, parité expérimentale, frontière Brain/ActionProposal, promotion contrôlée, univers broker dynamique et gouvernance Strategy Harvester. Voir `docs/DECISIONS/README.md`.
+
+## Lot F — checkpoint partiel d'urgence (2026-10-03)
+
+- Réalisé : modèle canonique `OwnedPosition`, référence `position_id` dans `ActionProposal` et vue positions dans `BrainContext`; capacités explicites close/partial/SL/TP/reconciliation; primitive broker `MODIFY`; jeton de gestion lié à la proposition; comportements déterministes MockBroker pour modification et fermeture partielle; requête MT5 `TRADE_ACTION_SLTP`.
+- Incomplet : règles `RiskEngine.evaluate_position_action`, orchestration via `ExecutionService`, PAPER, confirmation/réconciliation, idempotence, journal complet, migrations et matrice de tests Lot F.
+- Validation exécutée : Ruff sur les sept fichiers Python modifiés; `tests/test_agents.py` et `tests/test_mt5_broker.py` (38 tests); `git diff --check`. Tout est vert. Une première commande pytest a échoué uniquement car `tests/test_brain.py` n'existe pas.
+- Limite : ce checkpoint ne rend pas encore les actions Lot F exécutables depuis le Brain; le garde-fou Lot E continue donc à les rejeter.
+- Reprise exacte : compléter d'abord le contexte et la décision déterministe de gestion, puis brancher `ExecutionService`, PAPER, réconciliation/idempotence/journal et ajouter la matrice ciblée avant de déclarer Lot F terminé.

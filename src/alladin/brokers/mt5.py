@@ -84,6 +84,11 @@ class MT5Broker(b.BrokerAdapter):
             has_close_time=False,
             has_tick_volume=True,
             provenance_tag="mt5",
+            can_close_position=True,
+            can_partial_close=True,
+            can_modify_stop=True,
+            can_modify_target=True,
+            reliable_position_reconciliation=True,
         )
 
     def __init__(
@@ -450,6 +455,17 @@ class MT5Broker(b.BrokerAdapter):
         if info is None:
             raise ExecutionBlockedError(f"symbole inconnu : {req.symbol}")
         digits = int(info.digits)
+        if req.action is OrderAction.MODIFY:
+            payload: dict[str, Any] = {
+                "action": mt5.TRADE_ACTION_SLTP, "symbol": req.symbol,
+                "position": int(req.position_ticket or 0), "magic": int(req.magic),
+                "comment": req.comment,
+            }
+            if req.stop_loss is not None:
+                payload["sl"] = round(float(req.stop_loss), digits)
+            if req.take_profit is not None:
+                payload["tp"] = round(float(req.take_profit), digits)
+            return payload
         tick = mt5.symbol_info_tick(req.symbol)
         if tick is None:
             raise ExecutionBlockedError(f"aucun tick pour {req.symbol}")

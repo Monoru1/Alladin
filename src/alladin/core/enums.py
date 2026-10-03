@@ -56,6 +56,7 @@ class EntryType(StrEnum):
 class OrderAction(StrEnum):
     OPEN = "OPEN"
     CLOSE = "CLOSE"
+    MODIFY = "MODIFY"
 
 
 class MarketRegime(StrEnum):

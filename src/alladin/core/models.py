@@ -16,6 +16,7 @@ from alladin.core.enums import (
     EntryType,
     MarketRegime,
     OrderAction,
+    RunMode,
     Side,
     SymbolTradeMode,
 )
@@ -126,6 +127,29 @@ class Position(BaseModel):
     magic: int = 0
     comment: str = ""
     time_open: datetime = Field(default_factory=utcnow)
+
+
+class OwnedPosition(BaseModel):
+    """Vue métier canonique d'une position ALLADIN, indépendante du broker."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    position_id: str
+    run_id: str
+    trade_id: str
+    opportunity_id: str | None = None
+    proposal_id: str | None = None
+    broker_ticket: int | None = None
+    paper_id: str | None = None
+    symbol: str
+    side: Side
+    original_volume: float = Field(gt=0)
+    remaining_volume: float = Field(gt=0)
+    entry_price: float = Field(gt=0)
+    stop_loss: float | None = Field(default=None, gt=0)
+    take_profit: float | None = Field(default=None, gt=0)
+    mode: RunMode
+    status: str = "OPEN"
 
 
 class PendingOrder(BaseModel):

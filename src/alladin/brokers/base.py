@@ -57,6 +57,11 @@ class BrokerCapabilities:
     )
     max_bars: int = 10000
     provenance_tag: str = ""  # tag pour traçabilité dans l'archive
+    can_close_position: bool = False
+    can_partial_close: bool = False
+    can_modify_stop: bool = False
+    can_modify_target: bool = False
+    reliable_position_reconciliation: bool = False
 
 
 def block_message(account_type: AccountType) -> str:

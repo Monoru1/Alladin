@@ -56,7 +56,11 @@ class MockBroker(b.BrokerAdapter):
     name = "MOCK"
 
     def capabilities(self) -> b.BrokerCapabilities:
-        return b.BrokerCapabilities(name="mock:test", has_spread=True, has_close_time=False)
+        return b.BrokerCapabilities(
+            name="mock:test", has_spread=True, has_close_time=False,
+            can_close_position=True, can_partial_close=True, can_modify_stop=True,
+            can_modify_target=True, reliable_position_reconciliation=True,
+        )
 
     def __init__(
         self,
@@ -299,10 +303,17 @@ class MockBroker(b.BrokerAdapter):
         if spec is None:
             return OrderCheck(ok=False, retcode=b.RETCODE_INVALID, message="symbole inconnu")
         if request.action is OrderAction.CLOSE:
-            ok = request.position_ticket in self._positions
+            pos = self._positions.get(request.position_ticket or 0)
+            ok = pos is not None and 0 < request.volume <= pos.volume + 1e-9
             return OrderCheck(
                 ok=ok, retcode=0 if ok else b.RETCODE_INVALID, message="" if ok else "position inconnue"
             )
+        if request.action is OrderAction.MODIFY:
+            ok = request.position_ticket in self._positions and (
+                request.stop_loss is not None or request.take_profit is not None
+            )
+            return OrderCheck(ok=ok, retcode=0 if ok else b.RETCODE_INVALID_STOPS,
+                              message="" if ok else "modification invalide")
         if not spec.is_tradable:
             return OrderCheck(
                 ok=False, retcode=b.RETCODE_TRADE_DISABLED, message="trading désactivé sur le symbole"
@@ -335,10 +346,18 @@ class MockBroker(b.BrokerAdapter):
             )
         tick = self._ticks[request.symbol]
         spec = self._specs[request.symbol]
+        if request.action is OrderAction.MODIFY:
+            pos = self._positions[request.position_ticket]  # type: ignore[index]
+            if request.stop_loss is not None:
+                pos.sl = request.stop_loss
+            if request.take_profit is not None:
+                pos.tp = request.take_profit
+            return OrderResult(accepted=True, retcode=b.RETCODE_DONE, retcode_name="DONE",
+                               position_ticket=pos.ticket, volume=pos.volume, executed_at=self._time)
         if request.action is OrderAction.CLOSE:
             pos = self._positions[request.position_ticket]  # type: ignore[index]
             px = tick.bid if pos.side is Side.BUY else tick.ask
-            deal = self._close(pos, px, CloseReason.EXPERT)
+            deal = self._close(pos, px, CloseReason.EXPERT, request.volume)
             return OrderResult(
                 accepted=True,
                 retcode=b.RETCODE_DONE,
@@ -346,7 +365,7 @@ class MockBroker(b.BrokerAdapter):
                 order=deal.order,
                 deal=deal.ticket,
                 position_ticket=pos.ticket,
-                volume=pos.volume,
+                volume=request.volume,
                 requested_price=request.price,
                 executed_price=px,
                 bid=tick.bid,
@@ -411,14 +430,16 @@ class MockBroker(b.BrokerAdapter):
             executed_at=self._time,
         )
 
-    def _close(self, pos: Position, price: float, reason: CloseReason) -> Deal:
+    def _close(self, pos: Position, price: float, reason: CloseReason,
+               volume: float | None = None) -> Deal:
         spec = self._specs[pos.symbol]
+        closed_volume = pos.volume if volume is None else volume
         pnl = (
             (price - pos.price_open)
             * pos.side.sign
             / spec.trade_tick_size
             * spec.trade_tick_value
-            * pos.volume
+            * closed_volume
         )
         self._balance += pnl
         self._next_ticket += 1
@@ -429,7 +450,7 @@ class MockBroker(b.BrokerAdapter):
             symbol=pos.symbol,
             side=pos.side.opposite,
             entry=DealEntry.OUT,
-            volume=pos.volume,
+            volume=closed_volume,
             price=price,
             profit=pnl,
             magic=pos.magic,
@@ -438,5 +459,8 @@ class MockBroker(b.BrokerAdapter):
             close_reason=reason,
         )
         self._deals.append(deal)
-        del self._positions[pos.ticket]
+        if closed_volume >= pos.volume - 1e-9:
+            del self._positions[pos.ticket]
+        else:
+            pos.volume -= closed_volume
         return deal

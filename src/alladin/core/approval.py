@@ -22,7 +22,7 @@ TOKEN_TTL = timedelta(seconds=60)
 
 @dataclass(frozen=True)
 class ApprovalToken:
-    kind: Literal["OPEN", "CLOSE"]
+    kind: Literal["OPEN", "CLOSE", "MODIFY"]
     run_id: str
     symbol: str
     volume: float
@@ -45,6 +45,13 @@ def issue_open_token(run_id: str, intent_id: str, symbol: str, volume: float) ->
 def issue_close_token(run_id: str, symbol: str, volume: float) -> ApprovalToken:
     """Appelé uniquement par ExecutionService (fermeture = réduction de risque)."""
     return ApprovalToken("CLOSE", run_id, symbol, volume, datetime.now(UTC), None, _ISSUER)
+
+
+def issue_position_token(
+    run_id: str, action: Literal["CLOSE", "MODIFY"], proposal_id: str,
+    symbol: str, volume: float,
+) -> ApprovalToken:
+    return ApprovalToken(action, run_id, symbol, volume, datetime.now(UTC), proposal_id, _ISSUER)
 
 
 def verify_token(request: OrderRequest, token: ApprovalToken | None, *, now: datetime | None = None) -> None:
