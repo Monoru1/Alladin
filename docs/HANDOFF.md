@@ -729,3 +729,16 @@ Conséquences opérationnelles :
 - le Command Center global reste un cockpit de supervision, pas une source d'état métier ni une voie d'exécution.
 
 Avant d'implémenter le runtime Jafar, terminer les fondations communes de gestion de position et d'identité/capabilities si le code confirme cette dépendance.
+
+
+### Complément registre — décisions 017 à 022
+
+Le registre contient désormais explicitement les décisions transversales qui étaient déjà engagées par les lots C/D/E et les discussions d'architecture :
+- DECISION-017 : vérité marché causale, archive exacte et replay sans fetch broker caché ;
+- DECISION-018 : même économie expérimentale, coûts/R et règles OOS pour baselines et futurs Brains/SNN ;
+- DECISION-019 : Brain -> ActionProposal -> Risk -> Execution, NO_TRADE explicite et fail-closed ;
+- DECISION-020 : précision de DECISION-011 sur la promotion versionnée/réversible du Brain actif ;
+- DECISION-021 : découverte large du broker puis classification/capabilities/éligibilité avant univers tradable ;
+- DECISION-022 : Strategy Harvester gouverné par provenance/licence, audit lookahead/repaint et expérimentation clean-room.
+
+Ces décisions sont des contraintes pour les prochains lots, pas des fonctionnalités toutes déjà implémentées.
