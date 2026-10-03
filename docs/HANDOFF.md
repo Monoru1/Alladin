@@ -708,3 +708,24 @@ Un SNN biologique n'est pas automatiquement un edge.
 Un résultat positif sans contrôle n'est pas une validation.
 
 Le but est de construire un système autonome, observable, falsifiable, reproductible et capable d'évoluer sans perdre ses contraintes de sécurité.
+
+
+---
+
+## 33. Alladin + Jafar : plateforme multi-workspace
+
+Décisions adoptées le 2026-10-03 :
+- `DECISION-014` : Alladin et Jafar sont deux workspaces isolés sur un core partagé ;
+- `DECISION-015` : broker et compte sont des bindings/capabilities, pas l'identité d'un workspace ;
+- `DECISION-016` : un Command Center global pourra superviser les deux workspaces sans fusionner leur état.
+
+Conséquences opérationnelles :
+- Jafar n'est ni un fork ni un simple thème rouge d'Alladin ;
+- le code peut être partagé, mais runs, positions, risque, univers, brain/checkpoints et configuration restent isolés par workspace ;
+- Exness peut être un candidat de broker crypto-compatible, mais Jafar ne dépend pas d'Exness et MT5 n'est pas le modèle universel ;
+- un futur adapter crypto natif reste possible ;
+- la chaîne `Brain -> ActionProposal -> Risk -> Execution -> Broker` reste obligatoire ;
+- LIVE reste bloqué tant que ses gates explicites ne sont pas implémentés et validés ;
+- le Command Center global reste un cockpit de supervision, pas une source d'état métier ni une voie d'exécution.
+
+Avant d'implémenter le runtime Jafar, terminer les fondations communes de gestion de position et d'identité/capabilities si le code confirme cette dépendance.
