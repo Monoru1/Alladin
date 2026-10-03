@@ -15,6 +15,7 @@ class FakeMT5:
     ORDER_TYPE_BUY, ORDER_TYPE_SELL, ORDER_TYPE_BUY_LIMIT, ORDER_TYPE_SELL_LIMIT = 0, 1, 2, 3
     ORDER_TYPE_BUY_STOP, ORDER_TYPE_SELL_STOP = 4, 5
     TRADE_ACTION_DEAL, TRADE_ACTION_PENDING = 1, 5
+    TRADE_ACTION_SLTP = 6
     ORDER_FILLING_FOK, ORDER_FILLING_IOC, ORDER_FILLING_RETURN = 0, 1, 2
     ORDER_TIME_GTC = 0
     TRADE_RETCODE_PLACED, TRADE_RETCODE_REJECT, TRADE_RETCODE_DONE, TRADE_RETCODE_DONE_PARTIAL = (
@@ -153,6 +154,11 @@ class FakeMT5:
                 ask=ask,
                 comment="Rejected",
             )
+        if req["action"] == self.TRADE_ACTION_SLTP:
+            pos = next(p for p in self._positions if p.ticket == req["position"])
+            pos.sl, pos.tp = req.get("sl", 0.0), req.get("tp", 0.0)
+            return SimpleNamespace(retcode=self.send_retcode, deal=0, order=0, volume=0.0, price=0.0,
+                                   bid=bid, ask=ask, comment="Request executed")
         self._next += 1
         ticket = self._next
         price = req["price"]

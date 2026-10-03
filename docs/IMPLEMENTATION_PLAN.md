@@ -676,3 +676,16 @@ Après audit croisé des décisions de conception déjà prises et du registre, 
 - Validation exécutée : Ruff sur les sept fichiers Python modifiés; `tests/test_agents.py` et `tests/test_mt5_broker.py` (38 tests); `git diff --check`. Tout est vert. Une première commande pytest a échoué uniquement car `tests/test_brain.py` n'existe pas.
 - Limite : ce checkpoint ne rend pas encore les actions Lot F exécutables depuis le Brain; le garde-fou Lot E continue donc à les rejeter.
 - Reprise exacte : compléter d'abord le contexte et la décision déterministe de gestion, puis brancher `ExecutionService`, PAPER, réconciliation/idempotence/journal et ajouter la matrice ciblée avant de déclarer Lot F terminé.
+
+### Lot F — sécurisation des primitives broker (2026-10-03, reprise Codex)
+
+L'audit de `72adaab` a identifié des défauts à corriger avant l'activation des actions de gestion.
+
+- MT5 `MODIFY` relit la position par ticket, vérifie symbole/magic/comment et inclut explicitement les deux protections dans `TRADE_ACTION_SLTP`. Le SL ou TP non demandé est conservé depuis la position fraîche ; une position absente, une lecture impossible ou une modification vide est refusée avant `order_check`/`order_send`.
+- Les nouveaux jetons de gestion exigent `request=` et lient l'approbation à la requête complète, notamment ticket, sens, SL/TP, volume et identité. Une requête modifiée après approbation est refusée. Les jetons historiques OPEN/CLOSE restent compatibles ; MODIFY exige un jeton lié à la requête complète.
+- MockBroker vérifie symbole/magic/comment pour CLOSE/MODIFY. Une fermeture exige le sens opposé et un volume fini respectant le minimum/pas, sans reliquat non négociable. La fermeture partielle valide conserve le ticket, SL/TP et le volume restant.
+- Tests : `tests/test_position_primitives.py` ajoute 36 cas ; le faux module MT5 simule SLTP sans fermer la position ni créer de deal. Suite complète : 404 tests passés, 3 intégrations MT5 sautées ; Ruff, mypy et `git diff --check` propres. Aucun terminal ni ordre externe utilisé.
+
+**Limites : Lot F reste incomplet.** Le RiskEngine/orchestrateur continue de refuser CLOSE/MODIFY/PARTIAL_CLOSE proposés par le Brain. Ces correctifs ne constituent ni une politique de gestion, ni une confirmation après exécution, ni l'idempotence. La conservation SL/TP repose sur un snapshot frais mais n'est pas atomique vis-à-vis d'une modification concurrente au terminal ; la confirmation/réconciliation reste indispensable dans la suite du lot. Validation réelle MT5 à effectuer sur Windows avant activation. Aucune migration de base, aucun changement UI/SNN/Jafar.
+
+**Reprise exacte :** implémenter la politique déterministe de gestion et le contexte canonique DEMO/PAPER, puis ExecutionService, confirmation/réconciliation, idempotence et journal. Garder les actions désactivées jusqu'à validation de cette chaîne.

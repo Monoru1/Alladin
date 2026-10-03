@@ -456,15 +456,22 @@ class MT5Broker(b.BrokerAdapter):
             raise ExecutionBlockedError(f"symbole inconnu : {req.symbol}")
         digits = int(info.digits)
         if req.action is OrderAction.MODIFY:
+            positions = mt5.positions_get(ticket=int(req.position_ticket or 0))
+            if positions is None:
+                raise ExecutionBlockedError("lecture de position impossible : modification refusée")
+            pos = next((p for p in positions if p.ticket == req.position_ticket), None)
+            if pos is None or pos.symbol != req.symbol or pos.magic != req.magic or pos.comment != req.comment:
+                raise ExecutionBlockedError("position absente ou identité incohérente : modification refusée")
+            if req.stop_loss is None and req.take_profit is None:
+                raise ExecutionBlockedError("modification sans SL/TP : refusée")
+            # SLTP carries both protections. An omitted field must not clear the other one.
             payload: dict[str, Any] = {
                 "action": mt5.TRADE_ACTION_SLTP, "symbol": req.symbol,
                 "position": int(req.position_ticket or 0), "magic": int(req.magic),
                 "comment": req.comment,
+                "sl": round(float(req.stop_loss), digits) if req.stop_loss is not None else float(pos.sl),
+                "tp": round(float(req.take_profit), digits) if req.take_profit is not None else float(pos.tp),
             }
-            if req.stop_loss is not None:
-                payload["sl"] = round(float(req.stop_loss), digits)
-            if req.take_profit is not None:
-                payload["tp"] = round(float(req.take_profit), digits)
             return payload
         tick = mt5.symbol_info_tick(req.symbol)
         if tick is None:

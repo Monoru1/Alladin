@@ -29,6 +29,7 @@ class ApprovalToken:
     issued_at: datetime
     intent_id: str | None = None
     _issuer: object = field(default=None, repr=False, compare=False)
+    request_snapshot: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self._issuer is not _ISSUER:
@@ -49,9 +50,13 @@ def issue_close_token(run_id: str, symbol: str, volume: float) -> ApprovalToken:
 
 def issue_position_token(
     run_id: str, action: Literal["CLOSE", "MODIFY"], proposal_id: str,
-    symbol: str, volume: float,
+    symbol: str, volume: float, *, request: OrderRequest,
 ) -> ApprovalToken:
-    return ApprovalToken(action, run_id, symbol, volume, datetime.now(UTC), proposal_id, _ISSUER)
+    if (request.action.value != action or request.symbol != symbol or request.volume != volume
+            or request.position_ticket is None or request.position_ticket <= 0):
+        raise ExecutionBlockedError("requête de gestion incohérente — refusée")
+    return ApprovalToken(action, run_id, symbol, volume, datetime.now(UTC), proposal_id, _ISSUER,
+                         request.model_dump_json())
 
 
 def verify_token(request: OrderRequest, token: ApprovalToken | None, *, now: datetime | None = None) -> None:
@@ -65,5 +70,9 @@ def verify_token(request: OrderRequest, token: ApprovalToken | None, *, now: dat
         raise ExecutionBlockedError("type d'approbation incohérent avec l'ordre — refusé")
     if token.symbol != request.symbol or abs(token.volume - request.volume) > 1e-9:
         raise ExecutionBlockedError("l'ordre diffère de ce que le RiskEngine a approuvé — refusé")
+    if token.request_snapshot is not None and token.request_snapshot != request.model_dump_json():
+        raise ExecutionBlockedError("la requête de gestion diffère de l'approbation — refusée")
+    if request.action.value == "MODIFY" and token.request_snapshot is None:
+        raise ExecutionBlockedError("modification sans approbation de la requête complète — refusée")
     if request.action.value == "OPEN" and request.stop_loss is None:
         raise ExecutionBlockedError("NO SL — ordre refusé")

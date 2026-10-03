@@ -302,11 +302,24 @@ class MockBroker(b.BrokerAdapter):
         spec = self._specs.get(request.symbol)
         if spec is None:
             return OrderCheck(ok=False, retcode=b.RETCODE_INVALID, message="symbole inconnu")
+        if request.action in (OrderAction.CLOSE, OrderAction.MODIFY):
+            pos = self._positions.get(request.position_ticket or 0)
+            if (pos is None or pos.symbol != request.symbol
+                    or pos.magic != request.magic or pos.comment != request.comment):
+                return OrderCheck(ok=False, retcode=b.RETCODE_INVALID, message="identité de position incohérente")
         if request.action is OrderAction.CLOSE:
             pos = self._positions.get(request.position_ticket or 0)
-            ok = pos is not None and 0 < request.volume <= pos.volume + 1e-9
+            assert pos is not None
+            if not math.isfinite(request.volume):
+                return OrderCheck(ok=False, retcode=b.RETCODE_INVALID_VOLUME, message="volume non fini")
+            remaining = pos.volume - request.volume
+            steps = request.volume / spec.volume_step
+            ok = (spec.volume_min <= request.volume <= pos.volume + 1e-9
+                  and abs(steps - round(steps)) <= 1e-6 and request.side is pos.side.opposite
+                  and (abs(remaining) <= 1e-9 or (remaining >= spec.volume_min - 1e-9
+                       and abs(remaining / spec.volume_step - round(remaining / spec.volume_step)) <= 1e-6)))
             return OrderCheck(
-                ok=ok, retcode=0 if ok else b.RETCODE_INVALID, message="" if ok else "position inconnue"
+                ok=ok, retcode=0 if ok else b.RETCODE_INVALID_VOLUME, message="" if ok else "fermeture invalide"
             )
         if request.action is OrderAction.MODIFY:
             ok = request.position_ticket in self._positions and (
