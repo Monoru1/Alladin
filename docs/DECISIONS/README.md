@@ -45,6 +45,9 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 11. [DECISION-011 — Cycle de vie autonome multi-position (ADOPTED)](./DECISION-011-AUTONOMOUS-MULTI-POSITION-LIFECYCLE.md)
 12. [DECISION-012 — Inspiration BlackRock Aladdin (ADOPTED)](./DECISION-012-BLACKROCK-ALADDIN-INSPIRATION.md)
 13. [DECISION-013 — Contrat de sécurité des modes OBSERVE/PAPER/DEMO (ADOPTED)](./DECISION-013-MODE-SAFETY.md)
+14. [DECISION-014 — Alladin et Jafar sont deux workspaces isolés sur un core partagé (ADOPTED)](./DECISION-014-ALLADIN-JAFAR-WORKSPACES.md)
+15. [DECISION-015 — Broker et compte sont des bindings, pas l'identité d'un workspace (ADOPTED)](./DECISION-015-BROKER-ACCOUNT-ABSTRACTION.md)
+16. [DECISION-016 — Command Center global et identités visuelles distinctes (ADOPTED)](./DECISION-016-GLOBAL-COMMAND-CENTER.md)
 
 ## Source de vérité
 
