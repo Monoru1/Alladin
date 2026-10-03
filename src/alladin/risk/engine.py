@@ -15,12 +15,17 @@ from alladin.core.models import Position, TradeIntent
 from alladin.risk import sizing
 from alladin.risk.exposure import compute_exposure, currency_legs
 from alladin.risk.models import RejectCode, RiskContext, RiskDecision, RiskReason
+from alladin.risk.position import PositionActionContext, evaluate_position_action
 from alladin.risk.sizing import PositionSizer
 
 _EPS = 1e-9
 
 
 class RiskEngine:
+    def plan_position_action(self, proposal: ActionProposal, context: PositionActionContext) -> RiskDecision:
+        """Effect-free Lot F plan. The legacy runtime gate remains closed until execution is ready."""
+        return evaluate_position_action(proposal, context)
+
     def __init__(
         self,
         rules: RiskRules,

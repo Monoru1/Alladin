@@ -9,14 +9,22 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from alladin.brokers.base import BrokerAdapter
 from alladin.challenge.models import WatchdogReport
 from alladin.core.approval import issue_close_token
-from alladin.core.enums import OrderAction, Side
+from alladin.core.enums import OrderAction, RunMode, Side
 from alladin.core.errors import ExecutionBlockedError
 from alladin.core.killswitch import KillSwitch
-from alladin.core.models import AccountSnapshot, InstrumentSpec, OrderRequest, Position, TradeIntent
+from alladin.core.models import (
+    AccountSnapshot,
+    InstrumentSpec,
+    OrderRequest,
+    OwnedPosition,
+    Position,
+    TradeIntent,
+)
 from alladin.execution.models import ExecStatus, ExecutionResult, comment_matches, make_comment
 from alladin.journal.models import EventType, TradeRecord
 from alladin.journal.service import JournalService
@@ -26,6 +34,9 @@ from alladin.risk.engine import RiskEngine
 from alladin.risk.models import RejectCode, RiskContext, RiskDecision, RiskReason
 
 DEFAULT_DEVIATION_POINTS = 20
+
+if TYPE_CHECKING:
+    from alladin.market.paper import PaperExperimentEngine
 
 
 class ExecutionService:
@@ -58,6 +69,40 @@ class ExecutionService:
 
     def my_positions(self) -> list[Position]:
         return [p for p in self.broker.positions() if self.owns(p)]
+
+    def owned_positions(
+        self, mode: RunMode, paper_engine: PaperExperimentEngine | None = None,
+    ) -> tuple[OwnedPosition, ...]:
+        """Canonical snapshots only; no untracked or foreign position is a Brain target.
+
+        OBSERVE may describe real owned DEMO positions without gaining execution rights.
+        PAPER uses its simulated portfolio exclusively, even if the broker has positions.
+        """
+        rid = self.run.run_id
+        if mode is RunMode.PAPER:
+            if paper_engine is None or paper_engine.run_id != rid:
+                return ()
+            return tuple(OwnedPosition(
+                position_id=f"POS-PAPER-{rid}-{p.paper_id}", run_id=rid,
+                trade_id=str(p.intent.get("intent_id") or p.paper_id),
+                opportunity_id=p.intent.get("opportunity_id"), proposal_id=p.intent.get("proposal_id"),
+                paper_id=p.paper_id, symbol=p.symbol, side=p.side,
+                original_volume=p.volume, remaining_volume=p.volume, entry_price=p.entry_price,
+                stop_loss=p.sl, take_profit=p.tp, mode=RunMode.PAPER,
+            ) for p in paper_engine.open_positions() if p.run_id == rid and p.status == "OPEN")
+        trades = {t.ticket: t for t in self.manager.repo.trades_for_run(rid, "OPEN") if t.ticket is not None}
+        result = []
+        for p in self.my_positions():
+            t = trades.get(p.ticket)
+            if t is None or t.symbol != p.symbol or t.side != p.side.value:
+                continue
+            result.append(OwnedPosition(
+                position_id=f"POS-DEMO-{rid}-{t.trade_id}", run_id=rid, trade_id=t.trade_id,
+                opportunity_id=t.opportunity_id, proposal_id=t.proposal_id, broker_ticket=p.ticket,
+                symbol=p.symbol, side=p.side, original_volume=t.volume, remaining_volume=p.volume,
+                entry_price=p.price_open, stop_loss=p.sl, take_profit=p.tp, mode=RunMode.DEMO,
+            ))
+        return tuple(result)
 
     # ------------------------------------------------------------------ ouverture
 

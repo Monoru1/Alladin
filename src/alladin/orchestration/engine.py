@@ -176,6 +176,7 @@ class OrchestrationEngine:
                 opportunities={o.symbol: o.opportunity_id for o in opportunities
                                if o.status is OpportunityStatus.QUALIFIED},
                 market=self._context(scan, signals),
+                positions=self.execution.owned_positions(self.run_mode, self.paper_engine),
             )
             if isinstance(self.brain, ClassicBrainAdapter):
                 self.journal.log(rid, EventType.AGENT_REQUEST,
