@@ -170,6 +170,11 @@ Il classe le catalogue complet, journalise les trois catégories d'éligibilité
 puis borne le scan actif à une sélection issue du volume 24 h et du spread. Les
 paires USDT et USDC partagent cette mécanique, sans liste de symboles figée.
 
+La reprise Jafar raccorde désormais le registre lifecycle à une reconciliation
+Binance read-only par `clientOrderId`. Les ordres ambigus, ouverts et partiellement
+exécutés sont inspectés avant le runtime. Toute absence ou erreur demeure
+`PENDING_CONFIRMATION`/ambiguë et bloque le démarrage au lieu de resoumettre.
+
 | Priorité | Sujet | Statut |
 |---|---|---|
 | P0 | Recette MT5 DEMO live : fermeture/modification/partial close réelles | **PENDING** Windows requis |

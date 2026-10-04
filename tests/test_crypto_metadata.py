@@ -310,6 +310,35 @@ def test_readonly_order_and_trade_history_convert_to_canonical_models():
     ]
 
 
+def test_query_order_uses_persistent_client_id_and_absence_is_not_resubmission():
+    order = {
+        "symbol": "BTCUSDT",
+        "orderId": 1,
+        "clientOrderId": "jfr-persistent",
+        "price": "65000",
+        "origQty": "0.01",
+        "executedQty": "0",
+        "cummulativeQuoteQty": "0",
+        "status": "NEW",
+        "type": "LIMIT",
+        "side": "BUY",
+        "time": 1000,
+        "updateTime": 1000,
+    }
+    transport = FixtureTransport(
+        [
+            HttpResponse(200, {}, json.dumps(order).encode()),
+            HttpResponse(400, {}, b'{"code":-2013,"msg":"Order does not exist"}'),
+        ]
+    )
+    client = BinanceRestClient(
+        api_key="key", signer=lambda _: "sig", transport=transport, max_attempts=1
+    )
+    assert client.query_order("BTCUSDT", "jfr-persistent").order_id == 1  # type: ignore[union-attr]
+    assert client.query_order("BTCUSDT", "jfr-absent") is None
+    assert all(urlparse(call[1]).path == "/api/v3/order" for call in transport.calls)
+
+
 def test_ed25519_pem_signer_produces_verifiable_base64(tmp_path: Path):
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey

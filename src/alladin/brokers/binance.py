@@ -438,6 +438,21 @@ class BinanceRestClient:
         params: dict[str, object] = {} if symbol is None else {"symbol": symbol}
         return self._orders(self.signed("/api/v3/openOrders", params))
 
+    def query_order(self, symbol: str, client_order_id: str) -> BinanceOrder | None:
+        """Recherche idempotente avant toute decision de resoumission."""
+        if not symbol or not client_order_id:
+            raise ValueError("symbol and client_order_id required")
+        try:
+            row = self.signed(
+                "/api/v3/order", {"symbol": symbol, "origClientOrderId": client_order_id}
+            )
+        except BinanceResponseError as exc:
+            if exc.code == -2013:  # Order does not exist.
+                return None
+            raise
+        orders = self._orders([row])
+        return orders[0]
+
     def order_history(self, symbol: str, *, limit: int = 500) -> tuple[BinanceOrder, ...]:
         if not 1 <= limit <= 1000:
             raise ValueError("Binance order history limit out of range")

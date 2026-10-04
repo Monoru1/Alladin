@@ -223,6 +223,25 @@ def test_jafar_mode_is_persisted_and_restored_fail_closed(jafar):
     assert resumed and resumed.jafar_mode is JafarMode.PAPER
 
 
+def test_jafar_restart_with_ambiguous_order_fails_closed(jafar):
+    from alladin.execution.order_lifecycle import CanonicalOrderStatus
+
+    assert jafar.order_lifecycle is not None
+    claim = jafar.order_lifecycle.claim(
+        jafar.run.run_id, "proposal-restart", "BTCUSDT", {"quantity": "0.01"}, now=T0
+    )
+    jafar.order_lifecycle.transition(
+        claim.client_order_id, CanonicalOrderStatus.RISK_APPROVED, now=T0
+    )
+    jafar.order_lifecycle.transition(
+        claim.client_order_id, CanonicalOrderStatus.SUBMITTING, now=T0
+    )
+    with pytest.raises(AlladinError, match="reconciliation Jafar ambigue"):
+        build_services(
+            jafar.settings, jafar.broker, workspace=WorkspaceId.JAFAR, run_id=jafar.run.run_id
+        )
+
+
 def test_jafar_mode_transitions_are_progressive_and_downgrade_to_observe(jafar):
     from alladin.orchestration.jafar import JafarModeStore
 

@@ -25,6 +25,11 @@ from alladin.core.enums import JafarMode, RunMode
 from alladin.core.errors import AlladinError
 from alladin.core.killswitch import KillSwitch
 from alladin.core.workspace import AccountBinding, WorkspaceId
+from alladin.execution.order_lifecycle import (
+    JafarStartupReconciler,
+    OrderLifecycleRepository,
+    ReconciliationReport,
+)
 from alladin.execution.service import ExecutionService
 from alladin.journal.models import EventType
 from alladin.journal.repository import JournalRepository
@@ -110,6 +115,8 @@ class Components:
     monitor: PositionMonitor
     outcomes: OutcomeEngine
     jafar_mode: JafarMode | None = None
+    order_lifecycle: OrderLifecycleRepository | None = None
+    startup_reconciliation: ReconciliationReport | None = None
 
     def engine(
         self,
@@ -265,4 +272,32 @@ def build_services(
         from alladin.orchestration.jafar import JafarModeStore
 
         components.jafar_mode = JafarModeStore(journal, run.run_id).load()
+        components.order_lifecycle = OrderLifecycleRepository(repo.engine, WorkspaceId.JAFAR)
+        pending = components.order_lifecycle.pending_reconciliation()
+        if pending:
+            try:
+                client = make_binance_account_client(
+                    settings, testnet=broker.account_info().server == "crypto:crypto-testnet"
+                )
+                client.account()
+                client.open_orders()
+                report = JafarStartupReconciler(
+                    components.order_lifecycle, client.query_order
+                ).reconcile()
+            except Exception as exc:
+                report = ReconciliationReport(
+                    coherent=False,
+                    inspected=len(pending),
+                    resolved=0,
+                    ambiguous=tuple(claim.client_order_id for claim in pending),
+                    errors=(type(exc).__name__,),
+                )
+            components.startup_reconciliation = report
+            journal.log(run.run_id, EventType.RECONCILE, report.model_dump(mode="json"))
+            if not report.coherent:
+                raise AlladinError("reconciliation Jafar ambigue: reprise fail-closed")
+        else:
+            components.startup_reconciliation = ReconciliationReport(
+                coherent=True, inspected=0, resolved=0
+            )
     return components

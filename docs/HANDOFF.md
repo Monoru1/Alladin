@@ -929,4 +929,10 @@ test compare les poids avant/après cycle. La boucle SLOW explicite reçoit les
 outcomes, applique le reward expérimental aux seuls poids shadow et calcule les
 métriques candidat. Elle ne possède aucun mécanisme de promotion ou d'exécution.
 
+Au restart Jafar, le registre local des ordres exchange est inspecté avant le
+démarrage. Les états SUBMITTING/PENDING_CONFIRMATION/UNKNOWN ainsi que les ordres
+ouverts/partiels sont recherchés par `clientOrderId` persistant via Binance. Un
+ordre retrouvé est réconcilié ; une absence, une erreur réseau ou une divergence
+laisse l'état ambigu et bloque la reprise. Aucun retry de soumission n'existe.
+
 Principe Jafar confirmé : **upside non plafonné artificiellement ; downside strictement borné**. La permission de retrait reste hors du rôle de la clé de trading ; une éventuelle trésorerie automatisée devra utiliser une séparation de privilèges dédiée.

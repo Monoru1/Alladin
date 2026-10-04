@@ -6,6 +6,7 @@ from alladin.brokers.binance import BinanceOrder
 from alladin.core.workspace import WorkspaceId
 from alladin.execution.order_lifecycle import (
     CanonicalOrderStatus,
+    JafarStartupReconciler,
     OrderLifecycleError,
     OrderLifecycleRepository,
 )
@@ -108,3 +109,47 @@ def test_workspace_order_claims_are_isolated():
     claim = jafar.claim("same-run", "same-proposal", "BTCUSDT", {}, now=T0)
     assert jafar.get(claim.client_order_id) is not None
     assert alladin.get(claim.client_order_id) is None
+
+
+def test_startup_reconciles_lost_ack_without_resubmission():
+    repo = repository()
+    claim = approved(repo)
+    repo.transition(claim.client_order_id, CanonicalOrderStatus.SUBMITTING, now=T0)
+    calls = []
+
+    def lookup(symbol, client_order_id):
+        calls.append((symbol, client_order_id))
+        return exchange(client_order_id, "NEW")
+
+    report = JafarStartupReconciler(repo, lookup).reconcile()
+    assert report.coherent and report.resolved == 1
+    assert repo.get(claim.client_order_id).status is CanonicalOrderStatus.ACKNOWLEDGED  # type: ignore[union-attr]
+    assert calls == [("BTCUSDT", claim.client_order_id)]
+
+
+def test_startup_absent_order_stays_ambiguous_across_restarts():
+    repo = repository()
+    claim = approved(repo)
+    repo.transition(claim.client_order_id, CanonicalOrderStatus.SUBMITTING, now=T0)
+    first = JafarStartupReconciler(repo, lambda _symbol, _client_id: None).reconcile()
+    second = JafarStartupReconciler(repo, lambda _symbol, _client_id: None).reconcile()
+    assert not first.coherent and not second.coherent
+    assert repo.get(claim.client_order_id).status is CanonicalOrderStatus.PENDING_CONFIRMATION  # type: ignore[union-attr]
+
+
+def test_startup_partial_fill_and_lookup_error_fail_closed():
+    repo = repository()
+    claim = approved(repo)
+    repo.transition(claim.client_order_id, CanonicalOrderStatus.SUBMITTING, now=T0)
+    partial = JafarStartupReconciler(
+        repo,
+        lambda _symbol, client_id: exchange(client_id, "PARTIALLY_FILLED", executed=0.005),
+    ).reconcile()
+    assert partial.coherent and partial.resolved == 1
+    assert repo.get(claim.client_order_id).status is CanonicalOrderStatus.PARTIALLY_FILLED  # type: ignore[union-attr]
+
+    def unavailable(_symbol, _client_id):
+        raise TimeoutError
+
+    failed = JafarStartupReconciler(repo, unavailable).reconcile()
+    assert not failed.coherent and failed.errors

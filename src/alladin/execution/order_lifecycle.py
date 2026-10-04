@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
@@ -121,6 +122,15 @@ class OrderClaim(BaseModel):
     exchange_order_id: int | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ReconciliationReport(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    coherent: bool
+    inspected: int
+    resolved: int
+    ambiguous: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
 
 
 _meta = MetaData()
@@ -304,6 +314,8 @@ class OrderLifecycleRepository:
             CanonicalOrderStatus.SUBMITTING.value,
             CanonicalOrderStatus.PENDING_CONFIRMATION.value,
             CanonicalOrderStatus.UNKNOWN.value,
+            CanonicalOrderStatus.ACKNOWLEDGED.value,
+            CanonicalOrderStatus.PARTIALLY_FILLED.value,
         )
         with self.engine.connect() as connection:
             rows = (
@@ -333,4 +345,45 @@ class OrderLifecycleRepository:
             else None,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+
+class JafarStartupReconciler:
+    """Reconciliation read-only des ordres ambigus avant demarrage Jafar."""
+
+    def __init__(
+        self,
+        repository: OrderLifecycleRepository,
+        lookup: Callable[[str, str], BinanceOrder | None],
+    ) -> None:
+        self.repository = repository
+        self.lookup = lookup
+
+    def reconcile(self) -> ReconciliationReport:
+        pending = self.repository.pending_reconciliation()
+        resolved = 0
+        ambiguous: list[str] = []
+        errors: list[str] = []
+        for claim in pending:
+            try:
+                exchange = self.lookup(claim.symbol, claim.client_order_id)
+                reconciled = self.repository.reconcile(claim.client_order_id, exchange)
+                if exchange is None:
+                    ambiguous.append(claim.client_order_id)
+                elif reconciled.status not in {
+                    CanonicalOrderStatus.UNKNOWN,
+                    CanonicalOrderStatus.PENDING_CONFIRMATION,
+                    CanonicalOrderStatus.SUBMITTING,
+                }:
+                    resolved += 1
+                else:
+                    ambiguous.append(claim.client_order_id)
+            except Exception as exc:
+                errors.append(f"{claim.client_order_id}:{type(exc).__name__}")
+        return ReconciliationReport(
+            coherent=not ambiguous and not errors,
+            inspected=len(pending),
+            resolved=resolved,
+            ambiguous=tuple(ambiguous),
+            errors=tuple(errors),
         )
