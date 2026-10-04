@@ -163,6 +163,72 @@ class BinanceTrade(BaseModel):
     is_maker: bool
 
 
+class BinanceSymbolFilter(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+    filter_type: str
+
+
+class BinanceSymbolInfo(BaseModel):
+    """Informations d'un symbole issues de GET /api/v3/exchangeInfo."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    symbol: str
+    status: str             # "TRADING", "HALT", "BREAK", ...
+    base_asset: str
+    quote_asset: str
+    is_spot_trading_allowed: bool
+    order_types: tuple[str, ...]
+    filters: tuple[BinanceSymbolFilter, ...]
+
+    @property
+    def is_trading(self) -> bool:
+        return self.status == "TRADING"
+
+    def get_filter(self, filter_type: str) -> BinanceSymbolFilter | None:
+        for f in self.filters:
+            if f.filter_type == filter_type:
+                return f
+        return None
+
+
+class BinanceExchangeInfo(BaseModel):
+    """Réponse parsée de GET /api/v3/exchangeInfo."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    server_time: datetime
+    symbols: tuple[BinanceSymbolInfo, ...]
+
+    def spot_symbols(self, quote_asset: str = "USDT") -> tuple[BinanceSymbolInfo, ...]:
+        qa = quote_asset.upper()
+        return tuple(s for s in self.symbols if s.quote_asset.upper() == qa and s.is_spot_trading_allowed)
+
+    def trading_only(self) -> tuple[BinanceSymbolInfo, ...]:
+        return tuple(s for s in self.symbols if s.is_trading)
+
+
+def _parse_symbol_info(row: dict[str, object]) -> BinanceSymbolInfo:
+    raw_filters = row.get("filters")
+    filter_list: list[dict[str, object]] = [f for f in raw_filters if isinstance(f, dict)] if isinstance(raw_filters, list) else []
+    filters = tuple(
+        BinanceSymbolFilter(filter_type=str(f.get("filterType", "")), **{
+            k: v for k, v in f.items() if k != "filterType"
+        })
+        for f in filter_list
+    )
+    raw_order_types = row.get("orderTypes")
+    order_types_list: list[object] = list(raw_order_types) if isinstance(raw_order_types, list) else []
+    order_types = tuple(str(t) for t in order_types_list if isinstance(t, str))
+    return BinanceSymbolInfo(
+        symbol=str(row["symbol"]),
+        status=str(row.get("status", "")),
+        base_asset=str(row.get("baseAsset", "")),
+        quote_asset=str(row.get("quoteAsset", "")),
+        is_spot_trading_allowed=bool(row.get("isSpotTradingAllowed", False)),
+        order_types=order_types,
+        filters=filters,
+    )
+
+
 def _timestamp(value: object) -> datetime:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError("invalid Binance timestamp")
@@ -290,6 +356,28 @@ class BinanceRestClient:
             cls = BinanceClockError if code == -1021 else BinanceResponseError
             raise cls(safe, status=response.status, code=code)
         return payload
+
+    def exchange_info(self, symbol: str | None = None) -> BinanceExchangeInfo:
+        """GET /api/v3/exchangeInfo — endpoint public, pas de credentials requis."""
+        params: dict[str, object] = {}
+        if symbol is not None:
+            params["symbol"] = symbol
+        row = self.public("/api/v3/exchangeInfo", params)
+        if not isinstance(row, dict):
+            raise BinanceResponseError("invalid exchangeInfo response", status=200)
+        raw_symbols = row.get("symbols")
+        if not isinstance(raw_symbols, list):
+            raise BinanceResponseError("invalid exchangeInfo symbols", status=200)
+        try:
+            symbols = tuple(
+                _parse_symbol_info(s)
+                for s in raw_symbols
+                if isinstance(s, dict)
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise BinanceResponseError("invalid exchangeInfo symbol entry", status=200) from exc
+        server_time = _timestamp(row.get("serverTime", 0))
+        return BinanceExchangeInfo(server_time=server_time, symbols=symbols)
 
     def account(self) -> BinanceAccount:
         row = self.signed("/api/v3/account", {"omitZeroBalances": "false"})
