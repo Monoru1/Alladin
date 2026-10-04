@@ -202,3 +202,40 @@ def test_jafar_modes_are_explicit_and_fail_closed_until_every_gate_passes():
     assert evaluate_jafar_mode(
         JafarMode.LIVE, safe.model_copy(update={"explicit_live_authorization": True})
     ).exchange_submission_allowed
+
+
+def test_jafar_mode_is_persisted_and_restored_fail_closed(jafar):
+    from alladin.orchestration.jafar import JafarModeStore
+
+    store = JafarModeStore(jafar.journal, jafar.run.run_id)
+    assert store.load() is JafarMode.OBSERVE
+    assert store.transition(JafarMode.PAPER, reason="test") is JafarMode.PAPER
+    resumed = build_services(
+        jafar.settings, jafar.broker, workspace=WorkspaceId.JAFAR, run_id=jafar.run.run_id
+    )
+    assert resumed and resumed.jafar_mode is JafarMode.PAPER
+
+
+def test_jafar_mode_transitions_are_progressive_and_downgrade_to_observe(jafar):
+    from alladin.orchestration.jafar import JafarModeStore
+
+    store = JafarModeStore(jafar.journal, jafar.run.run_id)
+    with pytest.raises(AlladinError, match="interdite"):
+        store.transition(JafarMode.LIVE, reason="bypass")
+    store.transition(JafarMode.PAPER, reason="paper")
+    store.transition(JafarMode.TESTNET, reason="testnet")
+    store.transition(JafarMode.LIVE_GATED, reason="gate")
+    store.transition(JafarMode.LIVE, reason="authorized elsewhere")
+    assert store.transition(JafarMode.OBSERVE, reason="safe downgrade") is JafarMode.OBSERVE
+
+
+def test_cli_refuses_runtime_mode_mismatch_and_persists_transition(settings, monkeypatch):
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    runner = CliRunner()
+    assert runner.invoke(cli.app, ["jafar", "new"]).exit_code == 0
+    changed = runner.invoke(cli.app, ["jafar", "mode", "PAPER"])
+    assert changed.exit_code == 0 and "PAPER" in changed.output
+    mismatch = runner.invoke(cli.app, ["jafar", "run", "--mode", "OBSERVE"])
+    assert mismatch.exit_code == 2 and "mode persiste PAPER" in mismatch.output
+    blocked = runner.invoke(cli.app, ["jafar", "run", "--mode", "PAPER"])
+    assert blocked.exit_code == 2 and "aucune execution" in blocked.output

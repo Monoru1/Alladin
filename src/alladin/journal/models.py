@@ -46,6 +46,7 @@ class EventType(StrEnum):
     POSITION_ACTION_REJECTED = "position.action_rejected"
     POSITION_ACTION = "position.action"
     MODE_CHANGE = "mode.change"
+    JAFAR_MODE_CHANGE = "jafar.mode.change"
     OUTCOME = "learning.outcome"
 
 

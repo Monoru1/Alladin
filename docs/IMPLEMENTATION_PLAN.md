@@ -150,6 +150,14 @@
 
 ## 6. Backlog technique prioritaire
 
+### Jafar — modes persistants
+
+Les modes `OBSERVE`, `PAPER`, `TESTNET`, `LIVE_GATED` et `LIVE` sont explicites
+et persistés par run. Les transitions dangereuses ne peuvent pas sauter les
+étapes intermédiaires ; tout mode peut revenir vers `OBSERVE`. Ce contrôle
+d'état ne constitue jamais une autorisation exchange. Le runtime reste
+fail-closed hors `OBSERVE` jusqu'au raccordement de chaque adapter dédié.
+
 | Priorité | Sujet | Statut |
 |---|---|---|
 | P0 | Recette MT5 DEMO live : fermeture/modification/partial close réelles | **PENDING** Windows requis |

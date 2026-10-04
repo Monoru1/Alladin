@@ -911,4 +911,10 @@ Checkpoint logiciel de référence : `65c3a8f` — **766 tests réussis, 3 ignor
 
 Priorités de reprise : modes Jafar explicites, raccordement Binance public + univers dynamique au runtime, boucles FAST/SLOW, reconciliation de démarrage, lifecycle d'ordre/idempotence, puis PAPER/TESTNET avant tout test d'exécution réel contrôlé.
 
+Les cinq modes Jafar sont désormais persistés par run dans le journal append-only.
+Les transitions sont progressives, une reprise recharge le dernier mode, et toute
+valeur absente/invalide retombe sur OBSERVE ou refuse la reprise. La CLI
+`jafar mode` ne confère aucune capacité d'exécution : hors OBSERVE, le runtime
+reste verrouillé tant que les adapters dédiés ne sont pas raccordés.
+
 Principe Jafar confirmé : **upside non plafonné artificiellement ; downside strictement borné**. La permission de retrait reste hors du rôle de la clé de trading ; une éventuelle trésorerie automatisée devra utiliser une séparation de privilèges dédiée.

@@ -1,9 +1,55 @@
-"""Jafar policy and OBSERVE brain. No trading strategy is inherited."""
+"""Jafar mode policy and OBSERVE brain. No trading strategy is inherited."""
 
 from pydantic import BaseModel, ConfigDict
 
 from alladin.brain import Action, ActionProposal, BrainContext, proposal_identity
 from alladin.core.enums import JafarMode
+from alladin.core.errors import AlladinError
+from alladin.journal.models import EventType
+from alladin.journal.service import JournalService
+
+_MODE_TRANSITIONS: dict[JafarMode, frozenset[JafarMode]] = {
+    JafarMode.OBSERVE: frozenset({JafarMode.PAPER}),
+    JafarMode.PAPER: frozenset({JafarMode.OBSERVE, JafarMode.TESTNET}),
+    JafarMode.TESTNET: frozenset({JafarMode.OBSERVE, JafarMode.PAPER, JafarMode.LIVE_GATED}),
+    JafarMode.LIVE_GATED: frozenset({JafarMode.OBSERVE, JafarMode.TESTNET, JafarMode.LIVE}),
+    JafarMode.LIVE: frozenset({JafarMode.OBSERVE, JafarMode.LIVE_GATED}),
+}
+
+
+class JafarModeStore:
+    """Etat de mode append-only, scoped au run et fail-closed au redemarrage."""
+
+    def __init__(self, journal: JournalService, run_id: str) -> None:
+        self.journal = journal
+        self.run_id = run_id
+
+    def load(self) -> JafarMode:
+        events = self.journal.repo.events(self.run_id, [EventType.JAFAR_MODE_CHANGE])
+        if not events:
+            self.journal.log(
+                self.run_id,
+                EventType.JAFAR_MODE_CHANGE,
+                {"from": None, "to": JafarMode.OBSERVE.value, "reason": "default_fail_closed"},
+            )
+            return JafarMode.OBSERVE
+        try:
+            return JafarMode(events[-1].payload["to"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AlladinError("mode Jafar persiste invalide: reprise refusee") from exc
+
+    def transition(self, target: JafarMode, *, reason: str) -> JafarMode:
+        current = self.load()
+        if target is current:
+            return current
+        if target not in _MODE_TRANSITIONS[current]:
+            raise AlladinError(f"transition Jafar interdite: {current.value}->{target.value}")
+        self.journal.log(
+            self.run_id,
+            EventType.JAFAR_MODE_CHANGE,
+            {"from": current.value, "to": target.value, "reason": reason},
+        )
+        return target
 
 
 class JafarExecutionReadiness(BaseModel):

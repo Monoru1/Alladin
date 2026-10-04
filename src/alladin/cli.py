@@ -15,7 +15,7 @@ from alladin.brokers.base import BrokerAdapter, block_message
 from alladin.brokers.mt5 import MT5Broker
 from alladin.challenge.profiles import list_profiles, load_profile
 from alladin.core.config import Settings, get_settings
-from alladin.core.enums import AccountType, EntryType, MarketRegime, RunMode, RunState, Side
+from alladin.core.enums import AccountType, EntryType, JafarMode, MarketRegime, RunMode, RunState, Side
 from alladin.core.errors import AlladinError, BrokerConnectionError
 from alladin.core.logging import setup_logging
 from alladin.core.models import TradeIntent
@@ -864,8 +864,30 @@ def jafar_new(broker_kind: BrokerOpt = "crypto-mock") -> None:
     """Crée un run isolé, avec budget virtuel et aucune stratégie."""
     comps = _jafar_components(broker_kind, create=True)
     out(
-        f"{comps.run.run_id} | JAFAR | OBSERVE uniquement | budget virtuel {comps.profile.initial_balance:g} USDT"
+        f"{comps.run.run_id} | JAFAR | {comps.jafar_mode.value if comps.jafar_mode else 'OBSERVE'} | budget virtuel {comps.profile.initial_balance:g} USDT"
     )
+
+
+@jafar_app.command("mode")
+def jafar_mode(
+    target: str,
+    broker_kind: BrokerOpt = "crypto-mock",
+    run: RunOpt = None,
+    reason: str = "operator_request",
+) -> None:
+    """Change le mode persiste; les transitions dangereuses sont progressives."""
+    from alladin.orchestration.jafar import JafarModeStore
+
+    try:
+        requested = JafarMode(target.upper())
+    except ValueError as exc:
+        raise die("mode Jafar invalide: OBSERVE | PAPER | TESTNET | LIVE_GATED | LIVE", 2) from exc
+    comps = _jafar_components(broker_kind, run_id=run)
+    try:
+        selected = JafarModeStore(comps.journal, comps.run.run_id).transition(requested, reason=reason)
+    except AlladinError as exc:
+        raise die(str(exc), 2) from exc
+    out(f"{comps.run.run_id} | mode {selected.value} persiste")
 
 
 @jafar_app.command("run")
@@ -877,11 +899,20 @@ def jafar_run(
     mode: str = "OBSERVE",
 ) -> None:
     """Observe les données spot et archive les cycles, sans appel à un agent payant."""
-    if mode.upper() != "OBSERVE":
-        raise die("Jafar skeleton: OBSERVE uniquement", 2)
+    try:
+        requested_mode = JafarMode(mode.upper())
+    except ValueError as exc:
+        raise die("mode Jafar invalide: OBSERVE | PAPER | TESTNET | LIVE_GATED | LIVE", 2) from exc
     if interval < 0 or cycles < 1:
         raise die("interval >= 0 et cycles >= 1 requis", 2)
     comps = _jafar_components(broker_kind, run_id=run)
+    if comps.jafar_mode is not requested_mode:
+        raise die(
+            f"mode demande {requested_mode.value} != mode persiste {comps.jafar_mode.value if comps.jafar_mode else 'UNKNOWN'}",
+            2,
+        )
+    if requested_mode is not JafarMode.OBSERVE:
+        raise die(f"runtime {requested_mode.value} non raccorde: aucune execution autorisee", 2)
     if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
         comps.manager.start(comps.run, comps.broker.account_info())
     engine = comps.engine(make_agent("mock", comps.settings))

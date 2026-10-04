@@ -21,7 +21,7 @@ from alladin.brokers.mt5 import MT5Broker
 from alladin.challenge.models import ChallengeProfile
 from alladin.challenge.profiles import load_profile
 from alladin.core.config import Settings
-from alladin.core.enums import RunMode
+from alladin.core.enums import JafarMode, RunMode
 from alladin.core.errors import AlladinError
 from alladin.core.killswitch import KillSwitch
 from alladin.core.workspace import AccountBinding, WorkspaceId
@@ -103,6 +103,7 @@ class Components:
     execution: ExecutionService
     monitor: PositionMonitor
     outcomes: OutcomeEngine
+    jafar_mode: JafarMode | None = None
 
     def engine(
         self,
@@ -227,7 +228,7 @@ def build_services(
     risk = RiskEngine(run.profile.risk)
     execution = ExecutionService(broker, risk, run, manager, journal, killswitch, clock=clk)
     monitor = PositionMonitor(broker, manager, journal, run)
-    return Components(
+    components = Components(
         settings,
         run.profile,
         broker,
@@ -241,3 +242,8 @@ def build_services(
         monitor,
         OutcomeEngine(repo, journal, RewardPolicy.load(settings.reward_policy_path)),
     )
+    if workspace is WorkspaceId.JAFAR:
+        from alladin.orchestration.jafar import JafarModeStore
+
+        components.jafar_mode = JafarModeStore(journal, run.run_id).load()
+    return components
