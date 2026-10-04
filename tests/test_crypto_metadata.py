@@ -236,3 +236,42 @@ def test_ed25519_pem_signer_produces_verifiable_base64(tmp_path: Path):
 
     signature = base64.b64decode(Ed25519PemSigner(path)(payload))
     private.public_key().verify(signature, payload)
+
+
+def test_public_trades_depth_and_24h_stats_are_canonical():
+    trades = [{"id": 1, "price": "100", "qty": "2", "quoteQty": "200", "time": 1000, "isBuyerMaker": True}]
+    depth = {"lastUpdateId": 7, "bids": [["99", "3"]], "asks": [["101", "4"]]}
+    stats = {
+        "lastPrice": "100",
+        "volume": "10",
+        "quoteVolume": "1000",
+        "count": 5,
+        "openTime": 1000,
+        "closeTime": 2000,
+    }
+    transport = FixtureTransport(
+        [HttpResponse(200, {}, json.dumps(item).encode()) for item in (trades, depth, stats)]
+    )
+    provider = BinancePublicProvider(client=BinanceRestClient(transport=transport, max_attempts=1))
+    assert provider.recent_trades("BTCUSDT")[0].quote_quantity == 200
+    assert provider.order_book("BTCUSDT", limit=100).bids[0] == (99, 3)  # type: ignore[union-attr]
+    assert provider.market_stats("BTCUSDT").quote_volume == 1000  # type: ignore[union-attr]
+    assert [urlparse(call[1]).path for call in transport.calls] == [
+        "/api/v3/trades",
+        "/api/v3/depth",
+        "/api/v3/ticker/24hr",
+    ]
+
+
+@pytest.mark.parametrize("fault", ["crossed", "empty", "nan"])
+def test_invalid_order_book_fails_closed(fault):
+    row = {"lastUpdateId": 7, "bids": [["99", "3"]], "asks": [["101", "4"]]}
+    if fault == "crossed":
+        row["bids"][0][0] = "102"
+    elif fault == "empty":
+        row["asks"] = []
+    else:
+        row["bids"][0][1] = "nan"
+    transport = FixtureTransport([HttpResponse(200, {}, json.dumps(row).encode())])
+    provider = BinancePublicProvider(client=BinanceRestClient(transport=transport, max_attempts=1))
+    assert provider.order_book("BTCUSDT") is None

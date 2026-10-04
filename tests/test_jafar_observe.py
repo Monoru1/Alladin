@@ -9,7 +9,7 @@ from alladin.agents.mock import MockAgent
 from alladin.api.app import create_app
 from alladin.brokers.crypto import CryptoMockProvider
 from alladin.brokers.crypto_observe import CryptoObserveBroker
-from alladin.core.enums import AccountType, RunMode
+from alladin.core.enums import AccountType, JafarMode, RunMode
 from alladin.core.errors import AlladinError, ExecutionBlockedError
 from alladin.core.workspace import WorkspaceId
 from alladin.journal.repository import JournalRepository
@@ -65,8 +65,15 @@ def test_direct_execution_and_broker_methods_cannot_send(jafar):
     assert jafar.execution.close_all("no order") == 0
     from alladin.core.enums import OrderAction, Side
     from alladin.core.models import OrderRequest
-    request = OrderRequest(action=OrderAction.OPEN, symbol="BTCUSDT", side=Side.BUY,
-                           volume=0.001, magic=jafar.run.magic, comment="fixture")
+
+    request = OrderRequest(
+        action=OrderAction.OPEN,
+        symbol="BTCUSDT",
+        side=Side.BUY,
+        volume=0.001,
+        magic=jafar.run.magic,
+        comment="fixture",
+    )
     with pytest.raises(ExecutionBlockedError):
         jafar.broker.check_order(request)
     with pytest.raises(ExecutionBlockedError):
@@ -128,11 +135,19 @@ def test_cli_new_run_kill_and_mode_rejection(settings, monkeypatch, tmp_path: Pa
 
 def test_direct_management_cannot_bypass_observe_gate(jafar):
     from alladin.brain import Action, ActionProposal, ProposalParameters, proposal_identity
+
     proposal = ActionProposal(
         proposal_id=proposal_identity(jafar.run.run_id, "cycle", "opp", "test", "1"),
-        source_id="test", source_version="1", run_id=jafar.run.run_id, cycle_id="cycle",
-        opportunity_id="opp", symbol="BTCUSDT", action=Action.CLOSE, timestamp=T0,
-        parameters=ProposalParameters(position_id="nonexistent"))
+        source_id="test",
+        source_version="1",
+        run_id=jafar.run.run_id,
+        cycle_id="cycle",
+        opportunity_id="opp",
+        symbol="BTCUSDT",
+        action=Action.CLOSE,
+        timestamp=T0,
+        parameters=ProposalParameters(position_id="nonexistent"),
+    )
     jafar.broker._send = lambda *args: pytest.fail("Jafar attempted order")
     assert jafar.execution.submit_position_action(proposal, RunMode.DEMO).status == "BLOCKED"
 
@@ -143,6 +158,7 @@ def test_scoped_serve_command_uses_jafar_app(settings, monkeypatch):
     assert runner.invoke(cli.app, ["jafar", "new"]).exit_code == 0
     captured = []
     import uvicorn
+
     monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: captured.append((app, kwargs)))
     served = runner.invoke(cli.app, ["jafar", "serve"])
     assert served.exit_code == 0, served.output
@@ -154,5 +170,35 @@ def test_scoped_serve_command_uses_jafar_app(settings, monkeypatch):
 def test_jafar_rejects_fx_profile_at_creation(settings):
     broker = CryptoObserveBroker(CryptoMockProvider(start=T0))
     with pytest.raises(AlladinError, match="profil"):
-        build_services(settings, broker, workspace=WorkspaceId.JAFAR, create_run=True,
-                       profile_id="ftmo_2step_demo")
+        build_services(
+            settings, broker, workspace=WorkspaceId.JAFAR, create_run=True, profile_id="ftmo_2step_demo"
+        )
+
+
+def test_jafar_modes_are_explicit_and_fail_closed_until_every_gate_passes():
+    from alladin.orchestration.jafar import JafarExecutionReadiness, evaluate_jafar_mode
+
+    empty = JafarExecutionReadiness()
+    assert not evaluate_jafar_mode(JafarMode.OBSERVE, empty).exchange_submission_allowed
+    paper = evaluate_jafar_mode(JafarMode.PAPER, empty)
+    assert paper.simulated_execution_allowed and not paper.exchange_submission_allowed
+    assert not evaluate_jafar_mode(JafarMode.LIVE_GATED, empty).exchange_submission_allowed
+    testnet = evaluate_jafar_mode(JafarMode.TESTNET, empty)
+    assert not testnet.exchange_submission_allowed and "RISK_ENGINE_REQUIRED" in testnet.reasons
+
+    safe = JafarExecutionReadiness(
+        risk_engine_passed=True,
+        portfolio_risk_passed=True,
+        reconciliation_ready=True,
+        audit_ready=True,
+        exchange_state_certain=True,
+        key_trade_permission=True,
+        withdrawals_disabled=True,
+    )
+    assert evaluate_jafar_mode(JafarMode.TESTNET, safe).exchange_submission_allowed
+    live = evaluate_jafar_mode(JafarMode.LIVE, safe)
+    assert not live.exchange_submission_allowed
+    assert live.reasons == ("EXPLICIT_LIVE_AUTHORIZATION_REQUIRED",)
+    assert evaluate_jafar_mode(
+        JafarMode.LIVE, safe.model_copy(update={"explicit_live_authorization": True})
+    ).exchange_submission_allowed

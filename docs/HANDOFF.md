@@ -751,6 +751,11 @@ en USDT. Validation réseau publique du 2026-10-04 : horloge OK, 1 372 symboles
 Spot tradables parsés dont 503 cotés USDT. Ces nombres sont une observation
 ponctuelle, pas une liste codée en dur.
 
+Le provider public expose également des conversions canoniques déterministes
+pour trades récents, carnet d'ordres et statistiques 24 h. Ce sont des briques
+de collecte ; elles ne constituent pas encore un filtre automatique de
+liquidité ou de data quality dans le runtime.
+
 Commande read-only : `python -m alladin jafar account [--symbol BTCUSDT]` avec
 `BINANCE_API_KEY` et `JAFAR_BINANCE_PRIVATE_KEY_PATH`. Dans cette session, le
 PEM local était présent mais la variable API n'était pas visible du processus ;
@@ -758,7 +763,12 @@ le GET account réel n'a donc pas été rejoué. La preuve manuelle HTTP 200 de 
 décision 030 reste la preuve authentifiée actuelle.
 
 Il n'existe toujours aucun endpoint de soumission/annulation Binance ni mode
-Jafar PAPER/TESTNET/LIVE_GATED/LIVE. En revanche, les fondations hors exécution
+Jafar PAPER/TESTNET/LIVE_GATED/LIVE raccordé au runtime. Les cinq modes sont
+désormais des états explicites (`JafarMode`) avec une politique fail-closed :
+OBSERVE interdit tout ordre, PAPER autorise uniquement la simulation,
+LIVE_GATED reste verrouillé, TESTNET exige toutes les preuves techniques et
+LIVE ajoute une autorisation humaine explicite. Le CLI/runtime reste OBSERVE.
+En revanche, les fondations hors exécution
 sont présentes : `execution/order_lifecycle.py` persiste un `clientOrderId`
 déterministe avant soumission future, impose la machine d'état canonique et
 maintient tout timeout en `PENDING_CONFIRMATION` jusqu'à réconciliation. Une

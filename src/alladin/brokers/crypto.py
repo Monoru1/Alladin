@@ -77,6 +77,37 @@ class CryptoInstrument:
     order_types: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class CryptoTrade:
+    trade_id: int
+    symbol: str
+    price: float
+    quantity: float
+    quote_quantity: float
+    time: datetime
+    buyer_is_maker: bool
+
+
+@dataclass(frozen=True)
+class CryptoOrderBook:
+    symbol: str
+    last_update_id: int
+    bids: tuple[tuple[float, float], ...]
+    asks: tuple[tuple[float, float], ...]
+    observed_at: datetime
+
+
+@dataclass(frozen=True)
+class CryptoMarketStats:
+    symbol: str
+    last_price: float
+    base_volume: float
+    quote_volume: float
+    trades: int
+    open_time: datetime
+    close_time: datetime
+
+
 class CryptoDataProvider(ABC):
     """Abstraction pour les sources de donnees crypto."""
 
@@ -320,3 +351,85 @@ class BinancePublicProvider(CryptoDataProvider):
 
     def now(self) -> datetime:
         return datetime.now(UTC)
+
+    def recent_trades(self, symbol: str, *, limit: int = 100) -> tuple[CryptoTrade, ...]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("Binance trade limit out of range")
+        try:
+            rows = self.client.public("/api/v3/trades", {"symbol": symbol, "limit": limit})
+            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+                return ()
+            result = tuple(
+                CryptoTrade(
+                    trade_id=int(row["id"]),
+                    symbol=symbol,
+                    price=float(row["price"]),
+                    quantity=float(row["qty"]),
+                    quote_quantity=float(row["quoteQty"]),
+                    time=datetime.fromtimestamp(int(row["time"]) / 1000, UTC),
+                    buyer_is_maker=row["isBuyerMaker"],
+                )
+                for row in rows
+            )
+            if not all(
+                isinstance(item.buyer_is_maker, bool)
+                and all(math.isfinite(v) and v > 0 for v in (item.price, item.quantity, item.quote_quantity))
+                for item in result
+            ):
+                return ()
+            return result
+        except (BinanceError, KeyError, TypeError, ValueError):
+            return ()
+
+    def order_book(self, symbol: str, *, limit: int = 100) -> CryptoOrderBook | None:
+        if limit not in {5, 10, 20, 50, 100, 500, 1000, 5000}:
+            raise ValueError("unsupported Binance depth limit")
+        try:
+            row = self.client.public("/api/v3/depth", {"symbol": symbol, "limit": limit})
+            if not isinstance(row, dict):
+                return None
+            bids = tuple((float(price), float(quantity)) for price, quantity in row["bids"])
+            asks = tuple((float(price), float(quantity)) for price, quantity in row["asks"])
+            if (
+                not bids
+                or not asks
+                or not all(math.isfinite(v) and v > 0 for level in bids + asks for v in level)
+            ):
+                return None
+            if bids[0][0] >= asks[0][0]:
+                return None
+            return CryptoOrderBook(
+                symbol=symbol,
+                last_update_id=int(row["lastUpdateId"]),
+                bids=bids,
+                asks=asks,
+                observed_at=self.now(),
+            )
+        except (BinanceError, KeyError, TypeError, ValueError):
+            return None
+
+    def market_stats(self, symbol: str) -> CryptoMarketStats | None:
+        try:
+            row = self.client.public("/api/v3/ticker/24hr", {"symbol": symbol})
+            if not isinstance(row, dict):
+                return None
+            result = CryptoMarketStats(
+                symbol=symbol,
+                last_price=float(row["lastPrice"]),
+                base_volume=float(row["volume"]),
+                quote_volume=float(row["quoteVolume"]),
+                trades=int(row["count"]),
+                open_time=datetime.fromtimestamp(int(row["openTime"]) / 1000, UTC),
+                close_time=datetime.fromtimestamp(int(row["closeTime"]) / 1000, UTC),
+            )
+            if (
+                not all(
+                    math.isfinite(v) and v >= 0
+                    for v in (result.last_price, result.base_volume, result.quote_volume)
+                )
+                or result.last_price <= 0
+            ):
+                return None
+            return result
+        except (BinanceError, KeyError, TypeError, ValueError):
+            return None

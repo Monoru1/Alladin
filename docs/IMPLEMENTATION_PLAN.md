@@ -37,6 +37,8 @@
 | Univers Jafar dynamique USDT depuis `exchangeInfo` | `brokers/crypto.py`, `brokers/crypto_observe.py` | Éligibilité liquidité/data quality encore à enrichir |
 | Lifecycle ordre exchange persistant/idempotent et réconciliation | `execution/order_lifecycle.py` | Aucun envoi Binance raccordé |
 | Valorisation portefeuille Spot et limites concentration/drawdown | `risk/portfolio.py` | Cost basis/corrélations doivent être alimentés par données réelles |
+| Modes Jafar OBSERVE/PAPER/TESTNET/LIVE_GATED/LIVE et gates fail-closed | `core/enums.py`, `orchestration/jafar.py` | Runtime/CLI encore OBSERVE uniquement |
+| Trades publics, carnet et statistiques 24 h Binance canoniques | `brokers/crypto.py` | Pas encore archivés ni utilisés par l'éligibilité |
 | Backtest chronologique (fill next-open, spread, gap SL, règle intrabar) | `research/backtest.py` | Distinct du vrai RiskEngine ; `passed` ≠ preuve OOS |
 | Splits chronologiques, scorecards, ResearchRepository, lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py` | — |
 | Outcome/Reward : snapshots immuables, politique hashée, reward versionné, statut INCOMPLETE, contrefactuels NO_TRADE/HOLD | `research/outcome.py`, `research/reward.py` | Aucun entraînement ; brain actif inchangé |

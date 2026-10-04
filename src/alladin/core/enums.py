@@ -143,3 +143,13 @@ class RunMode(StrEnum):
     OBSERVE = "OBSERVE"
     PAPER = "PAPER"
     DEMO = "DEMO"
+
+
+class JafarMode(StrEnum):
+    """Modes crypto explicites ; distincts du legacy MT5 DEMO."""
+
+    OBSERVE = "OBSERVE"
+    PAPER = "PAPER"
+    TESTNET = "TESTNET"
+    LIVE_GATED = "LIVE_GATED"
+    LIVE = "LIVE"
