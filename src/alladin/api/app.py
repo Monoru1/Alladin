@@ -123,6 +123,7 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
                          "available_risk": max(0.0, wc * profile.risk.max_total_open_risk_pct_of_wc / 100 - exposure.total_open_risk),
                          "exposure": exposure.model_dump(mode="json")},
                 "execution_blocked": acct is not None and acct.account_type is not AccountType.DEMO,
+                "observe_only": workspace is WorkspaceId.JAFAR,
                 "journal": {"ok": ok, "detail": detail}}
 
     @app.get("/api/runs")

@@ -1103,7 +1103,14 @@ async function refreshFast() {
     setChip("h-run", "RUN", ov.run?.run_id?.slice(0,10) || "N/A");
     setChip("h-heartbeat", "POLL", new Date().toLocaleTimeString(), "ok");
 
-    $id("blocked-banner").style.display = ov.execution_blocked ? "block" : "none";
+    const banner = $id("blocked-banner");
+    if (ov.observe_only) {
+      banner.textContent = "EXECUTION DISABLED \u2014 PUBLIC DATA / OBSERVE ONLY";
+      banner.style.display = "block";
+    } else {
+      banner.textContent = "EXECUTION BLOCKED \u2014 compte non DEMO";
+      banner.style.display = ov.execution_blocked ? "block" : "none";
+    }
 
     // Account dot
     setDot("dot-account", a.server ? "live" : "");

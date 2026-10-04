@@ -19,7 +19,7 @@ class EncoderParams:
 
     n_neurons: int = 10        # output neurons per feature
     n_timesteps: int = 20      # spike train length per feature value
-    max_rate: float = 100.0    # maximum firing rate (Hz, conceptual)
+    max_rate: float = 100.0    # maximum firing rate in Hz; each timestep = 1 ms (dt=1ms implied)
     seed: int = 42
 
 
@@ -33,8 +33,11 @@ def encode_feature(
     Encode a single scalar feature as a spike train using rate coding.
 
     The feature is normalized to [0, 1] relative to [min_val, max_val].
-    Each neuron fires independently with probability proportional to
-    the normalized value * max_rate / 1000 per timestep (rate coding).
+    Each neuron fires independently with probability per timestep:
+        p_fire = clamp(normalized * max_rate / 1000.0, 0, 1)
+    where max_rate is in Hz and each timestep is implicitly 1 ms (dt=1ms).
+    At max_rate=100 Hz: p_fire_max = 0.10 per timestep.
+    At max_rate=1000 Hz: p_fire_max = 1.0 per timestep (deterministic full firing).
 
     Args:
         value: Current feature value (must be in [min_val, max_val]).
@@ -52,9 +55,9 @@ def encode_feature(
     value_clamped = max(min_val, min(max_val, value))
     normalized = (value_clamped - min_val) / (max_val - min_val)  # [0, 1]
 
-    # Firing probability per timestep per neuron
-    p_fire = normalized * (params.max_rate / 1000.0) * params.n_timesteps / params.n_timesteps
-    p_fire = min(1.0, max(0.0, normalized))  # simple linear rate: p = normalized
+    # Firing probability per timestep per neuron.
+    # max_rate [Hz] * dt [s] = max_rate / 1000.0 (dt = 1 ms implied).
+    p_fire = min(1.0, max(0.0, normalized * params.max_rate / 1000.0))
 
     rng = random.Random(params.seed)
     spike_train: list[list[bool]] = []

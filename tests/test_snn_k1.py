@@ -180,12 +180,32 @@ class TestEncoder:
         total = sum(sum(1 for s in row if s) for row in t)
         assert total == 0
 
-    def test_max_value_high_firing_rate(self) -> None:
-        params = EncoderParams(n_neurons=10, n_timesteps=20, seed=0)
+    def test_max_value_all_spikes_at_max_rate_1000hz(self) -> None:
+        # max_rate=1000 Hz → p_fire = 1.0 * 1000/1000 = 1.0 → all neurons fire every step
+        params = EncoderParams(n_neurons=10, n_timesteps=20, max_rate=1000.0, seed=0)
         t = encode_feature(1.0, 0.0, 1.0, params)
-        # normalized=1.0 → p_fire=1.0 → all spikes
         total = sum(sum(1 for s in row if s) for row in t)
         assert total == 10 * 20
+
+    def test_max_rate_affects_firing_probability(self) -> None:
+        # Same value, same seed — higher max_rate must produce more spikes
+        low_rate = EncoderParams(n_neurons=20, n_timesteps=50, max_rate=50.0, seed=42)
+        high_rate = EncoderParams(n_neurons=20, n_timesteps=50, max_rate=500.0, seed=42)
+        t_low = encode_feature(1.0, 0.0, 1.0, low_rate)
+        t_high = encode_feature(1.0, 0.0, 1.0, high_rate)
+        count_low = sum(sum(1 for s in row if s) for row in t_low)
+        count_high = sum(sum(1 for s in row if s) for row in t_high)
+        assert count_high > count_low
+
+    def test_p_fire_bounded_0_1(self) -> None:
+        # max_rate=2000 would give normalized*2.0 — must be clamped to 1.0
+        params = EncoderParams(n_neurons=5, n_timesteps=10, max_rate=2000.0, seed=1)
+        # Should not raise and p_fire must stay ≤ 1.0 (no exception, deterministic output)
+        t = encode_feature(1.0, 0.0, 1.0, params)
+        assert len(t) == 10
+        # All spikes expected (p_fire clamped to 1.0)
+        total = sum(sum(1 for s in row if s) for row in t)
+        assert total == 5 * 10
 
     def test_value_clamped_below_min(self) -> None:
         params = EncoderParams(n_neurons=5, n_timesteps=10, seed=7)
@@ -329,6 +349,44 @@ class TestRSTDP:
         pre = [[False, False]] * 5
         out = readout(pre, weights)
         assert out == [0.0]
+
+    def test_tau_plus_affects_eligibility_traces(self) -> None:
+        # Smaller tau_plus → faster decay → less accumulated trace for same spikes
+        fast = RSTDPParams(n_pre=2, n_post=1, tau_plus=1.0, dt=1.0, seed=0)
+        slow = RSTDPParams(n_pre=2, n_post=1, tau_plus=100.0, dt=1.0, seed=0)
+        state_fast = RSTDPState(weights=[[0.5, 0.5]], eligibility=[[0.0, 0.0]])
+        state_slow = RSTDPState(weights=[[0.5, 0.5]], eligibility=[[0.0, 0.0]])
+        # Pre fires at t=0, post fires at t=3 (pre trace should have decayed differently)
+        pre = [[True, True], [False, False], [False, False], [False, False]]
+        post = [[False], [False], [False], [True]]
+        s_fast = accumulate_eligibility(state_fast, pre, post, fast)
+        s_slow = accumulate_eligibility(state_slow, pre, post, slow)
+        # Fast tau → traces decayed more → less eligibility accumulated
+        elig_fast = sum(abs(e) for row in s_fast.eligibility for e in row)
+        elig_slow = sum(abs(e) for row in s_slow.eligibility for e in row)
+        assert elig_fast != elig_slow
+
+    def test_dt_affects_decay(self) -> None:
+        # Larger dt → faster decay per step → less accumulated trace
+        small_dt = RSTDPParams(n_pre=2, n_post=1, tau_plus=20.0, dt=1.0, seed=0)
+        large_dt = RSTDPParams(n_pre=2, n_post=1, tau_plus=20.0, dt=10.0, seed=0)
+        state = RSTDPState(weights=[[0.5, 0.5]], eligibility=[[0.0, 0.0]])
+        pre = [[True, True], [False, False], [False, False], [False, False]]
+        post = [[False], [False], [False], [True]]
+        s_small = accumulate_eligibility(state, pre, post, small_dt)
+        s_large = accumulate_eligibility(state, pre, post, large_dt)
+        elig_small = sum(abs(e) for row in s_small.eligibility for e in row)
+        elig_large = sum(abs(e) for row in s_large.eligibility for e in row)
+        assert elig_small != elig_large
+
+    def test_rstdp_deterministic_with_same_params(self) -> None:
+        params = RSTDPParams(n_pre=3, n_post=2, tau_plus=15.0, tau_minus=25.0, dt=2.0, seed=5)
+        state = make_rstdp_state(params)
+        pre = [[True, False, True], [False, True, False]]
+        post = [[True, False], [False, True]]
+        s1 = accumulate_eligibility(state, pre, post, params)
+        s2 = accumulate_eligibility(state, pre, post, params)
+        assert s1.eligibility == s2.eligibility
 
 
 # ---------------------------------------------------------------------------

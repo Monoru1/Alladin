@@ -23,6 +23,7 @@ class RSTDPParams:
     w_max: float = 1.0       # maximum weight (hard clip)
     tau_plus: float = 20.0   # STDP time constant for pre→post (ms)
     tau_minus: float = 20.0  # STDP time constant for post→pre (ms)
+    dt: float = 1.0          # timestep duration (ms); decay = exp(-dt/tau)
     seed: int = 42
 
 
@@ -90,11 +91,12 @@ def accumulate_eligibility(
 
     new_elig = [list(row) for row in state.eligibility]
 
-    # Running traces for each neuron: decaying sum of past spikes
+    # Running traces for each neuron: decaying sum of past spikes.
+    # decay = exp(-dt / tau): faster decay for smaller tau or larger dt.
     pre_trace = [0.0] * params.n_pre
     post_trace = [0.0] * params.n_post
-    decay_pre = math.exp(-params.tau_plus / params.tau_plus)   # = e^-1 per tau_plus step
-    decay_post = math.exp(-params.tau_minus / params.tau_minus)
+    decay_pre = math.exp(-params.dt / params.tau_plus)
+    decay_post = math.exp(-params.dt / params.tau_minus)
 
     for t in range(n_steps):
         # Decay traces
