@@ -896,3 +896,19 @@ Reward explicite expérimental `PnL_R + 0.1 * protection_quality - 0.25 * sample
 API GET et panneau cockpit disponibles, agrégation par mode/devise/politique. Affichage USDT corrigé. `scripts/Invoke-AlladinChecks.ps1` sauvegarde SQLite puis vérifie le logiciel ; option MT5 strictement lecture seule. Voir [PC_ACCEPTANCE.md](PC_ACCEPTANCE.md). Le cœur Python est testé ici ; PowerShell/Windows et le terminal MT5 réel restent à vérifier sur PC. Les maxima intracycle et l’attribution journalière de réalisations partielles interjours ne sont pas une nouvelle garantie de ce lot. Pas d’entraînement/promotion SNN automatique ; suite K.
 
 Validation de ce checkpoint : 629 tests réussis, 3 tests MT5 ignorés sans terminal ; Ruff et mypy (85 sources) propres, syntaxe JavaScript vérifiée par Node. Aucun ordre réel envoyé depuis cet environnement.
+
+## Checkpoint Jafar/Binance — 2026-10-04 après validation manuelle
+
+État confirmé sur le poste utilisateur :
+- `python -m alladin jafar account` fonctionne contre Binance en authentification Ed25519 read-only ;
+- `python -m alladin jafar account --symbol BTCUSDT` lit également l'historique sans envoi d'ordre ;
+- la clé API est actuellement en lecture seule et le diagnostic applicatif la considère sûre pour ce mode ;
+- aucun ordre réel n'a été envoyé ;
+- `jafar run --broker crypto-mock --cycles 3 --interval 1 --mode OBSERVE` reste fonctionnel et retourne volontairement NO_TRADE ;
+- le runtime Jafar n'est pas encore raccordé de bout en bout au chemin d'exécution Binance.
+
+Checkpoint logiciel de référence : `65c3a8f` — **766 tests réussis, 3 ignorés, Ruff clean, mypy clean sur 95 sources**.
+
+Priorités de reprise : modes Jafar explicites, raccordement Binance public + univers dynamique au runtime, boucles FAST/SLOW, reconciliation de démarrage, lifecycle d'ordre/idempotence, puis PAPER/TESTNET avant tout test d'exécution réel contrôlé.
+
+Principe Jafar confirmé : **upside non plafonné artificiellement ; downside strictement borné**. La permission de retrait reste hors du rôle de la clé de trading ; une éventuelle trésorerie automatisée devra utiliser une séparation de privilèges dédiée.
