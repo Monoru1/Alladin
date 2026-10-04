@@ -57,6 +57,26 @@ Le code doit permettre de configurer le chemin plutôt que de dépendre silencie
 
 Les fichiers `*.pem` doivent être ignorés par Git en plus des règles existantes `.env` / `.env.*`. Aucun agent Claude/Codex/ChatGPT ne doit demander, afficher, logger ou committer la clé privée ou la valeur de `BINANCE_API_KEY`.
 
+## Politique de risque et objectif de performance Jafar
+
+Jafar ne doit pas avoir de **plafond artificiel de gains** ni réduire/arrêter une stratégie uniquement parce qu'un objectif positif prédéfini a été atteint. Une opportunité reste évaluée selon son edge, son risque, son coût, sa liquidité et l'état du portefeuille.
+
+En revanche, la **perte et le risque de ruine sont strictement bornés**. Le RiskEngine doit imposer des limites déterministes et fail-closed portant notamment sur :
+- perte maximale par décision/trade ;
+- perte cumulée et drawdown ;
+- capital/exposition réellement à risque ;
+- concentration et exposition corrélée ;
+- liquidité/slippage/coûts ;
+- données périmées ou état exchange incertain ;
+- incohérence entre journal local et état Binance ;
+- toute autre condition pouvant rendre le risque non quantifiable.
+
+Principe : **upside non plafonné par une cible de gain arbitraire ; downside borné par des lois de risque explicites**.
+
+Cela ne signifie jamais taille de position illimitée, levier illimité, martingale, poursuite des pertes ou contournement du RiskEngine. Une augmentation d'exposition doit toujours rester compatible avec le budget de risque et les contraintes du portefeuille.
+
+Le PortfolioEngine doit raisonner au niveau global (cash/stablecoins, actifs, PnL réalisé/latent, drawdown, frais, exposition nette, corrélations et budget de risque restant). Le Brain peut proposer ; le Portfolio/Risk layer peut refuser.
+
 ## Prochaines étapes
 
 - intégrer un adapter Binance authentifié read-only dans le workspace Jafar ;
