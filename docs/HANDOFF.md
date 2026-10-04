@@ -757,9 +757,15 @@ PEM local était présent mais la variable API n'était pas visible du processus
 le GET account réel n'a donc pas été rejoué. La preuve manuelle HTTP 200 de la
 décision 030 reste la preuve authentifiée actuelle.
 
-Il n'existe toujours aucun endpoint de soumission/annulation Binance, aucun
-mode Jafar PAPER/TESTNET/LIVE_GATED/LIVE et aucun PortfolioEngine crypto. Ces
-chantiers restent à construire derrière RiskEngine, idempotence et reconciliation.
+Il n'existe toujours aucun endpoint de soumission/annulation Binance ni mode
+Jafar PAPER/TESTNET/LIVE_GATED/LIVE. En revanche, les fondations hors exécution
+sont présentes : `execution/order_lifecycle.py` persiste un `clientOrderId`
+déterministe avant soumission future, impose la machine d'état canonique et
+maintient tout timeout en `PENDING_CONFIRMATION` jusqu'à réconciliation. Une
+reprise ne peut pas resoumettre la claim. `risk/portfolio.py` valorise balances
+libres/verrouillées, cash, holdings, frais, PnL fourni, drawdown, exposition par
+actif et groupes corrélés, puis applique des plafonds déterministes. Ces briques
+ne sont pas encore raccordées à un chemin d'ordre.
 
 
 ### Complément registre — décisions 017 à 022
