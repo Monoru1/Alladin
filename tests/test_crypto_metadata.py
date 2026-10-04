@@ -172,6 +172,50 @@ def test_clock_error_remains_explicit_after_single_resync():
     assert len(transport.calls) == 3
 
 
+def test_api_key_restrictions_distinguish_key_permissions_from_account_flags():
+    row = {
+        "ipRestrict": True,
+        "createTime": 1000,
+        "enableReading": True,
+        "enableWithdrawals": False,
+        "enableInternalTransfer": False,
+        "enableMargin": False,
+        "enableFutures": False,
+        "permitsUniversalTransfer": False,
+        "enableSpotAndMarginTrading": False,
+    }
+    transport = FixtureTransport([HttpResponse(200, {}, json.dumps(row).encode())])
+    client = BinanceRestClient(
+        api_key="key", signer=lambda _: "sig", transport=transport, max_attempts=1, clock_ms=lambda: 1000
+    )
+    restrictions = client.api_restrictions()
+    assert restrictions.safe_for_read_only
+    assert restrictions.ip_restricted and not restrictions.spot_margin_trading_enabled
+    assert urlparse(transport.calls[0][1]).path == "/sapi/v1/account/apiRestrictions"
+
+
+@pytest.mark.parametrize("field", ["enableReading", "enableWithdrawals", "enableSpotAndMarginTrading"])
+def test_api_key_restrictions_reject_non_boolean_permissions(field):
+    row = {
+        "ipRestrict": True,
+        "createTime": 1000,
+        "enableReading": True,
+        "enableWithdrawals": False,
+        "enableInternalTransfer": False,
+        "enableMargin": False,
+        "enableFutures": False,
+        "permitsUniversalTransfer": False,
+        "enableSpotAndMarginTrading": False,
+    }
+    row[field] = "false"
+    transport = FixtureTransport([HttpResponse(200, {}, json.dumps(row).encode())])
+    client = BinanceRestClient(
+        api_key="key", signer=lambda _: "sig", transport=transport, max_attempts=1, clock_ms=lambda: 1000
+    )
+    with pytest.raises(BinanceResponseError, match="invalid"):
+        client.api_restrictions()
+
+
 def test_readonly_order_and_trade_history_convert_to_canonical_models():
     order = {
         "symbol": "BTCUSDT",

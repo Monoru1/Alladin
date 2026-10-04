@@ -932,11 +932,14 @@ def jafar_account(symbol: str | None = None, testnet: bool = False) -> None:
     try:
         client = make_binance_account_client(get_settings(), testnet=testnet)
         account = client.account()
+        restrictions = client.api_restrictions()
         payload: dict[str, object] = {
             "observed_at": account.observed_at.isoformat(),
             "can_trade_account_flag": account.can_trade,
             "can_withdraw_account_flag": account.can_withdraw,
             "permissions": account.permissions,
+            "api_key_restrictions": restrictions.model_dump(mode="json"),
+            "api_key_read_only_safe": restrictions.safe_for_read_only,
             "nonzero_balances": [b.model_dump() for b in account.balances if b.total > 0],
             "open_orders": [o.model_dump(mode="json") for o in client.open_orders(symbol)],
         }

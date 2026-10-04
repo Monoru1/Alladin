@@ -33,7 +33,7 @@
 | Isolation workspace Alladin/Jafar : journal, positions, recherche, archive | `core/workspace.py`, migrations | — |
 | Catégories crypto, capabilities honnêtes, sessions configurables | `brokers/crypto.py`, `market/sessions.py`, `core/enums.py` | Aucun adapter d'exécution crypto |
 | Runtime Jafar OBSERVE : scan spot, archive/replay, brain NO_TRADE, cockpit scoped | `jafar/`, `api/` | Fail-closed PAPER/DEMO/entry/management |
-| Binance Spot public + compte USER_DATA read-only Ed25519 | `brokers/binance.py`, `brokers/crypto.py` | Aucun endpoint d'ordre ; clé API absente du processus de validation locale |
+| Binance Spot public + compte USER_DATA read-only Ed25519 + restrictions de clé | `brokers/binance.py`, `brokers/crypto.py` | Aucun endpoint d'ordre ; clé API absente du processus de validation locale |
 | Univers Jafar dynamique USDT depuis `exchangeInfo` | `brokers/crypto.py`, `brokers/crypto_observe.py` | Éligibilité liquidité/data quality encore à enrichir |
 | Lifecycle ordre exchange persistant/idempotent et réconciliation | `execution/order_lifecycle.py` | Aucun envoi Binance raccordé |
 | Valorisation portefeuille Spot et limites concentration/drawdown | `risk/portfolio.py` | Cost basis/corrélations doivent être alimentés par données réelles |

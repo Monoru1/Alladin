@@ -743,6 +743,9 @@ horloge, compte/balances, ordres ouverts, historique d'ordres et trades. La
 signature Ed25519 charge le PEM local à la demande ; ni clé API ni PEM ne sont
 sérialisés ou logués. Timeout, retries bornés sur réseau/429/5xx, backoff,
 réponse invalide et resynchronisation unique sur erreur `-1021` sont testés.
+Le diagnostic lit aussi `/sapi/v1/account/apiRestrictions` : permissions de la
+clé (lecture, Spot/Margin, retraits, restriction IP) distinctes des flags du
+compte. L'état read-only sûr exige lecture active, trading et retraits inactifs.
 
 `crypto-public` charge désormais l'ensemble de `exchangeInfo`, parse
 `PRICE_FILTER`, `LOT_SIZE`, `MARKET_LOT_SIZE`, `MIN_NOTIONAL`/`NOTIONAL`, statut

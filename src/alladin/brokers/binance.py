@@ -115,6 +115,23 @@ class BinanceAccount(BaseModel):
     taker_commission_bps: float | None = None
 
 
+class BinanceApiRestrictions(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    created_at: datetime
+    ip_restricted: bool
+    reading_enabled: bool
+    withdrawals_enabled: bool
+    spot_margin_trading_enabled: bool
+    margin_enabled: bool
+    futures_enabled: bool
+    internal_transfer_enabled: bool
+    universal_transfer_enabled: bool
+
+    @property
+    def safe_for_read_only(self) -> bool:
+        return self.reading_enabled and not self.withdrawals_enabled and not self.spot_margin_trading_enabled
+
+
 class BinanceOrder(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     symbol: str
@@ -226,7 +243,7 @@ class BinanceRestClient:
         return self._clock_offset_ms
 
     def _request(self, path: str, params: Mapping[str, object], *, signed: bool) -> Any:
-        if not path.startswith("/api/"):
+        if not path.startswith(("/api/", "/sapi/")):
             raise ValueError("Binance API path required")
         values = list(params.items())
         headers = {"Accept": "application/json", "User-Agent": "Alladin-Jafar/0.1"}
@@ -303,6 +320,31 @@ class BinanceRestClient:
             maker_commission_bps=None if maker is None else _finite_float(maker, "maker commission"),
             taker_commission_bps=None if taker is None else _finite_float(taker, "taker commission"),
         )
+
+    def api_restrictions(self) -> BinanceApiRestrictions:
+        row = self.signed("/sapi/v1/account/apiRestrictions")
+        if not isinstance(row, dict):
+            raise BinanceResponseError("invalid Binance API restrictions", status=200)
+        try:
+            return BinanceApiRestrictions(
+                created_at=_timestamp(row["createTime"]),
+                ip_restricted=_strict_bool(row["ipRestrict"], "ipRestrict"),
+                reading_enabled=_strict_bool(row["enableReading"], "enableReading"),
+                withdrawals_enabled=_strict_bool(row["enableWithdrawals"], "enableWithdrawals"),
+                spot_margin_trading_enabled=_strict_bool(
+                    row["enableSpotAndMarginTrading"], "enableSpotAndMarginTrading"
+                ),
+                margin_enabled=_strict_bool(row["enableMargin"], "enableMargin"),
+                futures_enabled=_strict_bool(row["enableFutures"], "enableFutures"),
+                internal_transfer_enabled=_strict_bool(
+                    row["enableInternalTransfer"], "enableInternalTransfer"
+                ),
+                universal_transfer_enabled=_strict_bool(
+                    row["permitsUniversalTransfer"], "permitsUniversalTransfer"
+                ),
+            )
+        except KeyError as exc:
+            raise BinanceResponseError("invalid Binance API restrictions", status=200) from exc
 
     def open_orders(self, symbol: str | None = None) -> tuple[BinanceOrder, ...]:
         params: dict[str, object] = {} if symbol is None else {"symbol": symbol}
