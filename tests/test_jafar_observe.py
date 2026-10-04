@@ -263,5 +263,6 @@ def test_cli_refuses_runtime_mode_mismatch_and_persists_transition(settings, mon
     assert changed.exit_code == 0 and "PAPER" in changed.output
     mismatch = runner.invoke(cli.app, ["jafar", "run", "--mode", "OBSERVE"])
     assert mismatch.exit_code == 2 and "mode persiste PAPER" in mismatch.output
-    blocked = runner.invoke(cli.app, ["jafar", "run", "--mode", "PAPER"])
-    assert blocked.exit_code == 2 and "aucune execution" in blocked.output
+    # PAPER est maintenant supporte -- la boucle s exécute (1 cycle)
+    paper_run = runner.invoke(cli.app, ["jafar", "run", "--mode", "PAPER", "--cycles", "1"])
+    assert paper_run.exit_code == 0 and "PAPER" in paper_run.output

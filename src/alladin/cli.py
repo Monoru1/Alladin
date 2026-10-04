@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import sys
 from datetime import timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -50,7 +50,7 @@ app.add_typer(runs_app, name="runs")
 app.add_typer(positions_app, name="positions")
 app.add_typer(replay_app, name="replay")
 app.add_typer(archive_app, name="archive")
-jafar_app = typer.Typer(no_args_is_help=True, help="Jafar — crypto OBSERVE uniquement, aucun ordre.")
+jafar_app = typer.Typer(no_args_is_help=True, help="Jafar — crypto OBSERVE / PAPER / TESTNET (jamais d'ordre production direct).")
 app.add_typer(jafar_app, name="jafar")
 outcomes_app = typer.Typer(no_args_is_help=True, help="Résultats et rewards hors exécution, aucun ordre.")
 app.add_typer(outcomes_app, name="outcomes")
@@ -898,7 +898,7 @@ def jafar_run(
     cycles: int = 1,
     mode: str = "OBSERVE",
 ) -> None:
-    """Observe les données spot et archive les cycles, sans appel à un agent payant."""
+    """Observe (ou simule PAPER) les donnees spot sans jamais envoyer d'ordre production."""
     try:
         requested_mode = JafarMode(mode.upper())
     except ValueError as exc:
@@ -911,10 +911,19 @@ def jafar_run(
             f"mode demande {requested_mode.value} != mode persiste {comps.jafar_mode.value if comps.jafar_mode else 'UNKNOWN'}",
             2,
         )
-    if requested_mode is not JafarMode.OBSERVE:
-        raise die(f"runtime {requested_mode.value} non raccorde: aucune execution autorisee", 2)
+    if requested_mode not in (JafarMode.OBSERVE, JafarMode.PAPER):
+        raise die(
+            f"runtime {requested_mode.value} non raccorde via CLI: utiliser jafar serve pour TESTNET/LIVE",
+            2,
+        )
     if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
         comps.manager.start(comps.run, comps.broker.account_info())
+
+    if requested_mode is JafarMode.PAPER:
+        _jafar_run_paper(comps, broker_kind, cycles, interval)
+        return
+
+    # OBSERVE
     engine = comps.engine(make_agent("mock", comps.settings))
     engine.run_loop(
         interval,
@@ -923,6 +932,47 @@ def jafar_run(
             f"{comps.run.run_id} | OBSERVE | {o.decision} | {o.reason} | {', '.join(o.shortlist) or '-'}"
         ),
     )
+
+
+def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float) -> None:
+    """Boucle PAPER Jafar : donnees reelles Binance, execution 100% simulee."""
+    import time as _time
+
+    from alladin.jafar.paper import JafarPaperEngine
+
+    broker = comps.broker
+    provider = getattr(broker, "provider", None)
+    if provider is None:
+        raise die("broker sans provider crypto - utiliser crypto-mock ou crypto-public", 2)
+
+    paper_engine = JafarPaperEngine(
+        provider=provider,
+        run_id=comps.run.run_id,
+        workspace=comps.run.workspace,
+        initial_capital=comps.profile.initial_balance,
+        repo=comps.repo,
+        journal=comps.journal,
+    )
+    restored = paper_engine.restore()
+    if restored:
+        out(f"{comps.run.run_id} | PAPER | {restored} position(s) restauree(s)")
+
+    for cycle_n in range(cycles):
+        closed = paper_engine.tick_all()
+        for pos in closed:
+            pnl = round(pos.realized_pnl or 0.0, 2)
+            out(f"{comps.run.run_id} | PAPER | {pos.symbol} {pos.status} PnL={pnl:+.2f} USDT")
+
+        snap = paper_engine.portfolio_snapshot()
+        out(
+            f"{comps.run.run_id} | PAPER | cycle={cycle_n+1}/{cycles} "
+            f"capital={snap.total_value:.2f} cash={snap.cash:.2f} "
+            f"open={snap.open_positions} closed={snap.closed_trades} "
+            f"pnl={snap.realized_pnl:+.2f}"
+        )
+
+        if cycle_n < cycles - 1 and interval > 0:
+            _time.sleep(interval)
 
 
 @jafar_app.command("serve")
@@ -980,6 +1030,136 @@ def jafar_account(symbol: str | None = None, testnet: bool = False) -> None:
         out(json.dumps(payload, indent=2, ensure_ascii=False))
     except (AlladinError, BinanceError, OSError, ValueError) as exc:
         raise die(f"Binance read-only indisponible: {exc}", 2) from exc
+
+
+@jafar_app.command("positions")
+def jafar_positions(broker_kind: BrokerOpt = "crypto-mock", run: RunOpt = None) -> None:
+    """Liste les positions PAPER ouvertes et le portefeuille simule."""
+    import json
+
+    from alladin.jafar.paper import JafarPaperEngine
+
+    comps = _jafar_components(broker_kind, run_id=run)
+    provider = getattr(comps.broker, "provider", None)
+    if provider is None:
+        raise die("broker sans provider crypto", 2)
+
+    engine = JafarPaperEngine(
+        provider=provider,
+        run_id=comps.run.run_id,
+        workspace=comps.run.workspace,
+        initial_capital=comps.profile.initial_balance,
+        repo=comps.repo,
+    )
+    engine.restore()
+    engine.tick_all()
+
+    snap = engine.portfolio_snapshot()
+    out(json.dumps({
+        "run_id": comps.run.run_id,
+        "mode": "PAPER",
+        "portfolio": {
+            "initial_capital": snap.initial_capital,
+            "total_value": round(snap.total_value, 4),
+            "cash": round(snap.cash, 4),
+            "invested": round(snap.invested, 4),
+            "unrealized_pnl": round(snap.unrealized_pnl, 4),
+            "realized_pnl": round(snap.realized_pnl, 4),
+            "total_fees": round(snap.total_fees, 4),
+            "drawdown_pct": round(snap.drawdown_pct, 2),
+            "win_rate": snap.win_rate,
+        },
+        "open_positions": [
+            {
+                "position_id": p.position_id,
+                "symbol": p.symbol,
+                "side": p.side.value,
+                "quantity": p.quantity,
+                "entry_price": p.entry_price,
+                "sl": p.sl,
+                "tp": p.tp,
+                "unrealized_pnl": round(p.unrealized_pnl, 4),
+                "fees_paid": round(p.fees_paid, 4),
+                "opened_at": p.opened_at.isoformat(),
+            }
+            for p in engine.open_positions()
+        ],
+        "closed_count": len(engine.closed_positions()),
+    }, indent=2, ensure_ascii=False))
+
+
+@jafar_app.command("open-orders")
+def jafar_open_orders(broker_kind: BrokerOpt = "crypto-mock", run: RunOpt = None) -> None:
+    """Liste les ordres lifecycle non-terminaux (SUBMITTING, PENDING_CONFIRMATION, etc.)."""
+    import json
+
+    from sqlalchemy import create_engine as _create_engine
+
+    from alladin.execution.order_lifecycle import OrderLifecycleRepository
+
+    comps = _jafar_components(broker_kind, run_id=run)
+    settings = comps.settings.for_workspace(comps.run.workspace)
+    lifecycle = OrderLifecycleRepository(_create_engine(settings.db_url), comps.run.workspace)
+    pending = lifecycle.pending_reconciliation()
+    out(json.dumps({
+        "run_id": comps.run.run_id,
+        "pending_reconciliation": [
+            {
+                "client_order_id": c.client_order_id,
+                "symbol": c.symbol,
+                "status": c.status.value,
+                "exchange_order_id": c.exchange_order_id,
+                "created_at": c.created_at.isoformat(),
+                "updated_at": c.updated_at.isoformat(),
+            }
+            for c in pending
+        ],
+        "count": len(pending),
+    }, indent=2, ensure_ascii=False))
+
+
+@jafar_app.command("reconcile")
+def jafar_reconcile(broker_kind: BrokerOpt = "crypto-mock", run: RunOpt = None, testnet: bool = False) -> None:
+    """Diagnostic de reconciliation : ordres locaux vs exchange (sans envoi d'ordre)."""
+    import json
+
+    from sqlalchemy import create_engine as _create_engine
+
+    from alladin.brokers.binance import BinanceError
+    from alladin.execution.order_lifecycle import OrderLifecycleRepository
+    from alladin.jafar.execution import JafarRestartReconciler
+    from alladin.orchestration.bootstrap import make_binance_account_client
+
+    comps = _jafar_components(broker_kind, run_id=run)
+    settings = comps.settings.for_workspace(comps.run.workspace)
+    try:
+        read_client = make_binance_account_client(get_settings(), testnet=testnet)
+    except (AlladinError, Exception) as exc:
+        raise die(f"Binance read-only client indisponible: {exc}", 2) from exc
+    lifecycle = OrderLifecycleRepository(_create_engine(settings.db_url), comps.run.workspace)
+    symbols = tuple(s.symbol for s in comps.broker.list_symbols()[:20]) or ("BTCUSDT",)
+    reconciler = JafarRestartReconciler(
+        lifecycle=lifecycle,
+        read_client=read_client,
+        journal=comps.journal,
+        run_id=comps.run.run_id,
+        workspace=comps.run.workspace,
+        symbols=symbols,
+    )
+    try:
+        report = reconciler.reconcile()
+    except (BinanceError, Exception) as exc:
+        raise die(f"reconciliation echouee: {exc}", 2) from exc
+    out(json.dumps({
+        "run_id": comps.run.run_id,
+        "coherent": report.coherent,
+        "inspected": report.inspected,
+        "resolved": report.resolved,
+        "ambiguous": list(report.ambiguous),
+        "errors": list(report.errors),
+    }, indent=2, ensure_ascii=False))
+    if not report.coherent:
+        raise typer.Exit(1)
 
 
 @outcomes_app.command("refresh")
