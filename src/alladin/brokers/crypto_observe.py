@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from alladin.brokers.base import BrokerAdapter, BrokerCapabilities
-from alladin.brokers.crypto import CryptoDataProvider, CryptoInstrument
+from alladin.brokers.crypto import BinancePublicProvider, CryptoDataProvider, CryptoInstrument
 from alladin.core.enums import AccountType, AssetCategory, Timeframe
 from alladin.core.errors import ExecutionBlockedError
 from alladin.core.models import (
@@ -32,17 +32,23 @@ class CryptoObserveBroker(BrokerAdapter):
         provider: CryptoDataProvider,
         *,
         symbols: tuple[str, ...] | None = None,
+        quote_assets: tuple[str, ...] = ("USDT", "USDC"),
+        max_symbols: int | None = None,
         reference_currency: str = "USDT",
         reference_budget: float = 100_000.0,
         provenance: str = "crypto:mock",
     ) -> None:
         if symbols is not None and (not symbols or len(set(symbols)) != len(symbols)):
             raise ValueError("explicit symbols must be unique")
-        if not reference_currency.strip() or not provenance.strip():
+        if not reference_currency.strip() or not provenance.strip() or not quote_assets:
             raise ValueError("reference currency and provenance required")
+        if max_symbols is not None and max_symbols < 1:
+            raise ValueError("max_symbols must be positive")
         if not math.isfinite(reference_budget) or reference_budget <= 0:
             raise ValueError("reference budget must be positive")
         self.provider, self.symbols = provider, symbols
+        self.quote_assets = frozenset(asset.upper() for asset in quote_assets)
+        self.max_symbols = max_symbols
         self.reference_currency = reference_currency.upper()
         self.reference_budget, self.provenance = reference_budget, provenance
         self._catalog: dict[str, CryptoInstrument] | None = None
@@ -50,16 +56,51 @@ class CryptoObserveBroker(BrokerAdapter):
     def refresh_symbols(self) -> None:
         self._catalog = None
 
+    def universe_summary(self) -> dict[str, object]:
+        if isinstance(self.provider, BinancePublicProvider):
+            report = self.provider.universe_report()
+            return {
+                "source": self.provenance,
+                "total_discovered": report.total_discovered,
+                "tradable": report.n_trade_eligible,
+                "observe_only": len(report.observe_only),
+                "ineligible": len(report.ineligible),
+                "by_quote_asset": report.by_quote_asset,
+                "selection_policy": "volume_24h+spread+exchange_constraints",
+                "selection_limit": self.max_symbols,
+            }
+        catalog = self._instruments()
+        return {
+            "source": self.provenance,
+            "total_discovered": len(catalog),
+            "tradable": len(catalog),
+            "observe_only": 0,
+            "ineligible": 0,
+            "by_quote_asset": {},
+            "selection_policy": "fixture_catalog",
+            "selection_limit": self.max_symbols,
+        }
+
     def _instruments(self) -> dict[str, CryptoInstrument]:
         if self._catalog is not None:
             return self._catalog
         items = self.provider.instruments()
         selected = None if self.symbols is None else set(self.symbols)
-        self._catalog = {
+        catalog = {
             item.symbol: item
             for item in items
-            if item.quote_asset == self.reference_currency and (selected is None or item.symbol in selected)
+            if item.quote_asset.upper() in self.quote_assets
+            and (selected is None or item.symbol in selected)
         }
+        if self.max_symbols is not None:
+            if not isinstance(self.provider, BinancePublicProvider):
+                items = sorted(catalog.values(), key=lambda item: item.symbol)[: self.max_symbols]
+            else:
+                items = self.provider.liquid_instruments(
+                    list(catalog.values()), limit=self.max_symbols
+                )
+            catalog = {item.symbol: item for item in items}
+        self._catalog = catalog
         return self._catalog
 
     def capabilities(self) -> BrokerCapabilities:

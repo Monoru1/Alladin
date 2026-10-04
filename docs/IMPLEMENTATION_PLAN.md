@@ -158,6 +158,11 @@ et persistés par run. Les transitions dangereuses ne peuvent pas sauter les
 d'état ne constitue jamais une autorisation exchange. Le runtime reste
 fail-closed hors `OBSERVE` jusqu'au raccordement de chaque adapter dédié.
 
+Le runtime `crypto-public` est raccordé à la découverte Spot Binance dynamique.
+Il classe le catalogue complet, journalise les trois catégories d'éligibilité,
+puis borne le scan actif à une sélection issue du volume 24 h et du spread. Les
+paires USDT et USDC partagent cette mécanique, sans liste de symboles figée.
+
 | Priorité | Sujet | Statut |
 |---|---|---|
 | P0 | Recette MT5 DEMO live : fermeture/modification/partial close réelles | **PENDING** Windows requis |

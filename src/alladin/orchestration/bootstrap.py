@@ -26,6 +26,7 @@ from alladin.core.errors import AlladinError
 from alladin.core.killswitch import KillSwitch
 from alladin.core.workspace import AccountBinding, WorkspaceId
 from alladin.execution.service import ExecutionService
+from alladin.journal.models import EventType
 from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
 from alladin.market.archive import MarketDataArchive
@@ -50,7 +51,11 @@ def make_broker(kind: str, settings: Settings, profile: ChallengeProfile | None 
             if kind == "crypto-mock"
             else BinancePublicProvider(testnet=kind == "crypto-testnet")
         )
-        return CryptoObserveBroker(provider, provenance=f"crypto:{kind}")
+        return CryptoObserveBroker(
+            provider,
+            provenance=f"crypto:{kind}",
+            max_symbols=25 if kind != "crypto-mock" else None,
+        )
     if kind == "mock":
         return MockBroker(balance=profile.initial_balance if profile else 100_000.0)
     if kind == "mt5":
@@ -120,6 +125,10 @@ class Components:
 
             registry = StrategyRegistry()  # no inherited FX strategies
             brain = brain or JafarObserveBrain()
+            if isinstance(self.broker, CryptoObserveBroker):
+                self.journal.log(
+                    self.run.run_id, EventType.UNIVERSE, self.broker.universe_summary()
+                )
         else:
             registry = StrategyRegistry.from_config(self.settings.strategies_dir)
         effective_mode = RunMode.DEMO if execute and run_mode is RunMode.OBSERVE else run_mode

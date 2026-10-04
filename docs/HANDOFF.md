@@ -917,4 +917,10 @@ valeur absente/invalide retombe sur OBSERVE ou refuse la reprise. La CLI
 `jafar mode` ne confère aucune capacité d'exécution : hors OBSERVE, le runtime
 reste verrouillé tant que les adapters dédiés ne sont pas raccordés.
 
+`jafar run --broker crypto-public --mode OBSERVE` utilise le catalogue Binance
+Spot réel, accepte dynamiquement les quotes USDT/USDC et présélectionne au plus
+25 marchés selon volume quote 24 h, spread et contraintes exchange. Le journal
+conserve les comptes `tradable`/`observe_only`/`ineligible`. Cette sélection
+reste strictement sans endpoint d'ordre ni credential.
+
 Principe Jafar confirmé : **upside non plafonné artificiellement ; downside strictement borné**. La permission de retrait reste hors du rôle de la clé de trading ; une éventuelle trésorerie automatisée devra utiliser une séparation de privilèges dédiée.

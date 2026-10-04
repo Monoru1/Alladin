@@ -95,8 +95,54 @@ def test_dynamic_spot_universe_uses_exchange_catalog_and_reference_currency():
     transport = FixtureTransport([HttpResponse(200, {}, json.dumps(data).encode())])
     provider = BinancePublicProvider(client=BinanceRestClient(transport=transport, max_attempts=1))
     broker = CryptoObserveBroker(provider)
-    assert [item.symbol for item in broker.list_symbols()] == ["BTCUSDT", "ETHUSDT"]
+    assert [item.symbol for item in broker.list_symbols()] == ["BTCUSDT", "ETHUSDT", "BTCUSDC"]
     assert len(transport.calls) == 1  # catalogue cache au lieu d'un exchangeInfo par symbole
+
+
+def test_public_runtime_filters_dynamic_universe_by_liquidity_and_spread():
+    data = payload()
+    eth = json.loads(json.dumps(data["symbols"][0]))
+    eth.update(symbol="ETHUSDT", baseAsset="ETH")
+    illiquid = json.loads(json.dumps(data["symbols"][0]))
+    illiquid.update(symbol="LOWUSDT", baseAsset="LOW")
+    data["symbols"] = [data["symbols"][0], eth, illiquid]
+    stats = [
+        {"symbol": "BTCUSDT", "quoteVolume": "9000000"},
+        {"symbol": "ETHUSDT", "quoteVolume": "8000000"},
+        {"symbol": "LOWUSDT", "quoteVolume": "10"},
+    ]
+    books = [
+        {"symbol": "BTCUSDT", "bidPrice": "99.9", "askPrice": "100.1"},
+        {"symbol": "ETHUSDT", "bidPrice": "199.9", "askPrice": "200.1"},
+        {"symbol": "LOWUSDT", "bidPrice": "1", "askPrice": "2"},
+    ]
+    transport = FixtureTransport(
+        [HttpResponse(200, {}, json.dumps(item).encode()) for item in (data, stats, books)]
+    )
+    provider = BinancePublicProvider(client=BinanceRestClient(transport=transport, max_attempts=1))
+    broker = CryptoObserveBroker(provider, max_symbols=1)
+    assert [item.symbol for item in broker.list_symbols()] == ["BTCUSDT"]
+    assert [urlparse(call[1]).path for call in transport.calls] == [
+        "/api/v3/exchangeInfo",
+        "/api/v3/ticker/24hr",
+        "/api/v3/ticker/bookTicker",
+    ]
+
+
+def test_public_universe_summary_keeps_three_classifications():
+    data = payload()
+    data["serverTime"] = 1000
+    halted = json.loads(json.dumps(data["symbols"][0]))
+    halted.update(symbol="HALTUSDT", baseAsset="HALT", status="BREAK")
+    wrong_quote = json.loads(json.dumps(data["symbols"][0]))
+    wrong_quote.update(symbol="BTCBNB", quoteAsset="BNB")
+    data["symbols"].extend([halted, wrong_quote])
+    transport = FixtureTransport([HttpResponse(200, {}, json.dumps(data).encode())])
+    provider = BinancePublicProvider(client=BinanceRestClient(transport=transport, max_attempts=1))
+    summary = CryptoObserveBroker(provider).universe_summary()
+    assert summary["tradable"] == 1
+    assert summary["observe_only"] == 1
+    assert summary["ineligible"] == 1
 
 
 def test_rate_limit_and_transient_server_errors_retry_with_bounded_backoff():

@@ -18,6 +18,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from alladin.brokers.binance import BinanceError, BinanceRestClient
+from alladin.brokers.crypto_universe import CryptoUniverseBuilder, UniverseReport
 from alladin.core.enums import Timeframe
 from alladin.core.models import Bar, Tick
 
@@ -301,6 +302,53 @@ class BinancePublicProvider(CryptoDataProvider):
             return [item for row in data["symbols"] if (item := self._parse_instrument(row)) is not None]
         except (BinanceError, KeyError, TypeError, ValueError):
             return []
+
+    def universe_report(self) -> UniverseReport:
+        """Classification complete exchange: tradable, observe-only, ineligible."""
+        return CryptoUniverseBuilder().build(self.client.exchange_info())
+
+    def liquid_instruments(
+        self,
+        instruments: list[CryptoInstrument],
+        *,
+        limit: int,
+        min_quote_volume: float = 1_000_000.0,
+        max_spread_bps: float = 50.0,
+    ) -> list[CryptoInstrument]:
+        """Classe un catalogue par liquidite 24h et spread, avec rejet fail-closed."""
+        if limit < 1 or min_quote_volume < 0 or max_spread_bps <= 0:
+            raise ValueError("invalid dynamic universe limits")
+        try:
+            stats = self.client.public("/api/v3/ticker/24hr")
+            books = self.client.public("/api/v3/ticker/bookTicker")
+        except BinanceError:
+            return []
+        if not isinstance(stats, list) or not isinstance(books, list):
+            return []
+        volumes: dict[str, float] = {}
+        spreads: dict[str, float] = {}
+        try:
+            for row in stats:
+                if isinstance(row, dict):
+                    value = float(row["quoteVolume"])
+                    if math.isfinite(value) and value >= 0:
+                        volumes[str(row["symbol"])] = value
+            for row in books:
+                if isinstance(row, dict):
+                    bid, ask = float(row["bidPrice"]), float(row["askPrice"])
+                    mid = (bid + ask) / 2
+                    spread = (ask - bid) / mid * 10_000 if mid > 0 else math.inf
+                    if bid > 0 and ask > bid and math.isfinite(spread):
+                        spreads[str(row["symbol"])] = spread
+        except (KeyError, TypeError, ValueError):
+            return []
+        eligible = [
+            item
+            for item in instruments
+            if volumes.get(item.symbol, -1) >= min_quote_volume
+            and spreads.get(item.symbol, math.inf) <= max_spread_bps
+        ]
+        return sorted(eligible, key=lambda item: (-volumes[item.symbol], item.symbol))[:limit]
 
     @staticmethod
     def _parse_instrument(row: Any) -> CryptoInstrument | None:
