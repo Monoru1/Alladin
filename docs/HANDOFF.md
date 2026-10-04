@@ -923,4 +923,10 @@ Spot réel, accepte dynamiquement les quotes USDT/USDC et présélectionne au pl
 conserve les comptes `tradable`/`observe_only`/`ineligible`. Cette sélection
 reste strictement sans endpoint d'ordre ni credential.
 
+Le Shadow Brain K2 est branché passivement au scan Jafar. La boucle FAST ne fait
+que l'inférence et persiste proposition simulée, confiance et incertitude ; un
+test compare les poids avant/après cycle. La boucle SLOW explicite reçoit les
+outcomes, applique le reward expérimental aux seuls poids shadow et calcule les
+métriques candidat. Elle ne possède aucun mécanisme de promotion ou d'exécution.
+
 Principe Jafar confirmé : **upside non plafonné artificiellement ; downside strictement borné**. La permission de retrait reste hors du rôle de la clé de trading ; une éventuelle trésorerie automatisée devra utiliser une séparation de privilèges dédiée.

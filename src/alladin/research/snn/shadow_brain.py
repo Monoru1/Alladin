@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import math
 import statistics
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -485,3 +486,19 @@ class ShadowBrain:
                 )
             except (KeyError, ValueError):
                 continue
+
+
+class ShadowSlowLoop:
+    """SLOW: outcomes, reward, apprentissage et evaluation hors chemin FAST."""
+
+    def __init__(self, brain: ShadowBrain) -> None:
+        self.brain = brain
+
+    def process(self, outcomes: Iterable[ShadowOutcome]) -> ShadowMetrics:
+        for outcome in outcomes:
+            self.brain.register_outcome(outcome)
+        return self.brain.compute_metrics()
+
+    def candidate(self) -> bool:
+        """Un candidat reste une information; cette API ne promeut jamais de poids."""
+        return self.brain.compute_metrics().is_candidate

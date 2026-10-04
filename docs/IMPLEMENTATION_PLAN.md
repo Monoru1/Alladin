@@ -134,17 +134,24 @@
 - Aucune auto-promotion, aucun transfert automatique FX→Jafar/crypto
 - Résultats négatifs acceptables et conservés
 
-### K2 — Shadow Brain intégré (**PLANNED**)
+### K2 — Shadow Brain intégré (**IMPLEMENTED, passif**)
 
 - Brancher le SNN K1 comme Shadow Brain (DECISION-028)
 - Observer le même flux causal que le Brain actif sans envoyer d'ordres
 - Stocker propositions et simulations, comparer sur horizons préenregistrés
 - Évaluer avec les outcomes Lot J
 
-### K3 — Boucles FAST/SLOW séparées (**PLANNED**)
+### K3 — Boucles FAST/SLOW séparées (**FOUNDATION IMPLEMENTED**)
 
 - Séparer chemin d'inférence (FAST) et entraînement/replay (SLOW) — DECISION-025
 - Dream Engine : replay causal → consolidation → candidats → validation — DECISION-029
+
+Le runtime Jafar OBSERVE transmet désormais les candidats du scan au Shadow
+Brain K2 dans le chemin FAST. Les propositions simulées, confiance, incertitude
+et version sont journalisées ; aucune référence d'exécution n'est accessible et
+les poids restent inchangés durant le cycle. `ShadowSlowLoop` constitue la
+frontière explicite où outcomes, reward R-STDP et métriques candidat sont traités
+hors chemin critique. Aucun candidat n'est promu automatiquement.
 
 ---
 

@@ -39,6 +39,7 @@ from alladin.orchestration.state import RunContext, RunManager
 from alladin.research.models import StrategyStatus
 from alladin.research.outcomes import OutcomeEngine, RewardPolicy
 from alladin.research.repository import ResearchRepository
+from alladin.research.snn.shadow_brain import ShadowBrain, ShadowSNN
 from alladin.risk.engine import RiskEngine
 from alladin.strategies.registry import StrategyRegistry
 from alladin.strategies.router import StrategyRouter
@@ -118,6 +119,7 @@ class Components:
         run_mode: RunMode = RunMode.OBSERVE,
         brain: Brain | None = None,
     ) -> OrchestrationEngine:
+        shadow_brains: tuple[ShadowBrain, ...] = ()
         if self.run.workspace is WorkspaceId.JAFAR:
             if execute or run_mode is not RunMode.OBSERVE:
                 raise AlladinError("Jafar skeleton autorise OBSERVE uniquement")
@@ -129,6 +131,13 @@ class Components:
                 self.journal.log(
                     self.run.run_id, EventType.UNIVERSE, self.broker.universe_summary()
                 )
+            shadow_brains = (
+                ShadowBrain(
+                    shadow_id="jafar-k2",
+                    journal_path=self.settings.resolved_data_dir / "shadow" / f"{self.run.run_id}.json",
+                    snn=ShadowSNN(seed=42),
+                ),
+            )
         else:
             registry = StrategyRegistry.from_config(self.settings.strategies_dir)
         effective_mode = RunMode.DEMO if execute and run_mode is RunMode.OBSERVE else run_mode
@@ -168,6 +177,7 @@ class Components:
             paper_engine=paper_engine,
             brain=brain,
             outcomes=self.outcomes,
+            shadow_brains=shadow_brains,
         )
 
 

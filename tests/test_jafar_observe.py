@@ -34,6 +34,7 @@ def test_observe_cycle_archives_crypto_without_strategy_or_order(jafar):
     assert jafar.broker.account_info().account_type is AccountType.UNKNOWN
     engine = jafar.engine(MockAgent())
     assert not engine.router.registry.enabled()
+    weights_before = [row[:] for row in engine.shadow_brains[0].snn._rstdp_state.weights]
     outcome = engine.run_cycle()
     assert outcome.decision == "NO_TRADE" and "no strategy" in outcome.reason
     scan = jafar.repo.events(jafar.run.run_id, ["market.scan"])[0]
@@ -44,6 +45,12 @@ def test_observe_cycle_archives_crypto_without_strategy_or_order(jafar):
     assert replay.workspace is WorkspaceId.JAFAR
     assert jafar.repo.verify_chain(jafar.run.run_id)[0]
     assert not jafar.repo.trades_for_run(jafar.run.run_id)
+    shadow = jafar.repo.events(jafar.run.run_id, ["shadow.proposal"])
+    assert shadow
+    assert all(
+        event.payload["simulated"] and not event.payload["execution_allowed"] for event in shadow
+    )
+    assert engine.shadow_brains[0].snn._rstdp_state.weights == weights_before
 
 
 @pytest.mark.parametrize("mode", [RunMode.PAPER, RunMode.DEMO])

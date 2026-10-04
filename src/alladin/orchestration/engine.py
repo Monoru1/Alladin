@@ -34,6 +34,7 @@ from alladin.market.scanner import MarketScanner
 from alladin.orchestration.monitor import PositionMonitor
 from alladin.orchestration.state import RunContext, RunManager
 from alladin.research.outcomes import OutcomeEngine
+from alladin.research.snn.shadow_brain import ShadowBrain, ShadowObservation
 from alladin.risk import sizing
 from alladin.strategies.base import StrategyContext
 from alladin.strategies.router import StrategyRouter
@@ -71,6 +72,7 @@ class OrchestrationEngine:
         paper_engine: PaperExperimentEngine | None = None,
         brain: Brain | None = None,
         outcomes: OutcomeEngine | None = None,
+        shadow_brains: tuple[ShadowBrain, ...] = (),
     ) -> None:
         self.broker, self.run, self.manager, self.journal = broker, run, manager, journal
         self.scanner, self.router, self.agent = scanner, router, agent
@@ -85,6 +87,7 @@ class OrchestrationEngine:
         self.paper_engine = paper_engine
         self.brain = brain or ClassicBrainAdapter(agent)
         self.outcomes = outcomes
+        self.shadow_brains = shadow_brains
         self._cycle = 0
         self._stop_requested = False
 
@@ -182,6 +185,7 @@ class OrchestrationEngine:
         )
         scan = self.scanner.scan(cycle_id=cycle_id, max_trade_risk=budget)
         self.journal.log(rid, EventType.SCAN, scan.summary())
+        self._run_shadows(scan, cycle_id)
 
         # 3. créer les Opportunity objects à partir du scan
         opportunities = self._build_opportunities(scan, cycle_id)
@@ -334,6 +338,50 @@ class OrchestrationEngine:
             reason=reason,
             shortlist=shortlist,
         )
+
+    def _run_shadows(self, scan: ScanReport, cycle_id: str) -> None:
+        """FAST: inference passive seulement; aucun reward/apprentissage ici."""
+        if not self.shadow_brains:
+            return
+        for candidate in scan.candidates:
+            names = tuple(name for name in _CTX_METRICS if name in candidate.metrics)
+            values = tuple(float(candidate.metrics[name]) for name in names)
+            if not values:
+                continue
+            bounds = tuple(max(abs(value), 1.0) for value in values)
+            observation = ShadowObservation(
+                symbol=candidate.symbol,
+                cycle_id=cycle_id,
+                features=values,
+                feature_names=names,
+                min_vals=tuple(-bound for bound in bounds),
+                max_vals=bounds,
+                observed_at=scan.scanned_at,
+            )
+            for shadow in self.shadow_brains:
+                try:
+                    proposal = shadow.observe_and_propose(observation)
+                    self.journal.log(
+                        self.run.run_id,
+                        EventType.SHADOW_PROPOSAL,
+                        {
+                            "shadow_id": proposal.shadow_id,
+                            "source_version": proposal.source_version,
+                            "symbol": proposal.symbol,
+                            "action": proposal.action,
+                            "confidence": proposal.confidence,
+                            "uncertainty": 1.0 - proposal.confidence,
+                            "spike_rate": proposal.spike_rate,
+                            "simulated": True,
+                            "execution_allowed": False,
+                        },
+                    )
+                except Exception as exc:
+                    self.journal.log(
+                        self.run.run_id,
+                        EventType.SHADOW_FAILURE,
+                        {"shadow_id": shadow.shadow_id, "symbol": candidate.symbol, "reason": str(exc)},
+                    )
 
     def _build_opportunities(self, scan: ScanReport, cycle_id: str) -> list[Opportunity]:
         """Convertit ScanCandidate -> Opportunity, journalise CREATED/REJECTED."""

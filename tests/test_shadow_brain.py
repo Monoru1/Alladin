@@ -26,6 +26,7 @@ from alladin.research.snn.shadow_brain import (
     ShadowObservation,
     ShadowOutcome,
     ShadowProposal,
+    ShadowSlowLoop,
     ShadowSNN,
     _action_return,
     _sharpe_proxy,
@@ -242,6 +243,15 @@ class TestShadowBrainCore:
         brain2.register_outcome(_BASE_OUTCOME)
         w_after = [row[:] for row in brain2.snn._rstdp_state.weights]
         assert w_before != w_after
+
+    def test_slow_loop_is_the_explicit_learning_boundary(self) -> None:
+        brain = make_brain()
+        brain.observe_and_propose(_BASE_OBS)
+        before = [row[:] for row in brain.snn._rstdp_state.weights]
+        metrics = ShadowSlowLoop(brain).process([_BASE_OUTCOME])
+        assert metrics.n_outcomes == 1
+        assert brain.snn._rstdp_state.weights != before
+        assert not ShadowSlowLoop(brain).candidate()
 
 
 # ---------------------------------------------------------------------------

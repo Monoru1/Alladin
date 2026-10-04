@@ -48,6 +48,8 @@ class EventType(StrEnum):
     MODE_CHANGE = "mode.change"
     JAFAR_MODE_CHANGE = "jafar.mode.change"
     OUTCOME = "learning.outcome"
+    SHADOW_PROPOSAL = "shadow.proposal"
+    SHADOW_FAILURE = "shadow.failure"
 
 
 class JournalEvent(BaseModel):
