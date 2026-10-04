@@ -13,6 +13,7 @@ from alladin.agents.codex import CodexAdapter
 from alladin.agents.mock import MockAgent
 from alladin.brain import Brain
 from alladin.brokers.base import BrokerAdapter
+from alladin.brokers.binance import BinanceRestClient, Ed25519PemSigner
 from alladin.brokers.crypto import BinancePublicProvider, CryptoMockProvider
 from alladin.brokers.crypto_observe import CryptoObserveBroker
 from alladin.brokers.mock import MockBroker
@@ -44,7 +45,11 @@ from alladin.strategies.router import StrategyRouter
 
 def make_broker(kind: str, settings: Settings, profile: ChallengeProfile | None = None) -> BrokerAdapter:
     if kind in ("crypto-mock", "crypto-public", "crypto-testnet"):
-        provider = CryptoMockProvider() if kind == "crypto-mock" else BinancePublicProvider(testnet=kind == "crypto-testnet")
+        provider = (
+            CryptoMockProvider()
+            if kind == "crypto-mock"
+            else BinancePublicProvider(testnet=kind == "crypto-testnet")
+        )
         return CryptoObserveBroker(provider, provenance=f"crypto:{kind}")
     if kind == "mock":
         return MockBroker(balance=profile.initial_balance if profile else 100_000.0)
@@ -58,6 +63,20 @@ def make_broker(kind: str, settings: Settings, profile: ChallengeProfile | None 
             server_utc_offset_hours=settings.mt5_server_utc_offset_hours,
         )
     raise AlladinError(f"broker inconnu : {kind}")
+
+
+def make_binance_account_client(settings: Settings, *, testnet: bool = False) -> BinanceRestClient:
+    """Construit l'acces USER_DATA read-only ; aucun endpoint d'ordre n'existe sur ce client."""
+    api_key = settings.binance_api_key.get_secret_value() if settings.binance_api_key else None
+    key_path = settings.jafar_binance_private_key_path
+    if not api_key or key_path is None:
+        raise AlladinError("BINANCE_API_KEY et JAFAR_BINANCE_PRIVATE_KEY_PATH requis")
+    return BinanceRestClient(
+        testnet=testnet,
+        api_key=api_key,
+        signer=Ed25519PemSigner(key_path),
+        recv_window_ms=settings.binance_recv_window_ms,
+    )
 
 
 def make_agent(kind: str, settings: Settings) -> AgentAdapter:
@@ -105,15 +124,19 @@ class Components:
         effective_mode = RunMode.DEMO if execute and run_mode is RunMode.OBSERVE else run_mode
         if effective_mode in (RunMode.DEMO, RunMode.PAPER):
             versions = ResearchRepository.from_engine(self.repo.engine, self.run.workspace).list_versions()
-            approved = {f"{v.strategy_id}@{v.version}" for v in versions
-                        if v.status is StrategyStatus.APPROVED}
+            approved = {
+                f"{v.strategy_id}@{v.version}" for v in versions if v.status is StrategyStatus.APPROVED
+            }
             if effective_mode is RunMode.DEMO:
                 registry.check_lifecycle(approved, strict=True)
             else:
                 registry.check_paper_lifecycle(approved)
         universe = MarketUniverse(self.broker, self.profile.universe)
         scanner = MarketScanner(
-            self.broker, universe, self.profile.universe, archive=MarketDataArchive(self.repo.engine, workspace=self.run.workspace)
+            self.broker,
+            universe,
+            self.profile.universe,
+            archive=MarketDataArchive(self.repo.engine, workspace=self.run.workspace),
         )
         router = StrategyRouter(registry, performance=self.journal)
         paper_engine: PaperExperimentEngine | None = None
@@ -178,9 +201,14 @@ def build_services(
             account=f"{account.login_masked}@{account.server}",
             initial_balance=account.balance,
             kind=run_kind,
-            account_binding=AccountBinding(workspace=workspace, broker=broker.name, account_ref=account.login_masked,
-                                           server=account.server, account_type=account.account_type,
-                                           account_fingerprint=account.account_fingerprint),
+            account_binding=AccountBinding(
+                workspace=workspace,
+                broker=broker.name,
+                account_ref=account.login_masked,
+                server=account.server,
+                account_type=account.account_type,
+                account_fingerprint=account.account_fingerprint,
+            ),
         )
         manager.mark_ready(run, account)
     else:
@@ -190,13 +218,26 @@ def build_services(
     expected_account = f"{snapshot.login_masked}@{snapshot.server}"
     if run.broker_name != broker.name or repo.get_run(run.run_id).account != expected_account:  # type: ignore[union-attr]
         raise AlladinError("broker/compte différent du binding persisté : reprise refusée")
-    if (run.account_binding and run.account_binding.account_fingerprint is not None
-            and run.account_binding.account_fingerprint != snapshot.account_fingerprint):
+    if (
+        run.account_binding
+        and run.account_binding.account_fingerprint is not None
+        and run.account_binding.account_fingerprint != snapshot.account_fingerprint
+    ):
         raise AlladinError("empreinte de compte différente du binding persisté")
     risk = RiskEngine(run.profile.risk)
     execution = ExecutionService(broker, risk, run, manager, journal, killswitch, clock=clk)
     monitor = PositionMonitor(broker, manager, journal, run)
     return Components(
-        settings, run.profile, broker, repo, journal, manager, killswitch, run, risk, execution, monitor,
+        settings,
+        run.profile,
+        broker,
+        repo,
+        journal,
+        manager,
+        killswitch,
+        run,
+        risk,
+        execution,
+        monitor,
         OutcomeEngine(repo, journal, RewardPolicy.load(settings.reward_policy_path)),
     )

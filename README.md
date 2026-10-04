@@ -50,17 +50,23 @@ ruff check src tests && mypy src
 
 ## Jafar — observation crypto isolée
 
-Données spot avec budget de référence **virtuel**, sans stratégie active,
-compte connecté ni ordre. Seul OBSERVE est autorisé. Journal, archive, runtime
-et kill switch sont isolés d'Alladin.
+Données spot avec budget de référence **virtuel**, sans stratégie active ni
+ordre. Seul OBSERVE est autorisé. Journal, archive, runtime et kill switch sont
+isolés d'Alladin. `crypto-public` découvre dynamiquement le catalogue Spot
+Binance puis conserve les marchés cotés dans la devise de référence USDT.
 
     python -m alladin jafar new --broker crypto-mock
     python -m alladin jafar run --broker crypto-mock --cycles 3 --interval 0
     python -m alladin jafar serve --broker crypto-mock --port 8002
     python -m alladin jafar kill --broker crypto-mock
+    python -m alladin jafar account [--symbol BTCUSDT]
 
 Choisir --broker crypto-public à la création ET à la reprise pour les données
-spot publiques, ou crypto-testnet pour la source testnet. Aucun secret ni
-abonnement API requis. Nouveau run pour changer de source. Après kill,
+spot publiques, ou crypto-testnet pour la source testnet. La commande `account`
+est strictement read-only et exige `BINANCE_API_KEY` ainsi que
+`JAFAR_BINANCE_PRIVATE_KEY_PATH`; elle lit compte, balances et ordres ouverts,
+puis éventuellement historiques d'ordres/trades pour `--symbol`. Le client
+n'expose aucun endpoint de création/annulation d'ordre. Nouveau run pour changer de source. Après kill,
 utiliser jafar kill --clear puis créer un nouveau run. Les accès réseau réels
-restent à vérifier sur le poste ; mock et parseurs sont testés sans réseau.
+publics sont validés séparément ; mock, signature, retries, clock drift et
+parseurs sont testés sans réseau.

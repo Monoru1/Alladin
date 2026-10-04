@@ -1,6 +1,6 @@
 # ALLADIN — Plan d'implémentation
 
-**Mis à jour :** 2026-10-04 · **Base :** `94cea9d` (`main`)
+**Mis à jour :** 2026-10-04 · **Base :** `85c29e4` (`main`)
 **Autorité :** le code et ses tests établissent l'existant ; les décisions `ADOPTED` de `docs/DECISIONS/` établissent la direction. Une cible documentaire n'est pas une capacité livrée.
 
 ---
@@ -33,6 +33,8 @@
 | Isolation workspace Alladin/Jafar : journal, positions, recherche, archive | `core/workspace.py`, migrations | — |
 | Catégories crypto, capabilities honnêtes, sessions configurables | `brokers/crypto.py`, `market/sessions.py`, `core/enums.py` | Aucun adapter d'exécution crypto |
 | Runtime Jafar OBSERVE : scan spot, archive/replay, brain NO_TRADE, cockpit scoped | `jafar/`, `api/` | Fail-closed PAPER/DEMO/entry/management |
+| Binance Spot public + compte USER_DATA read-only Ed25519 | `brokers/binance.py`, `brokers/crypto.py` | Aucun endpoint d'ordre ; clé API absente du processus de validation locale |
+| Univers Jafar dynamique USDT depuis `exchangeInfo` | `brokers/crypto.py`, `brokers/crypto_observe.py` | Éligibilité liquidité/data quality encore à enrichir |
 | Backtest chronologique (fill next-open, spread, gap SL, règle intrabar) | `research/backtest.py` | Distinct du vrai RiskEngine ; `passed` ≠ preuve OOS |
 | Splits chronologiques, scorecards, ResearchRepository, lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py` | — |
 | Outcome/Reward : snapshots immuables, politique hashée, reward versionné, statut INCOMPLETE, contrefactuels NO_TRADE/HOLD | `research/outcome.py`, `research/reward.py` | Aucun entraînement ; brain actif inchangé |
@@ -64,6 +66,7 @@
 | 027 | SNN-X objectif contraint/homéostasie | **EXPERIMENTAL** aucun code |
 | 028 | SNN-X Shadow Brain et promotion contrôlée | **EXPERIMENTAL** aucun code |
 | 029 | SNN-X Dream Engine et consolidation | **EXPERIMENTAL** aucun code |
+| 030 | Binance Spot natif Jafar, credentials Ed25519 locaux | **IMPLEMENTED** public + compte read-only ; exécution non implémentée |
 
 ---
 

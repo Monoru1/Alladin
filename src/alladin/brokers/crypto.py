@@ -11,16 +11,15 @@ Ce module fournit uniquement des donnees pour les experiences BTC.
 
 from __future__ import annotations
 
-import logging
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from alladin.brokers.binance import BinanceError, BinanceRestClient
 from alladin.core.enums import Timeframe
 from alladin.core.models import Bar, Tick
-
-log = logging.getLogger(__name__)
 
 # Mapping Timeframe -> Binance interval string
 _TF_MAP: dict[str, str] = {
@@ -72,6 +71,10 @@ class CryptoInstrument:
     min_notional: float = 10.0  # minimum order value
     min_qty: float = 0.00001
     max_qty: float = 1000.0
+    market_lot_size: float | None = None
+    market_min_qty: float | None = None
+    market_max_qty: float | None = None
+    order_types: tuple[str, ...] = ()
 
 
 class CryptoDataProvider(ABC):
@@ -88,6 +91,10 @@ class CryptoDataProvider(ABC):
     @abstractmethod
     def instrument(self, symbol: str) -> CryptoInstrument | None:
         """Retourne les specs de l'instrument."""
+
+    @abstractmethod
+    def instruments(self) -> list[CryptoInstrument]:
+        """Decouvre les instruments spot eligibles exposes par la source."""
 
     @abstractmethod
     def now(self) -> datetime:
@@ -111,6 +118,7 @@ class CryptoMockProvider(CryptoDataProvider):
 
     def klines(self, symbol: str, timeframe: Timeframe, count: int) -> list[Bar]:
         from random import Random
+
         if symbol != "BTCUSDT":
             return []
         bars: list[Bar] = []
@@ -124,12 +132,19 @@ class CryptoMockProvider(CryptoDataProvider):
             c = o * (1 + rng.gauss(0, 0.002))
             h = max(o, c) + abs(rng.gauss(0, o * 0.001))
             low = min(o, c) - abs(rng.gauss(0, o * 0.001))
-            bars.append(Bar(
-                time=t, close_time=t + timedelta(seconds=seconds), is_closed=True,
-                open=round(o, 2), high=round(h, 2), low=round(low, 2), close=round(c, 2),
-                tick_volume=rng.uniform(50, 500),
-                spread=round(o * self._spread_bps / 10000, 2),
-            ))
+            bars.append(
+                Bar(
+                    time=t,
+                    close_time=t + timedelta(seconds=seconds),
+                    is_closed=True,
+                    open=round(o, 2),
+                    high=round(h, 2),
+                    low=round(low, 2),
+                    close=round(c, 2),
+                    tick_volume=rng.uniform(50, 500),
+                    spread=round(o * self._spread_bps / 10000, 2),
+                )
+            )
         return bars
 
     def ticker(self, symbol: str) -> CryptoTick:
@@ -155,6 +170,10 @@ class CryptoMockProvider(CryptoDataProvider):
             min_notional=10.0,
         )
 
+    def instruments(self) -> list[CryptoInstrument]:
+        item = self.instrument("BTCUSDT")
+        return [] if item is None else [item]
+
     def now(self) -> datetime:
         return self._time
 
@@ -169,62 +188,58 @@ class BinancePublicProvider(CryptoDataProvider):
     Read-only : aucun ordre.
     """
 
-    BASE_URL = "https://api.binance.com"
-    TESTNET_URL = "https://testnet.binance.vision"
-
-    def __init__(self, *, testnet: bool = True) -> None:
-        self._base = self.TESTNET_URL if testnet else self.BASE_URL
+    def __init__(self, *, testnet: bool = True, client: BinanceRestClient | None = None) -> None:
         self._testnet = testnet
+        self.client = client or BinanceRestClient(testnet=testnet)
 
     def klines(self, symbol: str, timeframe: Timeframe, count: int) -> list[Bar]:
-        import json
-        import urllib.request
-
         interval = _TF_MAP.get(timeframe.value, "1h")
-        url = f"{self._base}/api/v3/klines?symbol={symbol}&interval={interval}&limit={count}"
         try:
-            with urllib.request.urlopen(url, timeout=10) as resp:
-                data = json.loads(resp.read())
-        except Exception:
-            log.warning("Binance klines fetch failed for %s %s", symbol, timeframe.value)
+            data = self.client.public(
+                "/api/v3/klines", {"symbol": symbol, "interval": interval, "limit": count}
+            )
+            if not isinstance(data, list):
+                return []
+        except BinanceError:
             return []
 
         bars: list[Bar] = []
         decision_time = self.now()
         for k in data:
+            if not isinstance(k, list) or len(k) < 7:
+                return []
             # Binance closeTime est la derniere milliseconde de la bougie.
             # Une kline future ou en formation ne peut servir au signal.
             close_time = datetime.fromtimestamp((int(k[6]) + 1) / 1000, UTC)
             if close_time > decision_time:
                 continue
-            bars.append(Bar(
-                time=datetime.fromtimestamp(k[0] / 1000, UTC),
-                close_time=close_time,
-                is_closed=True,
-                open=float(k[1]),
-                high=float(k[2]),
-                low=float(k[3]),
-                close=float(k[4]),
-                tick_volume=float(k[5]),
-                spread=0.0,
-            ))
+            bars.append(
+                Bar(
+                    time=datetime.fromtimestamp(k[0] / 1000, UTC),
+                    close_time=close_time,
+                    is_closed=True,
+                    open=float(k[1]),
+                    high=float(k[2]),
+                    low=float(k[3]),
+                    close=float(k[4]),
+                    tick_volume=float(k[5]),
+                    spread=0.0,
+                )
+            )
         return bars
 
     def ticker(self, symbol: str) -> CryptoTick | None:
-        import json
-        import urllib.request
-
-        url = f"{self._base}/api/v3/ticker/bookTicker?symbol={symbol}"
         try:
-            with urllib.request.urlopen(url, timeout=5) as resp:
-                data = json.loads(resp.read())
-        except Exception:
-            log.warning("Binance ticker fetch failed for %s", symbol)
+            data = self.client.public("/api/v3/ticker/bookTicker", {"symbol": symbol})
+        except BinanceError:
             return None
-
-        bid = float(data.get("bidPrice", 0))
-        ask = float(data.get("askPrice", 0))
-        if bid <= 0 or ask <= 0:
+        if not isinstance(data, dict):
+            return None
+        try:
+            bid, ask = float(data.get("bidPrice", 0)), float(data.get("askPrice", 0))
+        except (TypeError, ValueError):
+            return None
+        if not all(math.isfinite(v) and v > 0 for v in (bid, ask)) or ask <= bid:
             return None
 
         return CryptoTick(
@@ -236,32 +251,72 @@ class BinancePublicProvider(CryptoDataProvider):
         )
 
     def instrument(self, symbol: str) -> CryptoInstrument | None:
-        import json
-        import urllib.parse
-        import urllib.request
-
-        url = f"{self._base}/api/v3/exchangeInfo?" + urllib.parse.urlencode({"symbol": symbol})
         try:
-            with urllib.request.urlopen(url, timeout=10) as response:
-                data = json.loads(response.read())
-            row = next(r for r in data["symbols"] if r["symbol"] == symbol)
-            if row["status"] != "TRADING" or not row.get("isSpotTradingAllowed", False):
+            data = self.client.public("/api/v3/exchangeInfo", {"symbol": symbol})
+            if not isinstance(data, dict) or not isinstance(data.get("symbols"), list):
                 return None
-            filters = {f["filterType"]: f for f in row["filters"]}
-            tick = float(filters["PRICE_FILTER"]["tickSize"])
-            lot = filters["LOT_SIZE"]
-            step, low, high = (float(lot[k]) for k in ("stepSize", "minQty", "maxQty"))
-            notional = filters.get("NOTIONAL", filters.get("MIN_NOTIONAL"))
-            if notional is None:
-                return None
-            minimum = float(notional["minNotional"])
-            if not all(math.isfinite(v) and v > 0 for v in (tick, step, low, high, minimum)) or low > high:
-                return None
-            return CryptoInstrument(symbol=symbol, base_asset=row["baseAsset"], quote_asset=row["quoteAsset"],
-                                    tick_size=tick, lot_size=step, min_qty=low, max_qty=high, min_notional=minimum)
-        except Exception:
-            log.warning("Binance instrument metadata unavailable for %s", symbol)
+            row = next(
+                (r for r in data["symbols"] if isinstance(r, dict) and r.get("symbol") == symbol), None
+            )
+            return self._parse_instrument(row)
+        except (BinanceError, KeyError, TypeError, ValueError):
             return None
+
+    def instruments(self) -> list[CryptoInstrument]:
+        try:
+            data = self.client.public("/api/v3/exchangeInfo")
+            if not isinstance(data, dict) or not isinstance(data.get("symbols"), list):
+                return []
+            return [item for row in data["symbols"] if (item := self._parse_instrument(row)) is not None]
+        except (BinanceError, KeyError, TypeError, ValueError):
+            return []
+
+    @staticmethod
+    def _parse_instrument(row: Any) -> CryptoInstrument | None:
+        if (
+            not isinstance(row, dict)
+            or row.get("status") != "TRADING"
+            or not row.get("isSpotTradingAllowed", False)
+        ):
+            return None
+        filters_raw = row.get("filters")
+        if not isinstance(filters_raw, list):
+            return None
+        filters = {f["filterType"]: f for f in filters_raw if isinstance(f, dict) and "filterType" in f}
+        tick = float(filters["PRICE_FILTER"]["tickSize"])
+        lot = filters["LOT_SIZE"]
+        step, low, high = (float(lot[k]) for k in ("stepSize", "minQty", "maxQty"))
+        notional = filters.get("NOTIONAL", filters.get("MIN_NOTIONAL"))
+        if notional is None:
+            return None
+        minimum = float(notional["minNotional"])
+        values = (tick, step, low, high, minimum)
+        if not all(math.isfinite(v) and v > 0 for v in values) or low > high:
+            return None
+        market = filters.get("MARKET_LOT_SIZE")
+        market_values: tuple[float | None, float | None, float | None] = (None, None, None)
+        if market is not None:
+            market_values = tuple(float(market[k]) for k in ("stepSize", "minQty", "maxQty"))  # type: ignore[assignment]
+            present = tuple(v for v in market_values if v is not None)
+            if not all(math.isfinite(v) and v >= 0 for v in present):
+                return None
+        order_types = row.get("orderTypes", [])
+        if not isinstance(order_types, list) or not all(isinstance(v, str) for v in order_types):
+            return None
+        return CryptoInstrument(
+            symbol=str(row["symbol"]),
+            base_asset=str(row["baseAsset"]),
+            quote_asset=str(row["quoteAsset"]),
+            tick_size=tick,
+            lot_size=step,
+            min_qty=low,
+            max_qty=high,
+            min_notional=minimum,
+            market_lot_size=market_values[0],
+            market_min_qty=market_values[1],
+            market_max_qty=market_values[2],
+            order_types=tuple(order_types),
+        )
 
     def now(self) -> datetime:
         return datetime.now(UTC)

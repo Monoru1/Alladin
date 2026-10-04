@@ -647,9 +647,7 @@ def run_cmd(
         ):
             raise die("Annulé : aucun ordre ne sera envoyé.", 0)
     elif run_mode is RunMode.PAPER:
-        out(
-            "MODE PAPER : pipeline complet + simulation interne des trades. Aucun ordre broker envoyé."
-        )
+        out("MODE PAPER : pipeline complet + simulation interne des trades. Aucun ordre broker envoyé.")
     else:
         out(
             "MODE OBSERVE : scan et analyse complets. RiskEngine actif. Aucun ordre envoyé. "
@@ -839,8 +837,9 @@ def serve(
     settings = get_settings()
     broker = make_broker(broker_kind, settings)
     _connect(broker)
-    uvicorn.run(create_app(settings, JournalRepository.from_url(settings.db_url), broker), host=host, port=port)
-
+    uvicorn.run(
+        create_app(settings, JournalRepository.from_url(settings.db_url), broker), host=host, port=port
+    )
 
 
 def _jafar_components(kind: str, *, create: bool = False, run_id: str | None = None) -> Components:
@@ -850,8 +849,9 @@ def _jafar_components(kind: str, *, create: bool = False, run_id: str | None = N
     broker = make_broker(kind, settings)
     _connect(broker)
     try:
-        comps = build_services(settings, broker, workspace=WorkspaceId.JAFAR,
-                               create_run=create, run_id=run_id)
+        comps = build_services(
+            settings, broker, workspace=WorkspaceId.JAFAR, create_run=create, run_id=run_id
+        )
     except AlladinError as exc:
         raise die(str(exc), 2) from exc
     if comps is None:
@@ -863,13 +863,19 @@ def _jafar_components(kind: str, *, create: bool = False, run_id: str | None = N
 def jafar_new(broker_kind: BrokerOpt = "crypto-mock") -> None:
     """Crée un run isolé, avec budget virtuel et aucune stratégie."""
     comps = _jafar_components(broker_kind, create=True)
-    out(f"{comps.run.run_id} | JAFAR | OBSERVE uniquement | budget virtuel {comps.profile.initial_balance:g} USDT")
+    out(
+        f"{comps.run.run_id} | JAFAR | OBSERVE uniquement | budget virtuel {comps.profile.initial_balance:g} USDT"
+    )
 
 
 @jafar_app.command("run")
-def jafar_run(broker_kind: BrokerOpt = "crypto-mock", run: RunOpt = None,
-              interval: float = 300, cycles: int = 1,
-              mode: str = "OBSERVE") -> None:
+def jafar_run(
+    broker_kind: BrokerOpt = "crypto-mock",
+    run: RunOpt = None,
+    interval: float = 300,
+    cycles: int = 1,
+    mode: str = "OBSERVE",
+) -> None:
     """Observe les données spot et archive les cycles, sans appel à un agent payant."""
     if mode.upper() != "OBSERVE":
         raise die("Jafar skeleton: OBSERVE uniquement", 2)
@@ -879,8 +885,13 @@ def jafar_run(broker_kind: BrokerOpt = "crypto-mock", run: RunOpt = None,
     if comps.run.watchdog.run_state in (RunState.CREATED, RunState.READY):
         comps.manager.start(comps.run, comps.broker.account_info())
     engine = comps.engine(make_agent("mock", comps.settings))
-    engine.run_loop(interval, max_cycles=cycles, on_cycle=lambda o: out(
-        f"{comps.run.run_id} | OBSERVE | {o.decision} | {o.reason} | {', '.join(o.shortlist) or '-'}"))
+    engine.run_loop(
+        interval,
+        max_cycles=cycles,
+        on_cycle=lambda o: out(
+            f"{comps.run.run_id} | OBSERVE | {o.decision} | {o.reason} | {', '.join(o.shortlist) or '-'}"
+        ),
+    )
 
 
 @jafar_app.command("serve")
@@ -895,7 +906,9 @@ def jafar_serve(broker_kind: BrokerOpt = "crypto-mock", host: str = "127.0.0.1",
 
 
 @jafar_app.command("kill")
-def jafar_kill(broker_kind: BrokerOpt = "crypto-mock", reason: str = "arrêt Jafar", clear: bool = False) -> None:
+def jafar_kill(
+    broker_kind: BrokerOpt = "crypto-mock", reason: str = "arrêt Jafar", clear: bool = False
+) -> None:
     """Arrête le workspace Jafar sans toucher au kill switch Alladin."""
     if clear:
         from alladin.core.killswitch import KillSwitch
@@ -908,12 +921,40 @@ def jafar_kill(broker_kind: BrokerOpt = "crypto-mock", reason: str = "arrêt Jaf
     out(f"{comps.run.run_id} KILLED — Alladin indépendant")
 
 
+@jafar_app.command("account")
+def jafar_account(symbol: str | None = None, testnet: bool = False) -> None:
+    """Lit le compte Binance et son historique sans exposer de credential ni envoyer d'ordre."""
+    import json
+
+    from alladin.brokers.binance import BinanceError
+    from alladin.orchestration.bootstrap import make_binance_account_client
+
+    try:
+        client = make_binance_account_client(get_settings(), testnet=testnet)
+        account = client.account()
+        payload: dict[str, object] = {
+            "observed_at": account.observed_at.isoformat(),
+            "can_trade_account_flag": account.can_trade,
+            "can_withdraw_account_flag": account.can_withdraw,
+            "permissions": account.permissions,
+            "nonzero_balances": [b.model_dump() for b in account.balances if b.total > 0],
+            "open_orders": [o.model_dump(mode="json") for o in client.open_orders(symbol)],
+        }
+        if symbol:
+            payload["order_history"] = [o.model_dump(mode="json") for o in client.order_history(symbol)]
+            payload["trade_history"] = [t.model_dump(mode="json") for t in client.trade_history(symbol)]
+        out(json.dumps(payload, indent=2, ensure_ascii=False))
+    except (AlladinError, BinanceError, OSError, ValueError) as exc:
+        raise die(f"Binance read-only indisponible: {exc}", 2) from exc
+
+
 @outcomes_app.command("refresh")
 def outcomes_refresh(run_id: str, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> None:
     """Capture les trades déjà clôturés depuis la base et le journal, sans broker."""
     from alladin.journal.repository import JournalRepository
     from alladin.journal.service import JournalService
     from alladin.research.outcomes import OutcomeEngine, RewardPolicy
+
     settings = get_settings().for_workspace(workspace)
     repo = JournalRepository.from_url(settings.db_url, workspace)
     engine = OutcomeEngine(repo, JournalService(repo), RewardPolicy.load(settings.reward_policy_path))
@@ -933,6 +974,7 @@ def outcomes_show(run_id: str, workspace: WorkspaceId = WorkspaceId.ALLADIN, lim
 
     from alladin.journal.repository import JournalRepository
     from alladin.research.outcomes import OutcomeRepository, outcome_summary
+
     if not 1 <= limit <= 1000:
         raise die("limit entre 1 et 1000 requis", 2)
     settings = get_settings().for_workspace(workspace)
@@ -940,9 +982,21 @@ def outcomes_show(run_id: str, workspace: WorkspaceId = WorkspaceId.ALLADIN, lim
     if repo.get_run(run_id) is None:
         raise die("run inconnu ou hors workspace", 2)
     rows = OutcomeRepository(repo, read_only=True).list(run_id, limit=limit)
-    out(json.dumps({"workspace": workspace.value, "run_id": run_id, "summary_scope": "RETURNED_ROWS",
-                    "summary": outcome_summary(rows), "outcomes": [r.model_dump(mode="json") for r in rows]},
-                   ensure_ascii=False, indent=2, allow_nan=False))
+    out(
+        json.dumps(
+            {
+                "workspace": workspace.value,
+                "run_id": run_id,
+                "summary_scope": "RETURNED_ROWS",
+                "summary": outcome_summary(rows),
+                "outcomes": [r.model_dump(mode="json") for r in rows],
+            },
+            ensure_ascii=False,
+            indent=2,
+            allow_nan=False,
+        )
+    )
+
 
 def main() -> None:
     app()

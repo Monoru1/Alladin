@@ -39,12 +39,13 @@ class TestCryptoMockProvider:
                     int(close.timestamp() * 1000) - 1]
         data = [kline(now - timedelta(hours=2), now - timedelta(hours=1)),
                 kline(now - timedelta(minutes=30), now + timedelta(minutes=30))]
-        class Response:
-            def __enter__(self): return self
-            def __exit__(self, *_): return None
-            def read(self): return json.dumps(data).encode()
-        monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: Response())
-        provider = BinancePublicProvider()
+        from alladin.brokers.binance import BinanceRestClient, HttpResponse
+
+        class Transport:
+            def request(self, *_args, **_kwargs):
+                return HttpResponse(200, {}, json.dumps(data).encode())
+
+        provider = BinancePublicProvider(client=BinanceRestClient(transport=Transport(), max_attempts=1))
         monkeypatch.setattr(provider, "now", lambda: now)
         bars = provider.klines("BTCUSDT", Timeframe.H1, 2)
         assert len(bars) == 1
@@ -230,7 +231,7 @@ class TestBTCThreeWayEngine:
         from alladin.brokers.crypto import BinancePublicProvider
         p = BinancePublicProvider()
         assert p._testnet is True
-        assert "testnet" in p._base
+        assert "testnet" in p.client.base_url
 
 
 class TestBTCRiskProfile:

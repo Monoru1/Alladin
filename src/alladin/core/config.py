@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
     profiles_dir: Path = Field(default=REPO_ROOT / "config" / "challenge_profiles")
     strategies_dir: Path = Field(default=REPO_ROOT / "config" / "strategies")
-    reward_policy_path: Path = Field(default=REPO_ROOT / "config" / "reward_policies" / "outcome_v1.yaml",
-                                     alias="REWARD_POLICY_PATH")
+    reward_policy_path: Path = Field(
+        default=REPO_ROOT / "config" / "reward_policies" / "outcome_v1.yaml", alias="REWARD_POLICY_PATH"
+    )
     default_profile: str = Field(default="ftmo_2step_demo", alias="DEFAULT_PROFILE")
 
     mt5_path: str | None = Field(default=None, alias="MT5_PATH")
@@ -42,6 +43,11 @@ class Settings(BaseSettings):
     agent: Literal["mock", "claude", "codex"] = Field(default="mock", alias="AGENT")
     agent_timeout_s: int = Field(default=180, alias="AGENT_TIMEOUT_S")
 
+    # Binance Jafar : jamais serialises/logges. Le chemin est configurable ; aucun contenu PEM dans Git.
+    binance_api_key: SecretStr | None = Field(default=None, alias="BINANCE_API_KEY")
+    jafar_binance_private_key_path: Path | None = Field(default=None, alias="JAFAR_BINANCE_PRIVATE_KEY_PATH")
+    binance_recv_window_ms: int = Field(default=5000, ge=1, le=60_000, alias="BINANCE_RECV_WINDOW_MS")
+
     magic_base: int = 26_000_000  # magic = magic_base + numéro de run
 
     @field_validator(
@@ -51,6 +57,8 @@ class Settings(BaseSettings):
         "mt5_password",
         "database_url",
         "mt5_server_utc_offset_hours",
+        "binance_api_key",
+        "jafar_binance_private_key_path",
         mode="before",
     )
     @classmethod
@@ -65,11 +73,13 @@ class Settings(BaseSettings):
         base = self._workspace_root or self
         if workspace is WorkspaceId.ALLADIN:
             return base
-        scoped = base.model_copy(update={
-            "data_dir": base.resolved_data_dir / "workspaces" / workspace.value,
-            "default_profile": "jafar_observe",
-            "strategies_dir": base.strategies_dir / "jafar",
-        })
+        scoped = base.model_copy(
+            update={
+                "data_dir": base.resolved_data_dir / "workspaces" / workspace.value,
+                "default_profile": "jafar_observe",
+                "strategies_dir": base.strategies_dir / "jafar",
+            }
+        )
         scoped._workspace_scope = workspace
         scoped._workspace_root = base
         return scoped

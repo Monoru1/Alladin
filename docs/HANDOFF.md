@@ -736,6 +736,31 @@ Conséquences opérationnelles :
 
 Avant d'implémenter le runtime Jafar, terminer les fondations communes de gestion de position et d'identité/capabilities si le code confirme cette dépendance.
 
+## 34. Binance Spot Jafar — public dynamique et compte read-only
+
+Le client `brokers/binance.py` implémente uniquement des GET publics et USER_DATA :
+horloge, compte/balances, ordres ouverts, historique d'ordres et trades. La
+signature Ed25519 charge le PEM local à la demande ; ni clé API ni PEM ne sont
+sérialisés ou logués. Timeout, retries bornés sur réseau/429/5xx, backoff,
+réponse invalide et resynchronisation unique sur erreur `-1021` sont testés.
+
+`crypto-public` charge désormais l'ensemble de `exchangeInfo`, parse
+`PRICE_FILTER`, `LOT_SIZE`, `MARKET_LOT_SIZE`, `MIN_NOTIONAL`/`NOTIONAL`, statut
+et types d'ordres, puis le broker OBSERVE filtre dynamiquement les marchés cotés
+en USDT. Validation réseau publique du 2026-10-04 : horloge OK, 1 372 symboles
+Spot tradables parsés dont 503 cotés USDT. Ces nombres sont une observation
+ponctuelle, pas une liste codée en dur.
+
+Commande read-only : `python -m alladin jafar account [--symbol BTCUSDT]` avec
+`BINANCE_API_KEY` et `JAFAR_BINANCE_PRIVATE_KEY_PATH`. Dans cette session, le
+PEM local était présent mais la variable API n'était pas visible du processus ;
+le GET account réel n'a donc pas été rejoué. La preuve manuelle HTTP 200 de la
+décision 030 reste la preuve authentifiée actuelle.
+
+Il n'existe toujours aucun endpoint de soumission/annulation Binance, aucun
+mode Jafar PAPER/TESTNET/LIVE_GATED/LIVE et aucun PortfolioEngine crypto. Ces
+chantiers restent à construire derrière RiskEngine, idempotence et reconciliation.
+
 
 ### Complément registre — décisions 017 à 022
 
