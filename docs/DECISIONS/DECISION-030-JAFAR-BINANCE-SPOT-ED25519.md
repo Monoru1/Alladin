@@ -15,19 +15,20 @@ Au moment de cette validation, la clé API Binance a uniquement **Enable Reading
 ## Décision
 
 1. Binance Spot devient le premier adapter exchange natif réel de Jafar.
-2. Jafar doit réutiliser le core partagé Alladin/Jafar et respecter la chaîne `Brain -> ActionProposal -> Risk -> Execution -> Broker/Exchange`. Il ne doit pas créer un moteur parallèle contournant le RiskEngine.
-3. L'intégration doit distinguer au minimum :
+2. Jafar est conçu pour travailler sur **l'univers crypto disponible et éligible**, et non uniquement BTC/USDT. L'univers doit être découvert dynamiquement depuis l'exchange puis filtré par capabilities, liquidité, qualité des données, contraintes de marché et RiskEngine ; aucune liste fixe de quelques cryptos ne doit définir son identité.
+3. Jafar doit réutiliser le core partagé Alladin/Jafar et respecter la chaîne `Brain -> ActionProposal -> Risk -> Execution -> Broker/Exchange`. Il ne doit pas créer un moteur parallèle contournant le RiskEngine.
+4. L'intégration doit distinguer au minimum :
    - données publiques Spot ;
    - compte authentifié/read-only ;
    - exécution Spot, qui reste verrouillée tant que ses gates et tests ne sont pas validés.
-4. Les credentials ne sont jamais stockés dans Git :
+5. Les credentials ne sont jamais stockés dans Git :
    - **API key Binance** : variable d'environnement `BINANCE_API_KEY` sur le runtime ;
    - **clé privée Ed25519** : fichier local Windows `%USERPROFILE%\.ssh\jafar_binance_private.pem` ;
    - **clé publique Ed25519** : fichier local `%USERPROFILE%\.ssh\jafar_binance_public.pem`, enregistré côté Binance ;
    - le repository ne contient que les noms/emplacements attendus, jamais leurs valeurs.
-5. Les retraits doivent rester désactivés. L'activation future du trading Spot nécessite une étape explicite, testée et documentée ; elle ne doit pas être activée implicitement par du code.
-6. La restriction IP doit être traitée avant une mise en service LIVE lorsque l'infrastructure d'exécution stable est connue.
-7. Les modes et garde-fous existants restent applicables. Une capacité Binance disponible ne vaut pas autorisation Jafar de l'utiliser.
+6. Les retraits doivent rester désactivés. L'activation future du trading Spot nécessite une étape explicite, testée et documentée ; elle ne doit pas être activée implicitement par du code.
+7. La restriction IP doit être traitée avant une mise en service LIVE lorsque l'infrastructure d'exécution stable est connue.
+8. Les modes et garde-fous existants restent applicables. Une capacité Binance disponible ne vaut pas autorisation Jafar de l'utiliser.
 
 ## Preuve actuelle
 
@@ -64,6 +65,8 @@ Les fichiers `*.pem` doivent être ignorés par Git en plus des règles existant
 - ajouter journalisation, erreurs de signature/horloge/rate-limit et tests ;
 - construire l'exécution Spot derrière les gates Risk/Execution existants ;
 - utiliser testnet/PAPER avant toute permission de trading réelle ;
+- **mettre à jour explicitement les restrictions de la clé API Binance pour autoriser Spot trading** au moment du passage aux tests d'ordres authentifiés ; tant que cette permission n'est pas activée côté Binance, Jafar ne pourra pas envoyer d'ordres réels ;
+- après activation, vérifier par test contrôlé que création/annulation/lecture d'ordre fonctionnent derrière RiskEngine/Execution avant toute autonomie ;
 - activer le trading Spot réel seulement par décision explicite après validation ;
 - ne jamais activer les retraits.
 
