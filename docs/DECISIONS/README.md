@@ -63,6 +63,7 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 27. [DECISION-027 — SNN-X-04 — Rendement sous contraintes et homéostasie (ADOPTED)](./DECISION-027-SNN-X-CONSTRAINED-OBJECTIVE.md)
 28. [DECISION-028 — SNN-X-05 — Shadow Brain et promotion contrôlée (ADOPTED)](./DECISION-028-SNN-X-SHADOW-BRAIN.md)
 29. [DECISION-029 — SNN-X-06 — Dream Engine et consolidation hors production (ADOPTED)](./DECISION-029-SNN-X-DREAM-ENGINE.md)
+30. [DECISION-030 — Binance Spot natif pour Jafar et credentials Ed25519 locaux (ADOPTED)](./DECISION-030-JAFAR-BINANCE-SPOT-ED25519.md)
 
 ## Source de vérité
 
