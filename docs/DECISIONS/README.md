@@ -57,6 +57,13 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 
 23. [DECISION-023 — Outcomes audités et reward expérimental versionné (ADOPTED / coefficients EXPERIMENTAL)](./DECISION-023-OUTCOME-REWARD-EVIDENCE.md)
 
+24. [DECISION-024 — SNN-X-01 — Extension parallèle et non destructive (ADOPTED)](./DECISION-024-SNN-X-PARALLEL-EXTENSIONS.md)
+25. [DECISION-025 — SNN-X-02 — Boucles FAST/LIVE et SLOW/LEARNING (ADOPTED)](./DECISION-025-SNN-X-FAST-SLOW-LOOPS.md)
+26. [DECISION-026 — SNN-X-03 — Surveillance continue et mémoire du non-trade (ADOPTED)](./DECISION-026-SNN-X-CONTINUOUS-OBSERVATION.md)
+27. [DECISION-027 — SNN-X-04 — Rendement sous contraintes et homéostasie (ADOPTED)](./DECISION-027-SNN-X-CONSTRAINED-OBJECTIVE.md)
+28. [DECISION-028 — SNN-X-05 — Shadow Brain et promotion contrôlée (ADOPTED)](./DECISION-028-SNN-X-SHADOW-BRAIN.md)
+29. [DECISION-029 — SNN-X-06 — Dream Engine et consolidation hors production (ADOPTED)](./DECISION-029-SNN-X-DREAM-ENGINE.md)
+
 ## Source de vérité
 
 - Architecture SNN : `docs/SNN/ALLADIN_SNN_BIBLE.md`

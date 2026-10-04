@@ -1056,3 +1056,8 @@ baseline + M
 ```
 
 Si `M` n'apporte pas de bénéfice robuste, il est retiré même s'il est biologiquement séduisant.
+
+
+## Extension SNN-X adoptée le 2026-10-04
+
+Les décisions 024–029 du registre `docs/DECISIONS/` complètent ce document sans le remplacer : modules optionnels et ablations, FAST/SLOW, surveillance BTC continue, objectif sous contraintes, Shadow Brain et Dream Engine. Voir `docs/HANDOFF.md` pour la reprise Claude. Architecture cible adoptée, non implémentée par cet ajout ; préserver les travaux en cours et gates de recette. Les variantes de reward et la plasticité restent expérimentales ; aucun accès direct du Brain à l’exécution, aucune auto-promotion.

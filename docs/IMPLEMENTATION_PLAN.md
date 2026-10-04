@@ -1,748 +1,3 @@
-# ALLADIN ‚Äî Plan d'impl√©mentation audit√©
-
-**Audit :** 2026-10-02 ¬∑ **Base :** `2453208da93f9e789171d196a7cd65e571c3f648` (`main`)
-**Port√©e :** planification seulement ; aucun changement de runtime dans cet audit.
-**Autorit√© :** le code et ses tests √©tablissent l'existant ; les d√©cisions `ADOPTED` de `docs/DECISIONS/` √©tablissent la direction. Une cible documentaire n'est pas une capacit√© livr√©e.
-
-## 1. Executive Summary
-
-Alladin est un laboratoire de trading MT5 DEMO dot√© d'un noyau de s√©curit√© r√©el : contr√¥le de compte, RiskEngine, ChallengeWatchdog, sizing, journal cha√Æn√©, r√©conciliation, scanner, trois strat√©gies et API de lecture. Le backtest et l'archive de barres ont d√©j√† progress√© au-del√† de la description de `docs/ARCHITECTURE.md`. Le SNN, sa Brain API, l'apprentissage, la promotion contr√¥l√©e et les d√©cisions persistantes consultables dans Mission Control restent √† construire. La migration conserve les contrats broker/risque/journal et ins√®re progressivement une interface de d√©cision commune √† la place du choix agent/routeur comme centre du syst√®me.
-
-**Ordre de risque :** (1) rendre fiable le traitement d'une position poss√©d√©e sans SL, y compris quand le broker refuse la fermeture ; (2) r√©soudre explicitement le contrat des modes OBSERVE/PAPER et la simulation PAPER ; (3) fiabiliser donn√©es, replay et exp√©rience ; (4) brancher un cerveau simple en shadow, puis comparer les candidats SNN sans autoriser leur auto-promotion. Aucun r√©sultat de recherche ne justifie aujourd'hui un trade LIVE ni l'assouplissement d'une protection.
-
-## 2. Current Repository State
-
-- Layout Python `src/alladin`, configuration YAML dans `config/`, tests `tests/`, CLI Typer dans `src/alladin/cli.py`, FastAPI dans `src/alladin/api/app.py`, frontend statique dans `src/alladin/api/static/index.html`.
-- Runtime actuel : `BrokerAdapter` MT5/mock ; donn√©es crypto publiques et mock dans `brokers/crypto.py` mais **pas** d'adapter d'ex√©cution crypto ; orchestration scanner ‚Üí r√©gime ‚Üí strat√©gies/routeur ‚Üí `AgentAdapter` ‚Üí `TradeIntent` ‚Üí `ExecutionService`/RiskEngine ‚Üí broker ‚Üí moniteur/journal.
-- Stockage : SQLite via SQLAlchemy, journal append-only et hash par run (`journal/repository.py`), trades/runs, donn√©es de recherche (`research/repository.py`), barres OHLCV+spread immuables et r√©f√©rences de fen√™tres par cycle (`market/archive.py`). `ReplayContext.from_cycle` ne charge que les r√©f√©rences et √©v√©nements (`replay.py`).
-- Mode par d√©faut `OBSERVE`, `PAPER` et `DEMO` expos√©s par CLI ; `TradingMode` de configuration reste `demo` pour interdire le compte r√©el. `run` fait **un cycle par d√©faut** ; la boucle continue et les signaux d'arr√™t existent mais pas de service supervis√© (`cli.py`, `orchestration/engine.py`).
-- √âtat initial Git : `main` align√© avec `origin/main` ; `.claude/` et `.test_tmp/` non suivis √©taient d√©j√† pr√©sents. Ils ne font pas partie du livrable. Aucune connexion MT5 ni aucun ordre n'a √©t√© lanc√© pendant l'audit.
-- Lecture couverte : `docs/HANDOFF.md`, d√©cisions 001‚Äì012 et registre, `docs/SNN/`, `docs/SNN_BTC_RESEARCH.md`, tous les fichiers `docs/STRATEGIES/` et `scripts/`, README/documents racine, code `src/alladin/`, configurations, tests et CLI. Les constats suivants concernent ce commit, pas un √©tat historique.
-
-## 3. What Already Works
-
-| Capacit√© prouv√©e | Emplacement / limite |
-|---|---|
-| Blocage de compte non DEMO, jeton d'approbation, SL obligatoire √† l'ouverture, pr√©contr√¥le, v√©rification de position | `brokers/base.py`, `brokers/mt5.py`, `risk/engine.py`, `execution/service.py`; garder les tests `test_mt5_broker.py`, `test_execution.py`, `test_risk_engine.py`. La r√©cup√©ration d'une fermeture d'urgence refus√©e est insuffisante (section 21). |
-| Profil challenge avec r√®gles officielles s√©par√©es des r√®gles exp√©rimentales | `challenge/models.py`, `challenge/watchdog.py`, `config/challenge_profiles/ftmo_2step_demo.yaml`; plafonds actuels volontairement conservateurs. |
-| D√©couverte, filtrage qualit√©, r√©gimes, strat√©gies Trend/Breakout/Range | `market/`, `strategies/`, `config/strategies/strategies.yaml`; les signaux ne constituent pas une preuve d'edge. |
-| Journal, int√©grit√© et tra√ßage des cycles ; r√©conciliation des positions poss√©d√©es | `journal/`, `orchestration/monitor.py`, `replay.py`; `cycle_id`, `JournalEvent.id/seq`, `trade_id`, ownership magic+comment existent. |
-| Backtest chronologique avec signal √† la cl√¥ture puis fill √† l'open suivant, spread, gap au SL, r√®gle intrabar prudente | `research/backtest.py`, `tests/test_backtest.py`; simulateur encore distinct du RiskEngine et du vrai portefeuille. |
-| Splits chronologiques avec purge/embargo, scorecards, ResearchRepository et lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py`; la d√©cision `passed` du backtest n'est pas une validation OOS. |
-| Cockpit lecture seule avec positions, risque, challenge, radar, journal, Strategy Lab et Research Lab | `api/app.py`, `api/static/index.html`; donn√©es historiques en base, mais interface de trace seulement sur 40 √©v√©nements r√©cents. |
-| MockBroker, MockAgent, tests faux MT5 | `brokers/mock.py`, `agents/mock.py`, `tests/fake_mt5.py`; utiles pour exp√©rimenter sans acc√®s broker r√©el. |
-
-## 4. Decision Compliance Matrix
-
-Statuts : **conforme** = m√©canisme pr√©sent ; **partiel** = base pr√©sente, exigence non couverte ; **cible absente** = choix adopt√© mais pas cod√© ; **conflit** = comportement actuel incompatible ou contrat contradictoire.
-
-| D√©cision ADOPTED | √âtat au commit audit√© | Preuve et cons√©quence de migration |
-|---|---|---|
-| 001 SNN-first | **cible absente** | Aucun SNN/Brain API ; `engine.py` exige `AgentAdapter`, `StrategyRouter` reste d√©cisionnel. Garder ces voies comme contr√¥le classique, puis brancher Brain API. |
-| 002 reuse before rewrite | **conforme en base** | MT5, risque, watchdog, journal, cockpit, strat√©gies et backtest r√©utilisables. Aucun remplacement global justifi√©. |
-| 003 deterministic risk | **conforme, couverture √† √©tendre** | `ExecutionService.submit` appelle `RiskEngine` et token ; sorties de position et portefeuille transversal n√©cessitent des contrats de risque suppl√©mentaires, sans exposer `send_order` au cerveau. |
-| 004 multi-broker/canonique | **partiel** | `Tick`, `Bar`, `InstrumentSpec` et `BrokerAdapter` existent ; pas de `CanonicalMarketEvent` ni capacit√©s annonc√©es. `CryptoDataProvider` fournit de la donn√©e, pas l'ex√©cution. |
-| 005 Strategy Lab | **partiel** | 3 strat√©gies impl√©ment√©es et d√©p√¥t de recherche ; les autres fiches sont hypoth√®ses. Source/licence/audit leakage et co√ªt ne sont pas des portes impos√©es partout. |
-| 006 no LLM runtime | **partiel** | Le d√©faut `MockAgent` fonctionne sans LLM, mais `AgentAdapter` est obligatoire et Claude/Codex restent s√©lectionnables dans la boucle. Le service H24 doit choisir un moteur local sans LLM et √©chouer ferm√©. |
-| 007 Mission Control | **partiel** | API journal/cycle et positions existent ; pas de fiche d√©cision stable, chart, overlay, reward, replay cliquable. UI remplace les 40 derniers √©v√©nements. |
-| 008 service autonome | **partiel/conflit de mode** | Boucle et arr√™t propre existent ; pas de superviseur, checkpoint, heartbeat process, authentification distante. `/health` inf√®re la fra√Æcheur du dernier cycle (2 min fixes). `OBSERVE/PAPER` peuvent produire une fermeture protectrice malgr√© ¬´ aucun ordre ¬ª dans l'aide CLI. Voir d√©cision propos√©e 013. |
-| 009 shared core Jafar | **partiel** | Noyau donn√©es/recherche mutualisable ; crypto isol√© du `BrokerAdapter` et mod√®le FX implicite dans univers/sizing/exposition. Aucun transfert de param√®tres FX‚ÜíBTC pr√©sum√©. |
-| 010 no V1/V2 | **conforme au plan** | Une architecture cible ; les √©tapes ci-dessous sont unit√©s testables/r√©versibles, pas produits concurrents. |
-| 011 cycle multi-position autonome | **partiel** | Plusieurs positions et limites de risque ; `Opportunity` n'√©volue pas apr√®s QUALIFIED/FILTERED, pas de HOLD/MODIFY/PARTIAL_CLOSE/CLOSE par cerveau. Exposition `RiskContext` limit√©e aux positions du run ; corr√©lation provider absent au bootstrap. |
-| 012 inspiration BlackRock Aladdin | **partiel** | Journal/risque/exposition unifi√©s localement ; vue portefeuille inter-runs et sc√©narios transversaux manquants. Inspiration conceptuelle uniquement, jamais preuve d'efficacit√©. |
-
-**D√©cision non tranch√©e :** `docs/DECISIONS/DECISION-013-MODE-SAFETY.md` est une proposition `PROPOSED` sur les fermetures protectrices en OBSERVE/PAPER ; aucune d√©cision ADOPTED n'est modifi√©e.
-
-## 5. Documentation vs Implementation Gap Analysis
-
-| Sujet | Statut | Preuve / correction documentaire √† pr√©voir |
-|---|---|---|
-| DEMO only, SL, risk, watchdog, journal cha√Æn√© | **DOCUMENTED + IMPLEMENTED** | `docs/ARCHITECTURE.md`, `src/alladin/brokers/base.py`, `execution/service.py`, `journal/repository.py`. |
-| Barres archiv√©es et replay | **OBSOLETE + PARTIAL** | `docs/ARCHITECTURE.md` dit ¬´ barres non archiv√©es ¬ª ; `market/archive.py` existe. `replay.py` retourne m√©tadonn√©es/√©v√©nements, sans barres reconstruites ni r√©-simulation. |
-| PAPER simulation compl√®te | **CONFLICTING** | `core/enums.py`/aide CLI promettent P&L simul√© ; `engine.py:171` appelle `submit(..., dry_run=True)` et `market/paper.py` est isol√©. |
-| SNN, encoder, reward, surprise, metabolism, connectome, promotion | **DOCUMENTED + MISSING** | `docs/SNN/ALLADIN_SNN_BIBLE.md`, `FLY_BRAIN_FUNCTION.md` d√©crivent la cible ; aucune impl√©mentation correspondante dans `src/`. |
-| Cycle de vie Opportunity et position | **PARTIAL** | `market/opportunity.py` et √©v√©nements cr√©√©s ; pas de liaison stable opportunity‚Üíproposal‚Üírisk‚Üíorder‚Üíposition‚Üíoutcome ; pas d'actions de gestion autonome. |
-| Runtime autonome sans LLM | **PARTIAL** | Mock local existe ; CLI LLM optionnelles toujours sur le chemin de d√©cision. Pas de SNN local promu. |
-| Cockpit scientifique et d√©cisions persistantes | **PARTIAL** | Journal conserve les √©v√©nements, API `GET /api/runs/{run_id}/cycles/{cycle_id}` ; la trace UI consomme `/api/journal?limit=40`, sans s√©lection stable ni chart. |
-| Strategy Harvester | **DOCUMENTED + MISSING** | `docs/STRATEGIES/SOURCE_MAP.md`, `scripts/EXTERNAL_SCRIPT_AUDIT.md` ; aucun collecteur/porte de provenance/licence reli√© √† l'ex√©cution. |
-| CLI README | **OBSOLETE** | README indique `run [--execute]`; CLI r√©elle utilise `--mode` et un cycle par d√©faut (`cli.py`). |
-| Index des d√©cisions | **OBSOLETE** | `docs/DECISIONS/README.md` liste 001‚Äì010 alors que 011‚Äì012 sont ADOPTED ; correction dans ce commit. |
-| Capacit√©s du code peu document√©es | **IMPLEMENTED, doc PARTIAL** | Archive incr√©mentale, BTC data provider/exp√©rience, mode PAPER d√©clar√©, `ResearchPerformanceProvider`, endpoints `/api/research` et `/api/opportunities`, run `SYSTEM-TEST`, split `DEMO` figurent dans le code mais pas tous dans les guides racine. |
-
-## 6. KEEP / ADAPT / REFACTOR / REPLACE / REMOVE / NEW
-
-| Classe | Composants | Justification / limite |
-|---|---|---|
-| KEEP | `MT5Broker` et garde DEMO `BrokerAdapter.send_order`; `RiskEngine`, `PositionSizer`, `ChallengeWatchdog`, `ApprovalToken`, kill switch, ownership magic+comment | Contrats de s√©curit√© √©prouv√©s. Ajouter des contr√¥les sans affaiblir les limites existantes. |
-| KEEP | `JournalRepository`, `RunManager`, `PositionMonitor`, CLI de v√©rification, MockBroker et tests faux MT5 | Tra√ßage/r√©conciliation de base utiles ; corriger les d√©fauts cibl√©s. |
-| ADAPT | `Tick`/`Bar`/`InstrumentSpec`, scanner, archive, `ReplayContext`, splits, backtest, scorecards | Ajouter provenance, capacit√©s, int√©grit√© des fen√™tres, co√ªts comparables et replay causal ; pr√©server API existante tant que possible. |
-| ADAPT | 3 strat√©gies, registre/lifecycle, `ResearchRepository`, `ResearchPerformanceProvider` | Baselines/features/enseignants, jamais preuve automatique ; versionner et imposer preuves de promotion. |
-| ADAPT | `api/app.py` et frontend actuel | Conserver cartes positions/challenge/risque/labs ; ajouter historique pagin√©, fiche stable et graphique. |
-| ADAPT | `PaperExperimentEngine`, `CryptoDataProvider` | Simulateur en m√©moire non connect√© au mode PAPER ; crypto lecture publique non broker de production. |
-| REFACTOR cibl√© | `OrchestrationEngine` et `bootstrap.py` | Introduire d√©cision locale `Brain API`/`ActionProposal` et shadow sans casser la voie classique ; retirer ensuite l'obligation structurelle `AgentAdapter`. |
-| REPLACE progressif | Autorit√© du `StrategyRouter`/CLI Claude-Codex dans la d√©cision de production | Garder voie classique comme baseline ; la d√©cision promue passe par Brain API et contr√¥les de risque inchang√©s. |
-| REMOVE | Aucun composant runtime maintenant | Attendre preuves de redondance et tests de migration ; pas de suppression motiv√©e par l'√¢ge du code. |
-| NEW | `CanonicalMarketEvent`, capability manifest, normaliseur/encodeur, Brain API, cerveau simple/SNN, outcome/reward, registre de mod√®les/checkpoints, validateur de promotion, supervision service, d√©tails de d√©cision et replay contrefactuel | Manques av√©r√©s par audit. Modules √† cr√©er seulement quand le lot correspondant dispose d'un contrat et de tests. |
-
-## 7. Target Architecture
-
-```text
-Market/Broker ‚Üí Adapter + capabilities ‚Üí Canonical Market Event (temps, source, qualit√©)
-  ‚Üí archive causale ‚Üí Features versionn√©es ‚Üí Sensory Encoder ‚Üí Brain API
-  ‚Üí {classique baseline | baseline simple | SNN candidat/promu}
-  ‚Üí ActionProposal (LONG/SHORT/NO_TRADE/HOLD/MODIFY/CLOSE, version, confiance, state_id)
-  ‚Üí Opportunity/position state ‚Üí deterministic RiskEngine + ChallengeWatchdog
-  ‚Üí ExecutionService ‚Üí broker DEMO ou simulateur PAPER ‚Üí PositionMonitor
-  ‚Üí Outcome dat√© ‚Üí reward/pain/surprise ‚Üí replay/learning (boucle lente)
-
-Journal append-only + IDs, m√©triques, traces et replay : √† chaque fronti√®re.
-```
-
-Le **FAST PRODUCTION LOOP** ne lit qu'un cerveau promu, gel√© et versionn√© ; il observe, propose, valide, ex√©cute et surveille. L'indisponibilit√© du cerveau ou de donn√©es closes/fra√Æches donne NO_TRADE et alerte. Le **SLOW LEARNING/PROMOTION LOOP** utilise des snapshots immuables, replay, train/validation/OOS et promotion atomique sous contr√¥le explicite ; aucune s√©rie de pertes ne r√©√©crit les poids actifs. Une d√©cision de gestion de position passe aussi par un contr√¥le externe de risque et par `ExecutionService`.
-
-Le format canonique exprime des champs r√©ellement observ√©s (bid/ask, OHLC clos, volume, source, horodatage/close time, qualit√©) et la disponibilit√© par adapter. Les instruments, unit√©s de prix, contract sizes, tick value, devise de compte, funding et sessions ne sont pas fusionn√©s par hypoth√®se. Le RiskEngine re√ßoit un snapshot portefeuille et des capacit√©s v√©rifi√©es ; donn√©es/marge/corr√©lation indisponibles doivent conduire √† un comportement explicitement prudent, jamais √† une estimation invent√©e.
-
-## 8. Migration Strategy
-
-1. Poser des tests de s√©curit√© et corriger les d√©fauts P0 sans modifier les limites du profil.
-2. Figurer par tests et d√©cision documentaire le sens des modes ; raccorder PAPER au simulateur uniquement apr√®s s√©paration claire de toute voie `order_send` et persistance des positions simul√©es.
-3. Faire de l'archive et du replay une source causale v√©rifiable ; archiver exactement l'information disponible au moment de d√©cision, avec provenance/version/co√ªts. Corriger insertion tardive, doublons contradictoires et fen√™tres incompl√®tes.
-4. D√©finir les fronti√®res canonique/Brain API et adapter la voie classique pour produire la m√™me `ActionProposal` que le SNN ; conserver l'ancien chemin comme contr√¥le et faire tourner d'abord le cerveau en shadow.
-5. Ajouter outcome/reward/learning hors runtime, promotion contr√¥l√©e, puis UI et service exploitant les √©v√©nements persist√©s. D√©ployer PAPER puis DEMO prolong√© seulement avec crit√®res mesur√©s.
-
-Chaque lot conserve un chemin de retour vers la voie classique, les sch√©mas pr√©c√©dents ou le checkpoint promu pr√©c√©dent. Les nouvelles tables sont additives ; ne jamais modifier l'historique du journal ni r√©√©crire les r√©sultats n√©gatifs.
-
-## 9. Dependency Graph / Ordering
-
-```text
-P0 fermeture protectrice + contrat de modes
-    ‚îú‚îÄ‚Üí PAPER persistant et isol√© du broker
-    ‚îî‚îÄ‚Üí archive causale + replay fid√®le ‚îÄ‚Üí simulateur/co√ªts/splits comparables
-                                             ‚îú‚îÄ‚Üí outcome/reward dat√©s
-                                             ‚îî‚îÄ‚Üí Brain API + baseline classique/simple
-                                                     ‚îî‚îÄ‚Üí SNN simple shadow ‚îÄ‚Üí ablations/connectome
-                                                                          ‚îî‚îÄ‚Üí promotion contr√¥l√©e
-Journal/IDs ‚îÄ‚Üí API historique/d√©tail/replay ‚îÄ‚Üí Mission Control enrichi
-Heartbeat/checkpoints/reconcile ‚îÄ‚Üí service supervis√© ‚îÄ‚Üí DEMO prolong√©
-Provenance/licence ‚îÄ‚Üí Harvester ‚îÄ‚Üí Strategy Lab ‚îÄ‚Üí baselines/enseignants
-```
-
-Les travaux UI, service et Harvester peuvent avancer en parall√®le lorsque leurs contrats de donn√©es sont stabilis√©s. Les sorties autonomes d√©pendent du contrat de risque pour chaque action, jamais de la seule disponibilit√© du cerveau.
-
-## 10. Detailed Implementation Phases
-
-Ce sont des **unit√©s d'impl√©mentation/test/migration** sur une architecture cible unique, sans d√©coupage produit V1/V2. Chaque phase livre un comportement v√©rifiable et peut √™tre interrompue si son crit√®re √©choue.
-
-| Unit√© | Travail et fichiers/modules probables | Tests n√©cessaires et crit√®res d'acceptation | Retour arri√®re |
-|---|---|---|---|
-| A ‚Äî s√©curit√© des sorties | `orchestration/monitor.py`, `execution/service.py`, `orchestration/engine.py`, `tests/test_execution.py`, `test_orchestration.py` : d√©tecter √† chaque cycle toute position poss√©d√©e sans SL, m√™me adopt√©e/non enregistr√©e ; r√©sultat r√©el de fermeture, retry/alerte, ne plus affirmer ¬´ ferm√©e ¬ª sans confirmation. | Faux broker refusant CLOSE puis l'acceptant ; DEMO, restart/reconcile, foreign position ignor√©e, √©v√©nements append-only, aucun SL affaibli. Voir paquet final. | En cas de r√©gression, bloquer les nouvelles entr√©es DEMO, alerter et r√©concilier les positions ouvertes avant retour au dernier correctif valid√© ; ne jamais revenir silencieusement au d√©faut P0. |
-| B ‚Äî modes et PAPER | `core/enums.py`, `cli.py`, `orchestration/engine.py`, `market/paper.py`, `execution/service.py`, `tests/test_daemon_modes.py`, `test_paper_engine.py` : arbitrer la proposition 013, d√©finir politiques d'ordres par mode, rendre PAPER r√©ellement simul√© et persistant, rejouer des positions sur restart. | Tests avec espion `send_order` pour OPEN/CLOSE selon contrat adopt√©, P&L paper net, crash/restart, aucune contamination du broker. Ne pas assimiler `DRY_RUN_APPROVED` √† une ex√©cution. | Revenir √† OBSERVE sans simulation ; ne jamais activer DEMO pour ¬´ r√©parer ¬ª PAPER. |
-| C ‚Äî donn√©es causales et replay | `core/models.py`, `brokers/base.py`, `market/archive.py`, `market/scanner.py`, `replay.py`, `research/splits.py`, `tests/test_research_replay.py`, `test_market.py` : manifeste de capacit√© adapter, barres closes/temps de disponibilit√©, provenance, fen√™tre compl√®te, doublon contradictoire, insertion tardive, budget de donn√©es ; replay en lecture seule avec inputs r√©ellement vus. | Assertions au cutoff temporel, trous/duplicates, red√©marrage cache, fingerprint dataset, aucune donn√©e future, replay identique √† entr√©es archiv√©es ou √©chec explicite. | Tables additives et lecteur ancien conserv√© durant migration ; rejeter jeu incomplet plut√¥t que compl√©ter avec donn√©es futures. |
-| D ‚Äî banc exp√©rimental commun | `research/backtest.py`, `r_analytics.py`, `scorecard.py`, `repository.py`, `models.py`, `btc_experiment.py`, `tests/test_backtest.py`, `test_btc_experiment.py` : moteur de co√ªts/risque/positions comparables, provenance, splits et r√©sultats n√©gatifs immuables ; s√©parer r√©sultat technique et promotion. | M√™me ordre de march√© simul√© ‚Üí m√™mes fill/cost/R pour tous mod√®les ; slippage/spread/frais, gaps, intrabar, labels/purge, OOS hors r√©glage ; BTC avec spread source explicite. | Laisser ancien backtest comme baseline √©tiquet√©e non comparable ; ne promouvoir aucune exp√©rience non revalid√©e. |
-| E ‚Äî interface Brain et cycle de vie | `orchestration/engine.py`, `bootstrap.py`, `market/opportunity.py`, `core/models.py`, `journal/models.py`, tests d'orchestration : `ActionProposal` versionn√©e, NO_TRADE explicite, d√©cision stable, lien opportunity‚Üíintent‚Üírisk‚Üítrade/position‚Üíoutcome ; voie classique adapt√©e ; actions de sortie sous risque d√©terministe. | Voie classique avant/apr√®s √©gale sur fixtures, √©tats valides, refus de proposition malform√©e, sorties/SL/TP/partial close sur mock, aucune route directe Brain‚Üíbroker. | Flag de s√©lection : garder cerveau classique promu ; repasser en shadow si divergence. |
-| F ‚Äî outcome, reward et cerveau exp√©rimental | Nouveaux modules `brain/`, `learning/` seulement apr√®s contrats E ; `research/` pour replay, registre/checkpoints et contr√¥les ; tests unitaires/reproductibilit√©. LIF r√©duit, readout, R-STDP avec trace, surprise et m√©tabolisme chacun derri√®re ablation. | R√©sultat dat√©, attribution √† d√©cision/version, r√©compense NO_TRADE contrefactuelle s√©par√©e des donn√©es observ√©es, poids reproductibles par seed ; aucune mutation du checkpoint actif par la boucle lente. | Restaurer checkpoint promu pr√©c√©dent et d√©sactiver le candidat ; conserver exp√©riences n√©gatives. |
-| G ‚Äî Mission Control | `api/app.py`, `api/static/index.html`, `journal/repository.py`, `tests/test_api.py` : historique pagin√© par run/cycle/decision ID ; d√©tail JSON brut et replay en lecture seule ; chart OHLC archiv√© et overlays, positions SL/TP, rejets, sant√©, stress/reward lorsque disponibles. | D√©cision accessible apr√®s >40 nouveaux √©v√©nements/restart ; API read-only, limites de pagination, HTML √©chapp√©, aucune fuite de secret, chart au bon timestamp/source. | Conserver pages/cards actuelles ; d√©sactiver seulement panneaux nouveaux si sch√©ma/feature indisponible. |
-| H ‚Äî service supervis√© | `cli.py`, `orchestration/engine.py`, `bootstrap.py`, `api/app.py`, nouvelles unit√©s de d√©ploiement document√©es et tests daemon : service Windows MT5, heartbeat process/market/brain, checkpoints atomiques, restart/reconcile, auth/TLS du cockpit distant. S√©paration Linux cerveau/Windows ex√©cution seulement si besoin mesur√©. | Crash/restart idempotent, compte DEMO rev√©rifi√©, donn√©es p√©rim√©es ou cerveau absent ‚Üí aucune **nouvelle** entr√©e, alerte ; heartbeat authentique et liveness distincte de fra√Æcheur du cycle. | Arr√™t du service, kill switch, retour √† ex√©cution manuelle OBSERVE/DEMO sans fermer implicitement des positions. |
-| I ‚Äî Strategy Research/Harvester | `research/models.py`, `repository.py`, `strategies/registry.py`, docs/templates `docs/STRATEGIES/`, nouveaux outils de collecte isol√©s : provenance/licence ‚Üí r√®gles ‚Üí leakage/repaint ‚Üí impl√©mentation propre ‚Üí tests/replay/OOS/co√ªts ‚Üí PAPER/DEMO ‚Üí keep/modify/kill. | Source tra√ßable/hash√©e, licences v√©rifi√©es, aucune importation d'un script tiers vers `execution/` ou runtime, transitions bloqu√©es sans preuves, r√©sultats n√©gatifs visibles. | D√©sactiver candidat/outil ; conserver historique de provenance et versions. |
-
-## 11. Fichiers et fronti√®res de responsabilit√©
-
-Le lot A poss√®de uniquement s√©curit√© de position ; B poss√®de modes/simulateur ; C poss√®de archive/replay ; D poss√®de protocole de simulation ; E poss√®de contrats de d√©cision. √âviter les modifications simultan√©es de `orchestration/engine.py` par B et E, ou `research/models.py` par D et I. `execution/service.py` reste **l'unique** chemin broker ; `risk/` et `challenge/` gardent leurs r√®gles d√©terministes ; `journal/` est une d√©pendance transversale append-only. Le frontend et l'API ne transmettent aucune intention de trading. Toute migration de sch√©ma doit comporter lecteur compatible, migration explicite, et test de base existante.
-
-## 12. Tests, quality gates et √©tat observ√©
-
-Sur ce d√©p√¥t : `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=.test_tmp/risk_quality_full_20261002` a collect√© **283 tests : 280 r√©ussis, 3 ignor√©s** (`tests/integration/test_mt5_live.py`, opt-in `--run-mt5`). `.venv\Scripts\python.exe -m ruff check src tests` a r√©ussi ; `.venv\Scripts\python.exe -m mypy src/alladin` a r√©ussi sur 77 fichiers. Un essai cibl√© recherche a d'abord rencontr√© `PermissionError` sur le r√©pertoire temporaire global, puis la suite compl√®te avec `--basetemp` local a r√©ussi ; ce n'√©tait pas une assertion de code. Un avertissement Starlette/httpx externe demeure. Aucun test MT5 connect√© n'a √©t√© ex√©cut√© : il exige un terminal DEMO ; aucun trade r√©el n'a √©t√© fait.
-
-√Ä chaque lot : ex√©cuter tests cibl√©s puis suite hors MT5, `ruff check src tests`, `mypy src` ; ne lancer `pytest --run-mt5` que dans un environnement DEMO valid√©, ses trois tests √©tant en lecture seule. Pour les travaux de recherche, ajouter tests de causalit√©, d√©terminisme, comparaison paire √† paire et stress de co√ªts. Un test qui ne v√©rifie que l'enum ou recopie la fonction n'est pas une preuve fonctionnelle.
-
-## 13. Crit√®res d'acceptation transversaux
-
-1. Aucune nouvelle entr√©e LIVE/CONTEST/UNKNOWN et aucune d√©rive du profil de risque ; SL et token restent obligatoires ; les sorties protectrices sont trait√©es explicitement selon d√©cision 013.
-2. Toute d√©cision, y compris NO_TRADE et rejet, a ID, temps de disponibilit√© des donn√©es, version du cerveau/strat√©gie, proposition, r√©sultat du risque, mode et lien vers outcome lorsqu'il existe.
-3. Rejeu d'un cycle avec donn√©es archiv√©es produit le m√™me contexte ou une erreur d'int√©grit√© ; jamais une substitution silencieuse par le march√© actuel.
-4. Un r√©sultat OOS ne sert pas au r√©glage ; toute promotion r√©clame comparaison pr√©enregistr√©e avec baseline et rollback possible.
-5. Les tests de s√©curit√©, causalit√©, int√©grit√© et restart passent ; aucune modification de l'historique journal/recherche.
-
-## 14. Rollback strategy
-
-Runtime : conserver le dernier cerveau promu et une voie classique valid√©e ; activation par configuration/version pin, jamais auto-r√©√©criture. Donn√©es : migrations additives, backups SQLite avant migration, hash/fingerprint et lecture de l'ancien format jusqu'√† preuve de conversion ; ne jamais ¬´ r√©parer ¬ª une archive invalide avec des barres futures. Modes : fail closed, OBSERVE lors d'une incompatibilit√©, kill switch op√©rationnel ; la r√©conciliation ne ferme pas une position simplement √† cause d'un red√©marrage. UI : panneau nouveau d√©sactivable ind√©pendamment. Chaque lot documente commandes de validation et proc√©dure de retour √† l'√©tat ant√©rieur.
-
-## 15. Observability requirements
-
-√âv√©nements structur√©s et corr√©l√©s par `run_id`, `cycle_id`, `opportunity_id`, `decision_id`, `trade_id`/ticket et `brain_version`. √Ä chaque fronti√®re : source/capacit√©s des donn√©es, horodatage observable, d√©lai/fra√Æcheur, feature/encoder version, proposition+confiance/NO_TRADE, rejets cod√©s RiskEngine, pr√©contr√¥le/ex√©cution v√©rifi√©e, changements de position, outcome/reward/surprise et checkpoint. Mesurer latences, stale-data, trous d'archive, refus de fermeture, positions sans SL, √©carts paper/broker, drift/calibration, drawdown, headroom challenge, √©tat de liveness/restart. √âviter secrets et identifiants broker dans API/logs. `/health` doit distinguer vie du processus, derni√®re observation et dernier cycle r√©ussi ; l'heure du navigateur n'est pas un heartbeat serveur.
-
-## 16. Data / replay requirements
-
-`MarketDataArchive` constitue le point de d√©part, pas encore une preuve de fid√©lit√© : sa PK `(symbol,timeframe,ts)` et ses triggers emp√™chent une modification SQL, mais `_last` cache le dernier timestamp ; une barre arriv√©e tard est √©cart√©e, `OR IGNORE` peut masquer des doublons contradictoires et `added=len(rows)` surestime parfois l'insertion. Les r√©f√©rences `cycle_inputs` donnent `n_bars/first_ts/last_ts`, sans garantir que toutes les barres sont retrouvables. Les barres archiv√©es manquent close time explicite, disponibilit√© de la donn√©e, provenance, bid/ask tick et version de calcul. `ReplayContext` ne charge pas les barres ; la CLI ¬´ replay cycle ¬ª affiche des r√©f√©rences.
-
-Fixer des cutoffs observables par timeframe, fronti√®res train/validation/OOS/DEMO, fingerprint de dataset/code/co√ªts, flux de ticks lorsque le co√ªt/ex√©cution le requiert, et politique des r√©visions vendor. Le replay doit pouvoir reconstruire la vue **as-of**, comparer des actions contrefactuelles sans contaminer l'observ√©, et signaler toute donn√©e indisponible. La m√™me archive, le m√™me simulateur, le m√™me risque, les m√™mes frais/spread/slippage et les m√™mes splits alimentent toutes les architectures candidates.
-
-## 17. SNN experimental protocol
-
-Le SNN est une hypoth√®se falsifiable. Pr√©enregistrer objectif, m√©trique primaire (par exemple expectancy R OOS net de co√ªts et drawdown/challenge), seuil minimal d'effet, budget de complexit√©, nombre de runs/seeds, contr√¥le des essais multiples et crit√®res d'√©chec **avant** d'observer OOS. Comparer, avec m√™mes donn√©es/features accessibles, horizon, co√ªt, ex√©cution, portefeuille, splits, seed set et budget de tuning :
-
-1. Alladin classique (strat√©gies/routeur) ; baseline simple sans SNN (r√®gle na√Øve, r√©gression/ridge ou autre contr√¥le fix√©).
-2. SNN simple LIF et readout ; r√©seau gel√© versus avec plasticit√©.
-3. Connectome biologique prun√© versus graphes al√©atoires et **rewired √† degr√©s pr√©serv√©s**, m√™me taille/densit√©/readout ; ne pas changer plusieurs m√©canismes √† la fois.
-4. Ablations appari√©es avec/sans R-STDP, avec/sans surprise, avec/sans √©tat m√©tabolique, puis interactions explicitement pr√©vues.
-
-Rapporter distribution par seed, instruments/r√©gimes, OOS, co√ªts et slippage stress√©s, turnover, calibration, drawdown/tails, latence et consommation ; r√©sultats n√©gatifs conserv√©s. OOS reste ferm√© au r√©glage. Les analogies Mushroom Body/Central Complex sont des hypoth√®ses de mapping, pas des faits biologiques sur le march√©. Si le connectome ou la plasticit√© n'apporte pas de gain robuste sur les contr√¥les, rejeter la complexit√©. Aucun mod√®le de recherche ne passe directement √† l'ex√©cution ; promotion avec version/checkpoint/signature et retour arri√®re.
-
-## 18. Mission Control migration
-
-Garder le frontend et les endpoints de lecture existants. √âtape donn√©es d'abord : recherche pagin√©e par run/type/date, d√©tail stable par `(run_id, seq)` ou ID journal (la PK existe), fiche d√©cision agr√©geant les √©v√©nements li√©s sans d√©truire le JSON brut ; `GET` replay read-only. √âtape interface : s√©lectionner une d√©cision puis conserver cette s√©lection pendant les rafra√Æchissements ; URL/deep link, filtres NO_TRADE/risk/position, √©tat de chargement/erreur. Ajouter chandeliers depuis les barres archiv√©es, overlays positions/SL/TP et d√©cisions horodat√©es ; afficher explicitement ¬´ non disponible ¬ª pour reward/surprise/SNN tant que ces donn√©es n'existent pas. Les cartes positions, challenge, risque et labs restent.
-
-Le d√©faut actuel est `refreshMedium()` qui remplace `brain-body` par les 40 derniers √©v√©nements (`index.html`) ; le journal conserve l'historique. L'UI utilise un `renderHTML` avec allowlist ad hoc : pr√©f√©rer cr√©ation DOM et `textContent` pour les donn√©es, ou assainissement robuste test√© ; ajouter tests d'injection de champs journal/recherche. L'API actuelle n'a pas d'authentification int√©gr√©e : bind local par d√©faut, puis auth/TLS et contr√¥le de p√©rim√®tre avant acc√®s distant.
-
-## 19. Autonomous service migration
-
-Conserver la boucle `OrchestrationEngine.run_loop`, sa pause apr√®s erreurs et ses signaux d'arr√™t. Ajouter superviseur Windows compatible MT5, politique restart/backoff, singleton/lock, heartbeat process √©crit par service, contr√¥le de fra√Æcheur march√© et du checkpoint cerveau, puis reconcile au d√©marrage. S√©parer liveness, readiness et permission d'envoyer un ordre ; aucun ordre nouveau si march√© p√©rim√©, broker non DEMO, cerveau indisponible, journal non accessible ou √©tat non r√©cup√©r√©. Une sortie protectrice existante suit la d√©cision 013 et reste audit√©e. Le n≈ìud Linux Brain / Windows Execution est une possibilit√© conditionnelle : avant s√©paration, prouver auth des messages, idempotence, s√©quencement, timeouts et capacit√© √† se fermer en s√©curit√©. Le cockpit n'est expos√© √† distance qu'apr√®s authentification et TLS.
-
-## 20. Strategy Research / Harvester integration
-
-Conserver `StrategyRegistry`, les trois strat√©gies et `ResearchRepository`. Les fiches `docs/STRATEGIES/` (trend, breakout, mean reversion, pairs, carry, multifactor) et les r√©f√©rences `scripts/` forment une biblioth√®que d'hypoth√®ses ; seuls Trend/Breakout/Range sont des strat√©gies de runtime. Un candidat traverse `discover ‚Üí provenance/license ‚Üí extraction de r√®gles ‚Üí audit leakage/repaint ‚Üí impl√©mentation propre ‚Üí tests ‚Üí replay ‚Üí validation/OOS ‚Üí stress de co√ªts ‚Üí PAPER/DEMO ‚Üí keep/modify/kill`. Enregistrer URL/auteur/date/licence et restrictions d'usage, hash de source et de code propre, donn√©es/co√ªts/seeds, motifs de rejet. Un script tiers reste isol√©, n'est jamais import√© dans le processus d'ex√©cution et ne fournit jamais un `ApprovalToken` ; son id√©e peut devenir baseline, feature, enseignant ou contre-factuel apr√®s validation. L'√©tat `APPROVED` n'est pas d√©duit d'une courbe positive ; le lifecycle actuel v√©rifie des statuts, pas l'ensemble des preuves.
-
-## 21. Technical debt discovered
-
-- **P0 s√©curit√© :** `monitor.sync()` √©crit `stop_loss=None` d√®s d√©tection ; si la fermeture √©choue, le cycle suivant peut ne plus √©mettre `sl_removed`. `close_position()` retourne vrai d√®s qu'une position est trouv√©e, pas apr√®s fermeture confirm√©e. √Ä l'ouverture sans SL, `submit()` affirme une fermeture d'urgence sans v√©rifier le r√©sultat et peut laisser une position non enregistr√©e. Voir lot A.
-- **P0 contrat :** modes OBSERVE/PAPER d√©crits sans `order_send`, alors que fermeture protectrice peut appeler broker ; PAPER n'est qu'un dry-run pour les entr√©es.
-- **P1 portefeuille :** `ExecutionService._build_context` ne passe que les positions du run ; corr√©lation calculable mais provider non fourni au bootstrap ; si `calc_margin` renvoie `None`, contr√¥le de marge peut √™tre ignor√©. D√©finir politique fail-closed sans bloquer arbitrairement un compte sur donn√©es fiables.
-- **P1 donn√©es :** cache `_last`, `OR IGNORE`, fen√™tre replay incompl√®te, provenance et temps de disponibilit√© absents ; `BinancePublicProvider.klines` ne fournit pas de spread exploitable (valeur z√©ro), exp√©rience BTC en m√©moire avec co√ªts fixes.
-- **P1 recherche :** backtest ne passe ni par `MarketQualityEngine` ni par le vrai `RiskEngine`, fabrique `tf_trend={}` et r√©duit `passed` √† 30 trades + expectancy positive ; ce flag ne prouve pas OOS. Il est n√©anmoins causal sur le fill next-open et les gaps.
-- **P1 observabilit√© :** d√©cisions UI volatiles, `/health` sans heartbeat process, `Opportunity.strategy_candidates` rempli avec cl√©s de timeframes (`engine.py`) et non IDs de strat√©gies ; opportunit√©s sans transitions apr√®s cr√©ation.
-- **P2 docs/qualit√© :** README CLI et section replay d'`ARCHITECTURE.md` obsol√®tes ; index d√©cisions incomplet ; `ResearchPerformanceProvider` existe mais bootstrap classe via journal ; champs de provenance/seed/co√ªt/checkpoint absents du d√©p√¥t d'exp√©riences.
-
-## 22. Security / risk concerns and guards
-
-Conserver `TRADING_MODE=demo`, contr√¥le `AccountType.DEMO` au niveau broker, token d'approbation frais, SL obligatoire, pr√©contr√¥le, position v√©rifi√©e, kill switch, ownership magic+comment, watchdog, journal append-only et fermeture explicitement contr√¥l√©e. Le profil courant limite par exemple le risque par trade √† 8 % du **working capital** (10 % de l'equity), 5 positions, risque ouvert total √† 30 % du working capital, concentration devise √† 15 %, marge √† 50 %, corr√©lation √† 0,85 ; ces valeurs sont des plafonds exp√©rimentaux, pas des objectifs √† atteindre. Un changement de garde-fou exige une proposition distincte avec justification, m√©triques, conditions, remplacement √©ventuel et rollback ; les invariants compte DEMO, chemin unique `ExecutionService`, risque externe et tra√ßabilit√© ne deviennent jamais des poids du cerveau.
-
-Risques additionnels : √©tat broker/journal d√©synchronis√©, fermeture refus√©e, tick p√©rim√©, capacit√© adapter absente, non-idempotence apr√®s crash, exposition de l'API, injection de donn√©es dans le frontend, provenance/licence de code tiers, fuite train‚ÜíOOS, reward hacking et transfert FX‚Üícrypto. Mettre des tests d'√©chec r√©alistes avant toute extension d'autonomie. Aucune commande de l'audit n'a utilis√© `--run-mt5` ou lanc√© un trade.
-
-## 23. Unresolved questions
-
-1. **Politique des sorties protectrices en OBSERVE/PAPER :** doivent-elles pouvoir envoyer un CLOSE sur une position DEMO poss√©d√©e ou seulement alerter ? La proposition 013 recommande de s√©parer un mode strictement sans ordre d'un mode de gestion de positions DEMO, √† adopter avant tout changement de s√©mantique.
-2. Portefeuille : limites par run ou compte entier, attribution d'une position √©trang√®re et comportement quand corr√©lation/marge sont indisponibles ? Ne jamais toucher une position √©trang√®re, mais tenir compte de son exposition √©conomique si les donn√©es sont fiables.
-3. Fr√©quence des d√©cisions et horizon de labels : pr√©ciser par instrument/timeframe avant purge, reward et contre-factuels.
-4. Co√ªts par broker/instrument et provenance historique des ticks/spreads : quelles donn√©es seront effectivement disponibles, sans inventer d'order book ?
-5. Strat√©gie de stockage long terme, r√©tention, sauvegarde et moteur de base si volume/acc√®s multi-processus d√©passent SQLite.
-6. Seuils de promotion SNN, budgets de calcul et latence acceptables : √† pr√©enregistrer avec les premi√®res exp√©riences, pas √† choisir apr√®s OOS.
-
-## 24. Explicit non-goals
-
-Pas de trading LIVE, de retrait de garde-fou, de copie/ex√©cution directe d'un script Internet, de r√©√©criture compl√®te du frontend ou du backend, de chargement imm√©diat du connectome complet, de HFT, de promesse de profit, de transfert automatique FX‚Üícrypto, de restructuration V1/V2, ni de modification de l'historique des d√©cisions. Ce plan ne d√©ploie rien et ne d√©cide pas √† la place de la proposition 013.
-
-## 25. Premier lot et handoff
-
-Le premier lot traite le risque P0 de fermeture protectrice non confirm√©e. Le replay fid√®le est le lot C suivant : son impl√©mentation pourrait se limiter initialement √† charger et v√©rifier les fen√™tres archiv√©es dans `ReplayContext.from_cycle`, avec tests d'archive incompl√®te. Avant chaque lot, Claude relit `docs/HANDOFF.md`, les d√©cisions ADOPTED, la proposition 013 si elle touche les modes, puis le code et les tests indiqu√©s ; les d√©cisions restent source de contrainte, pas preuve que les fonctionnalit√©s sont livr√©es.
-
-# CLAUDE ‚Äî NEXT WORK PACKAGE
-
-**Objectif exact.** Emp√™cher qu'une position ALLADIN poss√©d√©e et encore ouverte sans SL cesse d'√™tre signal√©e apr√®s un seul essai de fermeture √©chou√© ; ne d√©clarer une fermeture accomplie qu'apr√®s r√©sultat broker confirm√© et absence de la position. Petit correctif de s√©curit√© r√©versible, en **DEMO/mock** avec tests ; pas de changement du contrat OBSERVE/PAPER tant que la d√©cision 013 reste propos√©e.
-
-**Contexte.** `PositionMonitor.sync()` d√©tecte `pos.sl is None` seulement lorsque `trade.stop_loss` √©tait non nul puis √©crit `None` en base (`src/alladin/orchestration/monitor.py`). `OrchestrationEngine._run_cycle()` tente alors `close_position()` une seule fois. `ExecutionService._close()` ne retourne pas de statut confirm√© ; `close_position()` peut retourner `True` malgr√© refus broker (`src/alladin/execution/service.py`). Le chemin d'ouverture sans SL a le m√™me risque de message mensonger et peut pr√©c√©der la cr√©ation de `TradeRecord`. Toutes les s√©curit√©s DEMO et ownership restent obligatoires.
-
-**Fichiers √† inspecter.** `docs/HANDOFF.md`, `docs/DECISIONS/DECISION-003-DETERMINISTIC-RISK.md`, `DECISION-008-AUTONOMOUS-SERVICE.md`, `DECISION-011-AUTONOMOUS-MULTI-POSITION-LIFECYCLE.md`, proposition 013 ; `src/alladin/orchestration/{monitor,engine}.py`, `src/alladin/execution/service.py`, `src/alladin/brokers/{base,mock}.py`, `src/alladin/journal/{models,repository}.py`, `tests/{test_execution,test_orchestration,test_daemon_modes}.py` et fixtures `tests/conftest.py`.
-
-**Fichiers probablement √† modifier.** `src/alladin/orchestration/monitor.py`, `src/alladin/execution/service.py`, √©ventuellement l'appel dans `src/alladin/orchestration/engine.py` et tests existants `tests/test_execution.py`, `tests/test_orchestration.py`/`test_daemon_modes.py`. Aucun nouveau module, aucune migration de base sauf n√©cessit√© d√©montr√©e.
-
-**Invariants.** Ne jamais ouvrir sur compte non DEMO ; ne jamais envoyer un ordre sans token, toucher une position √©trang√®re ou supprimer l'exigence de SL. Ne pas transformer un mode en LIVE. Une fermeture protectrice refus√©e doit laisser une alerte persistante et bloquer les nouvelles entr√©es via les contr√¥les existants ; ne pas boucler rapidement des ordres sans cadence/backoff. Ne pas supprimer/modifier une ligne de journal ant√©rieure. Respecter la politique de mode actuelle jusqu'√† r√©solution explicite de la proposition 013.
-
-**Tests avant.** Avec le venv, lancer `pytest -q tests/test_execution.py tests/test_orchestration.py tests/test_daemon_modes.py -p no:cacheprovider --basetemp=.test_tmp/claude_sl_before` et noter le r√©sultat ; v√©rifier `git status --short`. Ne pas lancer MT5 r√©el.
-
-**Modifications attendues.** Ajouter un test qui cr√©e une position poss√©d√©e sans SL, fait refuser la fermeture par le faux broker, appelle deux cycles de surveillance et v√©rifie alerte/retry ou √©tat de retry explicite au second cycle. Ajouter un test pour une position adopt√©e/non enregistr√©e et un autre pour une fermeture refus√©e juste apr√®s ouverture sans SL ; v√©rifier qu'aucun message ¬´ ferm√©e ¬ª ni succ√®s bool√©en n'est √©mis sans confirmation. Impl√©menter la correction minimale : d√©tection bas√©e sur l'√©tat **courant du broker** √† chaque cycle, r√©sultat de fermeture v√©rifi√©, journal d'√©chec persistant et r√©conciliation apr√®s succ√®s. Tester que les positions √©trang√®res restent ignor√©es et que la fermeture DEMO r√©ussie est finalis√©e. Si le mock ne sait pas simuler le refus, l'√©tendre seulement dans les fixtures/tests n√©cessaires.
-
-**Tests apr√®s.** Rejouer les tests cibl√©s, puis `pytest -q -p no:cacheprovider --basetemp=.test_tmp/claude_sl_full`, `ruff check src tests`, `mypy src`. Comparer `git diff` et d√©montrer qu'aucun plafond/profil/mode n'a √©t√© assoupli.
-
-**Crit√®res d'acceptation.** (a) une position encore sans SL reste d√©tect√©e au cycle suivant m√™me si le journal/trade a enregistr√© `stop_loss=None` ; (b) fermeture refus√©e/bloqu√©e est journalis√©e et jamais annonc√©e r√©ussie ; (c) r√©ussite confirm√©e arr√™te les retries ; (d) aucun ordre vers position √©trang√®re ; (e) tests de s√©curit√© existants et nouveaux verts ; (f) aucun changement du sens d'OBSERVE/PAPER.
-
-**Conditions d'arr√™t.** Si r√©soudre le cas exige de changer la politique d'envoi de CLOSE en OBSERVE/PAPER, de retirer un garde-fou, ou d'introduire une migration destructrice, arr√™ter le lot apr√®s tests qui reproduisent le d√©faut et pr√©senter le choix bloquant. Si la fermeture broker retourne un √©tat ambigu, ne pas d√©clarer succ√®s : journaliser l'incertitude et r√©concilier avant nouvelle action.
-
-**Hors scope.** SNN, Brain API, PAPER P&L, Mission Control, refonte g√©n√©rale du moniteur, trading LIVE, nouveaux brokers, strat√©gie de retry distribu√©e et migration de sch√©ma non n√©cessaire.
-
-## CLAUDE SESSION CHECKPOINT ‚Äî Lot B
-
-- **Date :** 2026-10-02 15:15 UTC+2
-- **Work package :** Lot B ‚Äî Contrat OBSERVE/PAPER/DEMO et environnement PAPER r√©el
-- **√âtat : COMPLETE**
-
-### Objectif
-
-Adopter DECISION-013 et impl√©menter le contrat de modes : OBSERVE (lecture stricte, aucun send_order), PAPER (simulation r√©elle avec PaperExperimentEngine, persistance, RiskEngine actif), DEMO (chemin s√©curis√© inchang√©).
-
-### Fichiers modifi√©s
-
-| Fichier | Changement |
-|---|---|
-| `docs/DECISIONS/DECISION-013-MODE-SAFETY.md` | Statut PROPOSED ‚Üí ADOPTED. Contrat formalis√© : OBSERVE strict read-only, PAPER simulation isol√©e avec persistence, DEMO avec fermetures protectrices. |
-| `src/alladin/execution/models.py` | `ExecStatus.PAPER_EXECUTED` ajout√© ‚Äî position paper cr√©√©e, aucun ordre broker. |
-| `src/alladin/journal/repository.py` | Table `paper_positions` ajout√©e (paper_id PK, run_id, symbol, side, volume, entry_price, sl, tp, status, pnl_pips, mfe_pips, mae_pips, etc.). M√©thodes CRUD : `insert_paper_position`, `update_paper_position`, `get_paper_position`, `list_paper_positions`. |
-| `src/alladin/market/paper.py` | `PaperExperimentEngine` enrichi : persistance via repo, `restore()` pour restart, `close_position_by_id()` pour close explicite, accepte `RiskDecision` pour sizing. `PaperPosition.to_persistence()` / `from_persistence()` pour s√©rialisation. |
-| `src/alladin/orchestration/engine.py` | `_run_cycle()` mode-aware : PAPER tick les positions paper, utilise submit(dry_run=True) + paper_engine.open_position. OBSERVE/PAPER : alerte critique sur SL supprim√© sans send_order. DEMO : fermeture protectrice inchang√©e. Import `PaperExperimentEngine`, attribut `paper_engine`. |
-| `src/alladin/orchestration/bootstrap.py` | `Components.engine()` cr√©e `PaperExperimentEngine` et appelle `restore()` en mode PAPER. Import `PaperExperimentEngine`. |
-| `tests/test_paper_engine.py` | 31 tests couvrant : isolation broker (SpyBroker qui RAISE sur send_order pour OBSERVE/PAPER/SL/TP/close/restart), DEMO conserv√©, OBSERVE alerte critique sans close, LIVE bloqu√©, PAPER lifecycle (open/SL/TP/close/P&L), persistance restart, double fill/close, DRY_RUN_APPROVED != EXECUTED, RiskEngine en PAPER, kill switch, journal, sizing, spread, round-trip persistence. |
-
-### R√©sultats de validation
-
-- Suite globale compl√®te : **309 passed, 3 skipped** (MT5 opt-in)
-- `ruff check src tests` : **All checks passed**
-- `mypy src` : **Success: no issues found in 77 source files**
-- `git diff --check` : aucune erreur
-
----
-
-## CLAUDE SESSION CHECKPOINT ‚Äî Lot A
-
-- **Date :** 2026-10-02 10:38 UTC+2
-- **Work package :** Lot A ‚Äî P0 s√©curit√© fermeture protectrice
-- **√âtat : COMPLETE**
-
-### Cause racine
-
-Trois d√©fauts combin√©s emp√™chaient la re-d√©tection et la fermeture fiable d'une position sans SL :
-
-1. `monitor.sync()` comparait `pos.sl` (broker) √† `trade.stop_loss` (DB). Apr√®s le premier cycle, la DB √©tait mise √† jour avec `stop_loss=None`, rendant la condition fausse au cycle suivant ‚Äî la position sans SL devenait invisible.
-2. `_close()` retournait `None` et ne v√©rifiait pas `result.accepted`. `close_position()` retournait `True` inconditionnellement.
-3. `engine._run_cycle()` ignorait le retour de `close_position()` ‚Äî aucune journalisation d'√©chec, aucun retry.
-
-### Fichiers modifi√©s
-
-| Fichier | Changement |
-|---|---|
-| `src/alladin/execution/service.py` | `_close()` retourne `bool` bas√© sur `result.accepted`, log l'√©chec. `close_position()` propage le r√©sultat. `close_all()` ne compte que les fermetures confirm√©es. `submit()` path no-SL : message distinct selon succ√®s/√©chec de la fermeture d'urgence. |
-| `src/alladin/orchestration/monitor.py` | `sync()` re-signale `sl_removed` chaque cycle si le broker montre `pos.sl is None`, ind√©pendamment de l'√©tat DB. |
-| `src/alladin/orchestration/engine.py` | `_run_cycle()` capture le retour de `close_position()` et journalise l'√©chec. |
-| `tests/test_execution.py` | 6 nouveaux tests de r√©gression (voir ci-dessous). |
-
-### Tests ajout√©s
-
-1. `test_close_position_returns_false_when_broker_refuses`
-2. `test_sl_removed_position_is_redetected_after_failed_close` (reproduit le bug P0)
-3. `test_successful_protective_close_stops_redetection`
-4. `test_close_failure_never_announces_success`
-5. `test_emergency_close_failure_on_submit_does_not_claim_success`
-6. `test_no_double_close_on_foreign_position_without_sl`
-
-### R√©sultats de validation
-
-- Tests cibl√©s (3 fichiers, 55 tests) : **55 passed**
-- Suite globale compl√®te : **all passed, 0 failed**
-- `ruff check src tests` : **All checks passed**
-- `mypy src` : **Success: no issues found in 77 source files**
-- `git diff --check` : **aucun probl√®me de whitespace**
-
-### Crit√®res d'acceptation satisfaits
-
-- (a) position sans SL re-d√©tect√©e au cycle suivant ‚úì
-- (b) fermeture refus√©e journalis√©e, jamais annonc√©e r√©ussie ‚úì
-- (c) fermeture confirm√©e arr√™te les retries ‚úì
-- (d) aucun ordre vers position √©trang√®re ‚úì
-- (e) tests de s√©curit√© existants et nouveaux verts ‚úì
-- (f) aucun changement du sens OBSERVE/PAPER ‚úì
-
-### D√©cisions techniques
-
-- La re-d√©tection utilise un `if pos.sl is None and ticket not in rep.sl_removed` s√©par√© du bloc de comparaison SL/TP, pour couvrir aussi le cas o√π seul TP change avec SL toujours absent.
-- Pas de backoff explicite introduit : le cycle naturel du daemon sert de cadence. Chaque cycle tente au plus une fermeture par position sans SL.
-- `close_all()` ne compte d√©sormais que les fermetures broker-confirm√©es.
-
-### Prochaine √©tape (Lot A)
-
-Lot B selon le plan : r√©solution du contrat OBSERVE/PAPER (DECISION-013). Requiert l'adoption formelle de la proposition avant impl√©mentation.
-
----
-
-## CLAUDE IMPLEMENTATION WAVE 2 CHECKPOINT ‚Äî 2026-10-02 15:20 GMT+2
-
-### LOT B ‚Äî Modes et PAPER
-**STATUS: COMPLETE** (commit 926a9c8)
-
-**OBJECTIVE:** R√©soudre le contrat OBSERVE/PAPER/DEMO (DECISION-013), rendre PAPER r√©ellement simul√© et persistant.
-
-**IMPLEMENTED:**
-- DECISION-013 promu de PROPOSED √† ADOPTED
-- `ExecStatus.PAPER_EXECUTED` ajout√© √† `execution/models.py`
-- `PaperExperimentEngine` r√©√©crit avec persistance SQLite (`paper_positions` table dans `journal/repository.py`)
-- `PaperExperimentEngine` accepte `RiskDecision` pour volume/SL/TP du risk engine
-- `PaperExperimentEngine.restore()` pour survie au restart
-- `OrchestrationEngine._run_cycle()` mode-aware : PAPER tick, DEMO protective close, OBSERVE/PAPER alert-only
-- `bootstrap.py` c√¢ble `PaperExperimentEngine` avec auto-restore en mode PAPER
-
-**FILES:** `src/alladin/execution/models.py`, `src/alladin/market/paper.py`, `src/alladin/orchestration/engine.py`, `src/alladin/orchestration/bootstrap.py`, `src/alladin/journal/repository.py`, `docs/DECISIONS/DECISION-013-MODE-SAFETY.md`, `docs/DECISIONS/README.md`
-
-**TESTS ADDED:** `tests/test_paper_engine.py` (31 tests : broker isolation, DEMO preserved, OBSERVE alert, LIVE blocked, PAPER lifecycle, persistence, dry_run, risk engine, journal, sizing)
-
-**TESTS RUN:** 31/31 passed (+ suite compl√®te green)
-
-**ARCHITECTURAL DECISIONS:**
-- PAPER utilise `submit(dry_run=True)` pour validation risque, puis `paper_engine.open_position()` ‚Äî jamais `broker.send_order`
-- SpyBroker pattern : RAISES sur `send_order` pour prouver l'isolation OBSERVE/PAPER
-- Protective close en OBSERVE/PAPER = critical alert log (pas de close broker)
-
-**KNOWN LIMITATIONS:** Commit local 926a9c8, push bloqu√© par r√©seau lors de la session pr√©c√©dente.
-
----
-
-### LOT C ‚Äî Donn√©es causales et replay
-**STATUS: COMPLETE**
-
-**OBJECTIVE:** Fiabiliser archive, replay causal, provenance, doublons contradictoires, fen√™tres compl√®tes, fingerprint dataset.
-
-**IMPLEMENTED:**
-- `Bar` model : ajout `available_at: datetime | None` et `provenance: str | None` dans `core/models.py`
-- `BrokerCapabilities` dataclass dans `brokers/base.py` : `name`, `has_tick`, `has_bars`, `has_spread`, `has_close_time`, `has_tick_volume`, `has_real_volume`, `supported_timeframes`, `max_bars`, `provenance_tag`
-- `BrokerAdapter.capabilities()` m√©thode par d√©faut
-- `MockBroker.capabilities()` et `MT5Broker.capabilities()` surcharg√©s
-- `MarketDataArchive` migre additivement SQLite, conserve `close_time`/`is_closed`/`available_at`/`provenance`, compare chaque doublon et refuse toute contradiction ; le compte d'insertions et `_last` refl√®tent les lignes r√©elles, m√™me apr√®s une insertion tardive.
-- `cycle_input_bars` conserve les timestamps exacts de chaque fen√™tre par cycle ; `cycle_inputs` conserve le cutoff observ√© et le fingerprint SHA-256 des barres canoniquement ordonn√©es. Les deux tables sont immuables sous SQLite.
-- Le scanner v√©rifie la cl√¥ture et la disponibilit√© des barres au cutoff de d√©cision, archive leur provenance, puis emploie les barres relues depuis l'archive comme entr√©e du calcul. Le mock ne fournit plus de barre en cours.
-- `ReplayContext.from_cycle()` restitue les `Bar` exactes par symbole et timeframe, sans √©criture ni broker fetch ; manifeste absent, barre manquante, fingerprint divergent ou disponibilit√© future produisent un √©chec explicite.
-
-**FILES:** `src/alladin/core/models.py`, `src/alladin/brokers/base.py`, `src/alladin/brokers/mock.py`, `src/alladin/brokers/mt5.py`, `src/alladin/market/archive.py`, `src/alladin/market/scanner.py`, `src/alladin/replay.py`, `tests/test_observability.py`, `tests/test_research_replay.py`
-
-**TESTS RUN:** C1+C2 : 57 tests cibl√©s PASS. C3-C5 : 38 tests cibl√©s PASS ; suite compl√®te 317 PASS, 3 tests d'int√©gration MT5 ignor√©s ; ruff PASS, mypy PASS, `git diff --check` PASS.
-
-**DECISIONS:** Le premier cutoff d'observation devient `available_at` lorsque le broker ne fournit pas cet instant ; une nouvelle lecture conserve cette valeur immuable. Une ancienne archive sans manifeste exact ou preuve de disponibilit√© reste lisible, mais son replay causal √©choue. Le fingerprint couvre les donn√©es stock√©es et leur ordre canonique, jamais un √©tat du runtime.
-
-**LIMITES:** Les anciennes fen√™tres C pr√©existantes sans manifeste ne sont pas reconstructibles exactement. Le replay reconstruit les entr√©es historiques ; il ne r√©ex√©cute pas encore le moteur de d√©cision ni les ordres. Pour les fournisseurs sans `close_time`, la cl√¥ture est d√©duite de `time + dur√©e du timeframe`.
-
-**NEXT EXACT ACTION:** Lot D : banc exp√©rimental causal commun aux baselines classiques et au futur cerveau, selon la section ¬´ Unit√©s d'impl√©mentation ¬ª ci-dessus.
-
----
-
-### LOT D ‚Äî Banc exp√©rimental commun
-**STATUS: PARTIAL**
-
-**IMPLEMENTED (D1):** `StrategyExperiment` conserve facultativement le fingerprint SHA-256 et la provenance du dataset comme paire valid√©e ; migration SQLite additive. Les exp√©riences et r√©sultats sont idempotents si identiques, contradictoires si le m√™me ID d√©signe un autre contenu, et immuables sous SQLite. Les r√©sultats n√©gatifs sont conserv√©s. `passed` reste un r√©sultat technique et ne modifie pas `StrategyVersion.status`. Les identifiants de trades du backtest sont reproductibles pour une entr√©e identique.
-
-**FILES:** `src/alladin/research/{models,repository,backtest}.py`, `tests/{test_daemon_modes,test_backtest}.py`.
-
-**LIMITES:** Les anciennes exp√©riences sans fingerprint/provenance restent lisibles et ne prouvent pas la comparabilit√©. Le moteur de fill/co√ªt commun, le contrat de spread BTC, les labels/purge et la comparaison OOS restent √† impl√©menter avant de d√©clarer le lot D complet.
-
-**NEXT EXACT ACTION:** Lot D2 : d√©finir et tester un m√™me contrat de fill/co√ªts/R pour la baseline et BTC, en r√©utilisant `research/r_analytics.py`, puis enregistrer la configuration de co√ªts et le fingerprint du dataset dans chaque exp√©rience comparable. Pr√©server les r√©sultats historiques comme baselines non comparables.
-
-## CODEX SESSION CHECKPOINT
-
-DATE: 2026-10-02 (Europe/Paris)
-
-CURRENT LOT: D ‚Äî banc exp√©rimental commun
-
-STATUS: PARTIAL
-
-OBJECTIVE: Rendre les exp√©riences tra√ßables et leurs r√©sultats immuables avant d'unifier les simulations classiques et BTC.
-
-IMPLEMENTED: `StrategyExperiment` porte une paire facultative `dataset_fingerprint` (SHA-256 hexad√©cimal) / `dataset_provenance`. `ResearchRepository` migre les bases SQLite existantes, restitue cette paire, accepte l'enregistrement identique, refuse un m√™me ID au contenu contradictoire, et interdit UPDATE/DELETE des exp√©riences et r√©sultats via triggers SQLite. Les r√©sultats n√©gatifs restent visibles ; `ExperimentResult.passed` ne promeut pas `StrategyVersion`. `BacktestRunner` produit des IDs de trades d√©terministes √† entr√©e identique.
-
-FILES MODIFIED: `src/alladin/research/models.py`, `src/alladin/research/repository.py`, `src/alladin/research/backtest.py`, `tests/test_daemon_modes.py`, `tests/test_backtest.py`, `docs/IMPLEMENTATION_PLAN.md`.
-
-TESTS ADDED: Persistance et validation de la provenance, migration SQLite ancienne, idempotence et rejet des contradictions, immutabilit√© SQL, conservation d'un r√©sultat n√©gatif, absence de promotion automatique, reproductibilit√© des IDs et m√©triques de backtest.
-
-TESTS RUN: 5 tests cibl√©s Research et backtest ; ruff ; mypy ; `git diff --check`. Suite compl√®te du Lot C avant D : 317 passed, 3 skipped MT5.
-
-RESULTS: 5 passed ; ruff/mypy/diff-check verts. La suite compl√®te n'a pas √©t√© relanc√©e apr√®s D.
-
-ARCHITECTURAL DECISIONS: Une exp√©rience ancienne sans paire fingerprint/provenance reste lisible mais ne prouve pas la comparabilit√©. Une r√©p√©tition identique est idempotente ; un r√©sultat contradictoire ne peut pas remplacer silencieusement l'ancien. Le r√©sultat technique et le statut de promotion restent distincts.
-
-KNOWN LIMITATIONS: Lot D non termin√©. Aucun contrat partag√© de fill/co√ªts/R entre `BacktestRunner` et `BTCThreeWayEngine` ; pas encore de spread BTC sourc√© dans ce contrat, ni de preuve de comparaison OOS ou d'int√©gration automatique du fingerprint archive dans chaque exp√©rience.
-
-REMAINING WORK: Contrat commun de simulation et co√ªts, tests de parit√© baseline/BTC, gaps/intrabar/slippage/frais, preuve de causalit√© labels/purge et OOS hors r√©glage, puis validation du lot D complet.
-
-NEXT EXACT ACTION: Adapter `BTCThreeWayEngine` pour produire des `FillRecord` comparables, puis int√©grer le fingerprint archive dans chaque exp√©rience. Voir checkpoint Wave 3 ci-dessous.
-
----
-
-## CLAUDE IMPLEMENTATION WAVE 3 CHECKPOINT ‚Äî 2026-10-03 01:30 GMT+2
-
-### LOT D2 ‚Äî Contrat commun de fill/co√ªts/R
-**STATUS: COMPLETE**
-
-**OBJECTIVE:** D√©finir un contrat de fill/co√ªts explicite et immutable permettant la comparaison √©quitable entre syst√®mes de d√©cision distincts (backtester classique, futur BTC, futur SNN).
-
-**ROOT CAUSE / MOTIVATION:** Le `BacktestRunner` et le `BTCThreeWayEngine` calculaient P&L, co√ªts et R de mani√®re ind√©pendante avec des conventions diff√©rentes (loss_per_lot vs fee_bps, compute_r vs calcul manuel). Sans contrat commun, aucune comparaison scientifique n'est fiable.
-
-**IMPLEMENTED:**
-- `CostCategory` (StrEnum): classifie chaque composante de co√ªt comme OBSERVED, MODELED ou ZERO
-- `CostModel` (frozen dataclass): convention de co√ªts explicite; deux exp√©riences ne sont comparables que si elles partagent le m√™me CostModel
-- `FillRecord` (frozen dataclass): contrat de fill commun capturant symbol, side, prix entry/exit, SL/TP, timing, exit_reason, volume, spread_cost, slippage_cost, commission, swap, gross_pnl, net_pnl, initial_risk, r_multiple, cost_model, trade_id, experiment_id
-- `BacktestRunner.__init__()` construit un `CostModel` refl√©tant sa configuration (spread=MODELED, commission/slippage=MODELED si >0 sinon ZERO, swap=ZERO)
-- `BacktestRunner._finalize_trade()` produit un `FillRecord` pour chaque trade, avec `r_multiple == r_metrics.realized_r` et `initial_risk == r_metrics.initial_risk` (garantie de parit√© exacte)
-- `BacktestTrade.fill: FillRecord | None` ajout√© (backward-compatible, None par d√©faut)
-
-**FILES:** `src/alladin/research/r_analytics.py`, `src/alladin/research/backtest.py`, `tests/test_backtest.py`
-
-**TESTS ADDED:** 17 tests de parit√© dans `TestFillRecordParity`:
-- FillRecord existe sur chaque trade
-- FillRecord est immutable (frozen)
-- `r_multiple == r_metrics.realized_r` sur tous les trades (avec co√ªts vari√©s)
-- `initial_risk` coh√©rent entre fill et r_metrics
-- CostModel refl√®te la configuration du runner
-- `net_pnl == gross_pnl - slippage - commission + swap` (v√©rification alg√©brique)
-- R d√©rivable des valeurs mon√©taires (`net_pnl / initial_risk ‚âà r_multiple`)
-- LONG winner / LONG loser (param√©tr√©)
-- SHORT trade avec side=-1
-- SL exit avec exit_reason contenant "SL" et R <= 0
-- END_OF_DATA exit captur√©
-- spread_cost >= 0
-- Zero-cost runner: gross_pnl == net_pnl
-- trade_id coh√©rent entre fill et position
-- symbol et timing coh√©rents
-- Parit√© compl√®te avec spread + commission + slippage + volume + loss_per_lot
-
-**TESTS RUN:** 51 tests cibl√©s backtest (34 existants + 17 nouveaux) PASS ; suite compl√®te 336 passed, 3 skipped MT5 ; ruff PASS ; mypy PASS (77 fichiers) ; `git diff --check` PASS.
-
-**ARCHITECTURAL DECISIONS:**
-- `compute_r()` reste INCHANG√â : le FillRecord est une couche additionnelle, pas un remplacement
-- `r_multiple` et `initial_risk` dans le FillRecord sont directement pris de `r_metrics` pour garantie de parit√© exacte (pas de divergence par arrondi)
-- Les valeurs mon√©taires (gross_pnl, net_pnl, costs) sont calcul√©es ind√©pendamment depuis les m√™mes prix/volumes ‚Äî les tests v√©rifient la coh√©rence alg√©brique
-- Le spread est MODELED (param√®tre fixe spread_pips), pas OBSERVED (on ne lit pas le bid/ask r√©el du march√© historique)
-- Le FillRecord est frozen (immutable) pour pr√©venir toute mutation post-construction
-
-**CAUSALITY GUARANTEES:**
-- Aucun changement aux garanties causales du Lot C (archive, replay, available_at)
-- Le FillRecord ne modifie pas le timing d'ex√©cution du backtest (pending signal ‚Üí next bar open)
-- Aucune information future n'est utilis√©e dans le calcul des co√ªts ou du R
-
-**KNOWN LIMITATIONS:**
-- `BTCThreeWayEngine` n'utilise pas encore le contrat commun ‚Äî il calcule P&L/R manuellement avec ses propres conventions (fee_bps)
-- Pas encore d'int√©gration automatique du fingerprint archive dans chaque exp√©rience
-- Pas encore de preuve de comparaison OOS hors r√©glage
-- Pas de preuve de labels/purge causaux dans le contrat de fill
-- L'adaptateur BTC natif reste √† cr√©er (les symboles MT5 BTC/ETH sont des ETF Grayscale, PAS du spot crypto)
-
-**REMAINING WORK (Lot D3+):**
-1. Adapter `BTCThreeWayEngine._close_position()` pour produire un `FillRecord` avec le m√™me contrat
-2. Int√©grer le fingerprint archive dans `StrategyExperiment` automatiquement lors du backtest
-3. Prouver la causalit√© labels/purge dans le pipeline de splits
-4. Preuve de comparaison OOS hors r√©glage
-5. Baseline fairness : v√©rifier qu'une strat√©gie classique et le futur SNN sont √©valu√©s sous les m√™mes √©conomies
-
-**NEXT EXACT ACTION:** Voir Wave 4 ci-dessous ‚Äî Lot D est COMPLETE.
-
----
-
-## CLAUDE IMPLEMENTATION WAVE 4 ‚Äî LOT D FINALIZATION ‚Äî 2026-10-03 02:00 GMT+2
-
-### LOT D ‚Äî Banc exp√©rimental commun
-**STATUS: COMPLETE**
-
-#### D1 ‚Äî Provenance exp√©rimentale (session pr√©c√©dente)
-- `StrategyExperiment` avec `dataset_fingerprint`/`dataset_provenance` pair valid√©
-- Immutabilit√© SQLite (triggers UPDATE/DELETE interdits)
-- Idempotence (m√™me ID + m√™me contenu = silencieux; contenu contradictoire = erreur)
-- IDs de trades d√©terministes (`uuid5` sur cl√© composite)
-
-#### D2 ‚Äî Contrat commun fill/co√ªts/R (Wave 3)
-- `CostCategory` (OBSERVED/MODELED/ZERO), `CostModel`, `FillRecord` dans `r_analytics.py`
-- `BacktestRunner` produit un `FillRecord` par trade via `_finalize_trade()`
-- Parit√© exacte : `fill.r_multiple == r_metrics.realized_r`, `fill.initial_risk == r_metrics.initial_risk`
-- 17 tests de parit√©
-
-#### D3 ‚Äî Cross-engine parity (Wave 4)
-- `BTCThreeWayEngine._close_position()` produit un `FillRecord` avec `CostModel(spread=OBSERVED, commission=MODELED)`
-- `BTCExperimentPosition.fill: FillRecord | None` ajout√©
-- Duplicate P&L/R logic √©limin√© : `pnl_usdt` et `pnl_r` d√©riv√©s des m√™mes calculs que le FillRecord
-- Tests de parit√© cross-engine : LONG/SHORT winner/loser √† co√ªts z√©ro ‚Üí R identique ; avec commission ‚Üí gross/net identiques, R diff√®re car BacktestRunner inclut commission dans initial_risk (document√©, pas un bug)
-
-#### D4 ‚Äî Dataset/experiment provenance binding (Wave 4)
-- `BacktestResult.to_experiment()` cr√©e un `StrategyExperiment` avec fingerprint, provenance et cost_model_label
-- Le fingerprint dataset provient du syst√®me d'archive (fronti√®re explicite : le caller fournit le fingerprint)
-- Le cost_model_label est stock√© dans `parameters["cost_model"]`
-- Tests de reproductibilit√© : m√™me entr√©e ‚Üí m√™mes trade IDs et R ; co√ªt diff√©rent ‚Üí √©conomies diff√©rentes ; fingerprint diff√©rent pour donn√©es diff√©rentes ; fingerprint/provenance doivent √™tre pair√©s
-
-#### D5 ‚Äî OOS structural guarantee (Wave 4)
-- Les trades OOS n'existent que dans la fen√™tre OOS (test√©)
-- TRAIN et OOS ne se chevauchent pas (purge/embargo cr√©e un gap, test√©)
-- La strat√©gie ne voit que le pass√© pendant OOS (d√©tecteur anti-lookahead, test√©)
-
-#### Functional End-to-End Path
-- Test complet : barres historiques ‚Üí fingerprint ‚Üí BacktestRunner ‚Üí FillRecord ‚Üí R ‚Üí StrategyExperiment ‚Üí ExperimentResult
-- Cha√Æne de provenance : dataset identity + cost model + strategy ‚Üí r√©sultat tra√ßable
-
-**CROSS-ENGINE PARITY:**
-- Zero-cost : BacktestRunner et BTCThreeWayEngine produisent des gross_pnl, net_pnl, initial_risk et R identiques
-- With costs : gross et net pnl identiques ; R diff√®re car BacktestRunner inclut commission/slippage dans initial_risk tandis que BTCThreeWayEngine utilise uniquement le risque de prix ‚Äî diff√©rence architecturale document√©e et test√©e
-
-**DATASET/PROVENANCE:**
-- `StrategyExperiment.dataset_fingerprint` (SHA-256 hex, 64 chars) lie l'exp√©rience au dataset exact
-- `StrategyExperiment.dataset_provenance` identifie la source (archive, fichier, etc.)
-- Les deux doivent √™tre fournis ensemble (validation Pydantic)
-- Le cost model est enregistr√© dans parameters pour tra√ßabilit√©
-
-**OOS GUARANTEE:**
-- TRAIN < VALIDATION < OOS strictement chronologique
-- Purge/embargo configurable (`DatasetSplitConfig.purge_bars`, `embargo_bars`)
-- Anti-lookahead prouv√© par d√©tecteur de barres visibles
-
-**FILES MODIFIED:**
-- `src/alladin/research/r_analytics.py`, `src/alladin/research/backtest.py`, `src/alladin/research/btc_experiment.py`
-- `tests/test_backtest.py` (+27 tests), `tests/test_btc_experiment.py` (+8 tests)
-- `docs/IMPLEMENTATION_PLAN.md`
-
-**TESTS:** 354 passed, 3 skipped ; ruff PASS ; mypy PASS (77 fichiers) ; `git diff --check` PASS
-
-**KNOWN LIMITATIONS:**
-- Le cost_model n'est pas dans le sch√©ma SQLite d√©di√© ‚Äî stock√© dans parameters JSON
-- L'adaptateur BTC natif reste √† cr√©er (symboles MT5 BTC/ETH = ETF Grayscale, pas spot crypto)
-- Le purge/embargo est configurable mais pas contraint au niveau du repository
-
-**NEXT EXACT LOT:** Lot E ‚Äî Brain API et lifecycle.
-
----
-
-## CODEX CHECKPOINT ‚Äî LOT E : Brain interface et cycle d√©cision/position (2026-10-03)
-
-**√âtat :** fronti√®re architecturale livr√©e ; aucune impl√©mentation SNN.
-
-### Audit du code avant changement
-
-- Le runtime r√©el √©tait `MarketScanner ‚Üí StrategyRouter ‚Üí Strategy.evaluate ‚Üí AgentAdapter.propose ‚Üí AgentIntentDraft ‚Üí TradeIntent ‚Üí ExecutionService.submit ‚Üí RiskEngine ‚Üí broker`. Le `TradeIntent` est la proposition d'entr√©e historique ; `RiskDecision.intent_id` reliait le risque √† l'intention.
-- Les `Opportunity` √©taient journalis√©es avec des IDs al√©atoires, sans lien enregistr√© dans `TradeIntent`, `RiskDecision` ou `TradeRecord`. Un `cycle_id` existait dans le journal et les trades.
-- Les protections (SL retir√©, close d'urgence, watchdog) s'ex√©cutaient hors chemin de d√©cision de l'agent. OBSERVE/PAPER √©taient sans ordres broker dans les cycles test√©s ; DEMO passait par token et v√©rification de compte.
-- La documentation SNN/DECISION-011 d√©crit la gestion autonome des positions comme cible ; le code ne poss√®de pas encore de politique RiskEngine ni de capacit√©s broker pour MODIFY_STOP, MODIFY_TARGET et PARTIAL_CLOSE. Le CLI conserve les anciens agents LLM optionnels, malgr√© la cible ¬´ runtime H24 sans LLM ¬ª de DECISION-006. Ce lot ne change pas ces modes de lancement.
-
-### Contrat v1
-
-`src/alladin/brain.py` d√©finit `Brain.decide(BrainContext) -> ActionProposal` et `ClassicBrainAdapter`. `BrainContext` contient run, cycle, timestamp, mapping symbole ‚Üí opportunit√© qualifi√©e et snapshot JSON de march√©/contexte ; aucun objet broker, service d'ex√©cution, secret ou jeton n'est transmis. Le `ClassicBrainAdapter` appelle l'agent historique sans changer son classement ou sa s√©lection et transforme `TRADE`/`NO_TRADE` en proposition explicite.
-
-`ActionProposal` est immuable, interdit les champs inconnus et exige `schema_version=1`, `proposal_id`, `source_id`, `source_version`, `run_id`, `cycle_id`, `opportunity_id` pour une action de march√©, `symbol`, `action`, `timestamp`, raisons structur√©es (`list[str]`), confiance facultative et `ProposalParameters` valid√©s. Actions : LONG, SHORT, NO_TRADE, HOLD, CLOSE, MODIFY_STOP, MODIFY_TARGET, PARTIAL_CLOSE. L'identit√© `AP-uuid5(run, cycle, opportunit√©, source, version source)` est stable pour un m√™me point de d√©cision ; une version de source √©met au plus une proposition par opportunit√© et cycle. Les opportunit√©s utilisent d√©sormais `OPP-uuid5(run, cycle, symbole)`. Version inconnue, action inconnue, symbole absent, confiance/fraction invalide, valeur de modification absente, param√®tres contradictoires et ID forg√© sont rejet√©s.
-
-### Flux et √©chec
-
-Une entr√©e valide est convertie en `TradeIntent` avec `intent_id=proposal_id`, puis √©valu√©e par **le RiskEngine existant**, sans r√®gle de sizing ni voie d'√©valuation sp√©ciale. Le contr√¥le de shortlist et de version de strat√©gie reste en place. La confiance du `TradeIntent` est d√©sormais facultative comme dans le contrat Brain ; le RiskEngine ne l'utilise pas. `ExecutionService` √©crit `proposal_id`/`opportunity_id` dans la d√©cision de risque et dans `TradeRecord`; une migration SQLite additive nullable pr√©serve les anciennes lignes. Les √©v√©nements append-only `decision.action_proposal`, `decision.brain_failure`, `position.action` et `position.action_rejected` compl√®tent le journal. Les √©v√©nements de position PAPER exposent les IDs tir√©s de leur intention persist√©e ; les cl√¥tures DEMO journalisent les IDs du trade.
-
-`NO_TRADE` intentionnel est une proposition persist√©e et li√©e √† `decision.no_trade`. Exception, indisponibilit√©, proposition malform√©e ou incoh√©rence run/cycle/source/opportunit√© produisent un √©v√©nement d'√©chec et `NO_TRADE`, sans appel d'ex√©cution. Les propositions de gestion traversent une porte d√©terministe `RiskEngine.evaluate_position_action` : ownership, mode DEMO, type de compte, kill switch et √©tat du run sont v√©rifi√©s ; seul HOLD peut √™tre approuv√©, sans ordre. CLOSE/MODIFY_STOP/MODIFY_TARGET/PARTIAL_CLOSE sont rejet√©s avec motif `POSITION_ACTION_UNSUPPORTED` tant que les capacit√©s et r√®gles d'ex√©cution n'existent pas. Le monitor/close protecteur DEMO pr√©c√®de l'appel Brain et reste ind√©pendant de sa disponibilit√©. OBSERVE reste lecture stricte, PAPER passe par simulation, DEMO garde le broker s√©curis√©, LIVE reste interdit.
-
-### Replay et compatibilit√©
-
-L'archive et `ReplayContext.from_cycle` restent inchang√©s : le replay restitue les barres archiv√©es et l'√©v√©nement de proposition, sans fetch broker. Les IDs utilisent run/cycle/opportunit√©/source, sans donn√©e future ; les m√™mes entr√©es archiv√©es peuvent √™tre compar√©es plus tard avec une version de cerveau fix√©e. Le banc Lot D (`CostModel`, `FillRecord`, R, splits OOS) n'a pas √©t√© modifi√©. Les fixtures classiques conservent TRADE/NO_TRADE, risque et mode d'ex√©cution ; seules les repr√©sentations/IDs/journaux causaux s'ajoutent.
-
-### Validation
-
-Tests cibl√©s : validation du sch√©ma, identit√©/version, NO_TRADE explicite, adaptateur classique, erreur/malformation/horodatage Brain, risque/rejet, DEMO/PAPER/OBSERVE, HOLD et propri√©t√© de position, liens journal et replay, protection ind√©pendante, migration SQLite additive. R√©f√©rence avant Lot E : 36 tests orchestration/modes pass√©s. Validation finale : 368 tests pass√©s, 3 tests d'int√©gration MT5 saut√©s ; `ruff check src tests`, `mypy src` et `git diff --check` pass√©s. Aucun ordre r√©el pendant les tests (MockBroker).
-
-### Limites et prochain lot exact
-
-Le socket accepte les actions de gestion mais n'active que HOLD sans ordre. `BrainContext` fournit ticket/ID de trade et liens causaux pour les positions DEMO poss√©d√©es, mais pas encore une vue canonique unifi√©e avec PAPER. `BrokerCapabilities` n'annonce pas les primitives de modification/fermeture partielle. L'identit√© d'une position PAPER reste son `paper_id` distinct du trade DEMO. La persistance de la proposition ne capture pas encore un hash complet des features ni l'√©tat interne d'un cerveau futur.
-
-**NEXT :** impl√©menter et tester une politique d√©terministe de gestion par position dans RiskEngine/ExecutionService (ownership, position ID canonique DEMO/PAPER, capacit√©s broker, mode, kill switch, challenge, confirmation de r√©sultat), puis unifier la vue des positions poss√©d√©es dans BrainContext. Pr√©server les sorties protectrices ind√©pendantes. Apr√®s cette preuve seulement, envisager un cerveau SNN exp√©rimental ; ne pas le d√©marrer dans le Lot E.
-
-
----
-
-## PLATFORM CHECKPOINT ‚Äî ALLADIN / JAFAR SHARED CORE ‚Äî 2026-10-03
-
-**STATUS:** architectural decisions recorded, runtime Jafar not implemented.
-
-### Adopted decisions
-- DECISION-014 ‚Äî isolated Alladin/Jafar workspaces over shared core.
-- DECISION-015 ‚Äî broker/account bindings and capabilities; no hardcoded Exness/MT5 domain model.
-- DECISION-016 ‚Äî future global Command Center with distinct Alladin/Jafar identities and read-only supervision semantics.
-
-### Current invariant
-```text
-Workspace Market/Context
-    -> Brain
-    -> ActionProposal
-    -> deterministic Risk
-    -> Execution
-    -> BrokerAdapter / AccountBinding
-```
-
-### Isolation requirements
-Workspace-scoped mutable state: runs/cycles, universe, strategies, Brain/checkpoints, positions, risk/working-capital/challenge state, research configuration and broker/account binding.
-
-### Jafar direction
-Crypto-oriented workspace with deep-red/crimson UI identity, able to use a crypto-capable MT5 broker when compatible, while preserving the option of future native crypto/exchange adapters. Shared engine does not imply shared learned parameters.
-
-### Real-money boundary
-LIVE remains blocked. Future real-account support requires explicit promotion gates, capability verification, reconciliation, kill switch, auditability and human activation.
-
-### Recommended dependency ordering
-1. Complete deterministic position-management lifecycle: CLOSE / MODIFY_STOP / MODIFY_TARGET / PARTIAL_CLOSE with confirmation semantics.
-2. Unify owned-position identity/view across DEMO/PAPER and extend broker capabilities.
-3. Introduce explicit workspace/account isolation primitives.
-4. Add Jafar runtime skeleton on the shared core.
-5. Add global Command Center and workspace switch.
-6. Only then specialize crypto Brain/research/runtime and evaluate candidate brokers/adapters.
-
-
-### Decision-registry audit ‚Äî 2026-10-03
-
-Apr√®s audit crois√© des d√©cisions de conception d√©j√† prises et du registre, les d√©cisions 017 √† 022 ont √©t√© ajout√©es pour rendre explicites les contraintes d√©j√† utilis√©es par les lots C/D/E et la roadmap : causal replay, parit√© exp√©rimentale, fronti√®re Brain/ActionProposal, promotion contr√¥l√©e, univers broker dynamique et gouvernance Strategy Harvester. Voir `docs/DECISIONS/README.md`.
-
-## Lot F ‚Äî checkpoint partiel d'urgence (2026-10-03)
-
-- R√©alis√© : mod√®le canonique `OwnedPosition`, r√©f√©rence `position_id` dans `ActionProposal` et vue positions dans `BrainContext`; capacit√©s explicites close/partial/SL/TP/reconciliation; primitive broker `MODIFY`; jeton de gestion li√© √† la proposition; comportements d√©terministes MockBroker pour modification et fermeture partielle; requ√™te MT5 `TRADE_ACTION_SLTP`.
-- Incomplet : r√®gles `RiskEngine.evaluate_position_action`, orchestration via `ExecutionService`, PAPER, confirmation/r√©conciliation, idempotence, journal complet, migrations et matrice de tests Lot F.
-- Validation ex√©cut√©e : Ruff sur les sept fichiers Python modifi√©s; `tests/test_agents.py` et `tests/test_mt5_broker.py` (38 tests); `git diff --check`. Tout est vert. Une premi√®re commande pytest a √©chou√© uniquement car `tests/test_brain.py` n'existe pas.
-- Limite : ce checkpoint ne rend pas encore les actions Lot F ex√©cutables depuis le Brain; le garde-fou Lot E continue donc √† les rejeter.
-- Reprise exacte : compl√©ter d'abord le contexte et la d√©cision d√©terministe de gestion, puis brancher `ExecutionService`, PAPER, r√©conciliation/idempotence/journal et ajouter la matrice cibl√©e avant de d√©clarer Lot F termin√©.
-
-### Lot F ‚Äî s√©curisation des primitives broker (2026-10-03, reprise Codex)
-
-L'audit de `72adaab` a identifi√© des d√©fauts √† corriger avant l'activation des actions de gestion.
-
-- MT5 `MODIFY` relit la position par ticket, v√©rifie symbole/magic/comment et inclut explicitement les deux protections dans `TRADE_ACTION_SLTP`. Le SL ou TP non demand√© est conserv√© depuis la position fra√Æche ; une position absente, une lecture impossible ou une modification vide est refus√©e avant `order_check`/`order_send`.
-- Les nouveaux jetons de gestion exigent `request=` et lient l'approbation √† la requ√™te compl√®te, notamment ticket, sens, SL/TP, volume et identit√©. Une requ√™te modifi√©e apr√®s approbation est refus√©e. Les jetons historiques OPEN/CLOSE restent compatibles ; MODIFY exige un jeton li√© √† la requ√™te compl√®te.
-- MockBroker v√©rifie symbole/magic/comment pour CLOSE/MODIFY. Une fermeture exige le sens oppos√© et un volume fini respectant le minimum/pas, sans reliquat non n√©gociable. La fermeture partielle valide conserve le ticket, SL/TP et le volume restant.
-- Tests : `tests/test_position_primitives.py` ajoute 36 cas ; le faux module MT5 simule SLTP sans fermer la position ni cr√©er de deal. Suite compl√®te : 404 tests pass√©s, 3 int√©grations MT5 saut√©es ; Ruff, mypy et `git diff --check` propres. Aucun terminal ni ordre externe utilis√©.
-
-**Limites : Lot F reste incomplet.** Le RiskEngine/orchestrateur continue de refuser CLOSE/MODIFY/PARTIAL_CLOSE propos√©s par le Brain. Ces correctifs ne constituent ni une politique de gestion, ni une confirmation apr√®s ex√©cution, ni l'idempotence. La conservation SL/TP repose sur un snapshot frais mais n'est pas atomique vis-√†-vis d'une modification concurrente au terminal ; la confirmation/r√©conciliation reste indispensable dans la suite du lot. Validation r√©elle MT5 √† effectuer sur Windows avant activation. Aucune migration de base, aucun changement UI/SNN/Jafar.
-
-**Reprise exacte :** impl√©menter la politique d√©terministe de gestion et le contexte canonique DEMO/PAPER, puis ExecutionService, confirmation/r√©conciliation, idempotence et journal. Garder les actions d√©sactiv√©es jusqu'√† validation de cette cha√Æne.
-
-### Lot F ‚Äî politique de risque et vues de positions (reprise Codex, 2026-10-03)
-
-`RiskEngine.plan_position_action` produit d√©sormais un plan d√©terministe sans jeton ex√©cutable ni effet broker. `PositionActionContext` porte la position canonique, le run/mode/compte, les horodatages, tick/spec, capacit√©s, √©tat du run et kill switch. Le contrat de proposition est revalid√© avant √©valuation. Les contr√¥les couvrent identit√© canonique/ticket/liens causaux, OPEN, s√©paration DEMO/PAPER/OBSERVE, compte DEMO, kill switch/√©tat terminal, donn√©es finies et coh√©rentes, fra√Æcheur (60 secondes maximum, aucun timestamp futur), permissions DEMO et capacit√©s/r√©conciliation.
-
-Politique conservative : HOLD sans ordre ; CLOSE du volume restant ; PARTIAL_CLOSE avec arrondi d√©cimal strict vers le bas et reliquat n√©gociable, fraction 1 refus√©e au profit d'un CLOSE explicite ; MODIFY_STOP ne peut qu'√©galer/resserrer le stop ; MODIFY_TARGET conserve le stop. SL/TP doivent respecter grille tick, c√¥t√© du prix ex√©cutable, stops/freeze broker. Une position sans SL peut √™tre ferm√©e, mais pas modifi√©e par ce plan. Un challenge bloqu√© pour nouvelles entr√©es n'interdit pas un plan pr√©servant/r√©duisant l'exposition ; un run terminal ou kill switch bloque toujours le Brain, les sorties protectrices restent ind√©pendantes.
-
-`ExecutionService.owned_positions` fournit une vue canonique stable au `BrainContext.positions` : DEMO exige ownership magic/comment et trade OPEN coh√©rent ; le volume original vient du TradeRecord, le volume restant et les protections viennent du broker. PAPER utilise exclusivement le portefeuille simul√© du m√™me run et conserve les IDs apr√®s restore. OBSERVE peut lire les positions DEMO sans acqu√©rir de droit d'ex√©cution.
-
-Validation : 108 nouveaux tests couvrent les plans BUY/SELL dans les deux modes, les refus et bornes de risque, les donn√©es invalides, clocks, capacit√©s, sch√©mas alt√©r√©s, ownership, volume original/restant et restore PAPER. Suite compl√®te : 512 tests pass√©s, 3 int√©grations MT5 saut√©es ; Ruff, mypy et `git diff --check` propres. Aucun ordre externe.
-
-**Lot F toujours incomplet / activation inchang√©e :** la porte runtime historique n'approuve encore que HOLD DEMO par ticket. La nouvelle politique n'est volontairement pas branch√©e sur cette porte, car l'orchestrateur interpr√®te aujourd'hui toute approbation de gestion comme HOLD. Les nouveaux plans ne sont pas des ex√©cutions. L'ex√©cution, la confirmation, la r√©conciliation, l'idempotence persistante et le journal des actions interm√©diaires restent √† int√©grer avant activation. PAPER ne simule pas encore les modifications/fermetures partielles ; son volume original correspond donc au volume de sa position actuellement ouverte, √† pr√©server dans sa future migration. Pas de changement UI/SNN/Jafar.
-
-**Prochain incr√©ment exact :** ajouter un r√©sultat d'action de position distinct de HOLD, une r√©clamation persistante unique par proposal_id et la confirmation de l'√©tat post-action ; impl√©menter mutations PAPER atomiques et restauration avant de connecter `plan_position_action` au chemin Brain. Ne jamais convertir une approbation en succ√®s sans observation du r√©sultat.
-
-### Lots F et G ‚Äî validation logicielle termin√©e (2026-10-03)
-
-| Lot | Crit√®re | Preuve |
-| --- | --- | --- |
-| F | Gestion autonome des cinq actions via Risk/Execution | tests/test_position_lifecycle.py ; tests/test_position_risk.py |
-| F | Confirmation, claim durable, aucune r√©p√©tition ambigu√´ | reprise sur fichier SQLite, r√©ponse perdue, transaction PAPER annul√©e |
-| F | Cycle ouverture, maintien, modification, cl√¥ture | int√©gration OrchestrationEngine DEMO mock et PAPER |
-| G | Workspace, binding compte et plages magic | tests/test_workspaces.py |
-| G | Isolation journal, positions, recherche, archive/replay | m√™me base et m√™mes identifiants, requ√™tes scoped |
-| G | Compatibilit√© historique | migrations des bases legacy, hashes et immutabilit√© conserv√©s |
-
-Recette MT5 r√©elle encore requise sur compte DEMO. La suite porte sur les lots
-suivants de la plateforme ; aucune capacit√© LIVE ni strat√©gie Jafar n'est
-ouverte implicitement par cette validation.
-
-Contr√¥les finaux : **552 passed, 3 skipped** (int√©gration MT5), Ruff sans
-erreur, mypy sans erreur sur 81 fichiers source, git diff --check propre.
-
-### Lots H/I ‚Äî impl√©mentation et recette logicielle (2026-10-04)
-
-| Lot | Livrable | Validation |
-| --- | --- | --- |
-| H | Cat√©gories crypto et capabilities honn√™tes | source publique sans droits d'ex√©cution |
-| H | Maker/taker, remises et funding sign√© | inconnus/NaN refus√©s, bornes et identit√©s, R s√©par√© du swap |
-| H | Sessions configurables | timezone/jours/fen√™tres, scan/entr√©e bloqu√©s, sortie protectrice permise |
-| I | Runtime Jafar OBSERVE | scan spot, archive/replay, reprise SQLite, Brain NO_TRADE |
-| I | CLI et cockpit scoped | new/run/serve/kill/clear, rouge, GET-only, budget virtuel explicite |
-| I | Fail-closed | PAPER/DEMO/execute/entry/management refus√©s |
-
-Aucune strat√©gie crypto ni compte d'exchange activ√©. Funding : settlements
-fournis, couverture non invent√©e. Tests public-provider sur fixtures ; aucun
-acc√®s r√©seau r√©el d√©clar√© valid√©. Prochaine fondation : Lot J.
-
-Validation H/I : **590 passed, 3 skipped** (MT5), Ruff et mypy propres
-(84 fichiers source). Tests compl√©mentaires du parcours kill/clear/new/run
-√©galement verts. Aucun terminal MT5 ni endpoint crypto r√©el utilis√©.
-
-### Lot J ‚Äî Outcome/Reward et pr√©paration PC (2026-10-04)
-
-Fondation impl√©ment√©e : collecte PAPER/DEMO cl√¥tur√©s, snapshots immuables et audit atomique, politique hash√©e, reprise idempotente, R et excursions mon√©taires √©chantillonn√©es, reward explicite avec statut incomplet, contrefactuels limit√©s NO_TRADE/HOLD brut, consultation offline/API/cockpit. Aucun entra√Ænement ou changement du cerveau actif. Tests couvrent co√ªts, rebates, cl√¥ture partielle/reprise, compte li√©, contamination workspace, corruption, rollback et collecteurs concurrents. Recette PC document√©e dans `PC_ACCEPTANCE.md`, sauvegarde SQLite coh√©rente avant contr√¥les. K reste √† impl√©menter ; validation terminal r√©elle F/G et acc√®s crypto public toujours ouverts.
-
-Contr√¥les du checkpoint J : 629 passed / 3 skipped MT5, Ruff propre, mypy 85 sources, Node syntaxe dashboard valide. Ex√©cution Windows/PowerShell non r√©alis√©e ici.
+Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ€›6—:-jZ.∂õ≠ñ)ﬁ≥R2ƒƒDî‚(	B∆‚Bvñ◊Ã:ñ÷VÁFFñˆ‚VFóL:ê†¢¢§VFóB¢¢¢##b””"+r¢§&6R¢¢¢#CS3#ÜFì6cñSsÉìsCìfv6CcVSSs36ccCÜÜ÷ñÊê¢¢•˜'L:ñR¢¢¢∆Êñfñ6Fñˆ‚6WV∆V÷VÁB≤V7V‚6ÜÊvV÷VÁBFR'VÁFñ÷RFÁ26WBVFóB‡¢¢§WF˜&óL:í¢¢¢∆R6ˆFRWB6W2FW7G2:óF&∆ó76VÁB¬vWÜó7FÁB≤∆W2L:ñ6ó6ñˆÁ2DıDTFFRFˆ72ÙDT4ï4îÙÂ2ˆ:óF&∆ó76VÁB∆Fó&V7Fñˆ‚‚VÊR6ñ&∆RFˆ7V÷VÁFó&R‚vW7B2VÊR66óL:í∆óg,:ñR‡†¢22‚WÜV7WFófR7V÷÷'ê†§∆∆Fñ‚W7BV‚∆&˜&Fˆó&RFRG&FñÊr’CRDT‘ÚF˜L:íBwV‚Ê˜ñRFR<:ñ7W&óL:í,:ñV¬¢6ˆÁG,;F∆RFR6ˆ◊FR¬&ó6¥VÊvñÊR¬6Ü∆∆VÊvUvF6ÜFˆr¬6ó¶ñÊr¬¶˜W&Ê¬6Ü:ÊÏ:í¬,:ñ6ˆÊ6ñ∆ñFñˆ‚¬66ÊÊW"¬G&ˆó27G&L:ñvñW2WBíFR∆V7GW&R‚∆R&6∑FW7BWB¬v&6ÜófRFR&'&W2ˆÁBL:ñ¨:&ˆw&W7<:íR÷FVÃ:FR∆FW67&óFñˆ‚FRFˆ72Ù$4ÑïDT5EU$RÊ÷F‚∆R4‰‚¬6'&ñ‚í¬¬v&VÁFó76vR¬∆&ˆ÷˜Fñˆ‚6ˆÁG,;FÃ:ñRWB∆W2L:ñ6ó6ñˆÁ2W'6ó7FÁFW26ˆÁ7V«F&∆W2FÁ2÷ó76ñˆ‚6ˆÁG&ˆ¬&W7FVÁB:6ˆÁ7G'Vó&R‚∆÷ñw&Fñˆ‚6ˆÁ6W'fR∆W26ˆÁG&G2'&ˆ∂W"˜&ó7VRˆ¶˜W&Ê¬WBñÁ<:á&R&ˆw&W76ófV÷VÁBVÊRñÁFW&f6RFRL:ñ6ó6ñˆ‚6ˆ÷◊VÊR:∆∆6RGR6ÜˆóÇvVÁB˜&˜WFWW"6ˆ÷÷R6VÁG&RGR7ó7L:Ü÷R‡†¢¢§˜&G&RFR&ó7VR¢¢¢Éí&VÊG&Rfñ&∆R∆RG&óFV÷VÁBBwVÊR˜6óFñˆ‚˜7<:ñL:ñR6Á24¬¬í6ˆ◊&ó2VÊB∆R'&ˆ∂W"&VgW6R∆fW&÷WGW&R≤É"í,:ó6˜VG&RWá∆ñ6óFV÷VÁB∆R6ˆÁG&BFW2÷ˆFW2Ù%4U%dRıU"WB∆6ñ◊V∆Fñˆ‚U"≤É2ífñ&ñ∆ó6W"FˆÊÏ:ñW2¬&W∆íWBWá:ó&ñVÊ6R≤ÉBí'&Ê6ÜW"V‚6W'fVR6ñ◊∆RV‚6ÜF˜r¬Vó26ˆ◊&W"∆W26ÊFñFG24‰‚6Á2WF˜&ó6W"∆WW"WFÚ◊&ˆ÷˜Fñˆ‚‚V7V‚,:ó7V«FBFR&V6ÜW&6ÜRÊRßW7FñfñRV¶˜W&BváVíV‚G&FRƒïdRÊí¬v76˜W∆ó76V÷VÁBBwVÊR&˜FV7Fñˆ‚‡†¢22"‚7W'&VÁB&W˜6óF˜'í7FFP†¢“∆ñ˜WBóFÜˆ‚7&2ˆ∆∆FñÊ¬6ˆÊfñwW&Fñˆ‚î‘¬FÁ26ˆÊfñrˆ¬FW7G2FW7G2ˆ¬4ƒíGóW"FÁ27&2ˆ∆∆Fñ‚ˆ6∆íÁñ¬f7DíFÁ27&2ˆ∆∆Fñ‚ˆíˆÁñ¬g&ˆÁFVÊB7FFóVRFÁ27&2ˆ∆∆Fñ‚ˆí˜7FFñ2ˆñÊFWÇÊáF÷∆‡¢“'VÁFñ÷R7GVV¬¢'&ˆ∂W$FFW&’CRˆ÷ˆ6≤≤FˆÊÏ:ñW27'óFÚV&∆óVW2WB÷ˆ6≤FÁ2'&ˆ∂W'2ˆ7'óFÚÁñ÷ó2¢ß2¢¢BvFFW"BvWå:ñ7WFñˆ‚7'óFÚ≤˜&6ÜW7G&Fñˆ‚66ÊÊW"(i",:ñvñ÷R(i"7G&L:ñvñW2˜&˜WFWW"(i"vVÁDFFW&(i"G&FTñÁFVÁF(i"WÜV7WFñˆÂ6W'fñ6Vı&ó6¥VÊvñÊR(i"'&ˆ∂W"(i"÷ˆÊóFWW"ˆ¶˜W&Ê¬‡¢“7Fˆ6∂vR¢5∆óFRfñ5ƒ∆6ÜV◊í¬¶˜W&Ê¬VÊB÷ˆÊ«íWBÜ6Ç"'V‚Ü¶˜W&Ê¬˜&W˜6óF˜'íÁñí¬G&FW2˜'VÁ2¬FˆÊÏ:ñW2FR&V6ÜW&6ÜRÜ&W6V&6Ç˜&W˜6óF˜'íÁñí¬&'&W2ÙÑƒ5b∑7&VBñ÷◊V&∆W2WB,:ñl:ó&VÊ6W2FRfVÏ:ßG&W2"7ñ6∆RÜ÷&∂WBˆ&6ÜófRÁñí‚&W∆î6ˆÁFWáBÊg&ˆ’ˆ7ñ6∆VÊR6Ü&vRVR∆W2,:ñl:ó&VÊ6W2WB:ól:ñÊV÷VÁG2Ü&W∆íÁñí‡¢“÷ˆFR"L:ñfWBÙ%4U%dV¬U&WBDT‘ˆWá˜<:ó2"4ƒí≤G&FñÊt÷ˆFVFR6ˆÊfñwW&Fñˆ‚&W7FRFV÷ˆ˜W"ñÁFW&Fó&R∆R6ˆ◊FR,:ñV¬‚'VÊfóB¢ßV‚7ñ6∆R"L:ñfWB¢¢≤∆&˜V6∆R6ˆÁFñÁVRWB∆W26ñvÊWÇBv',:ßBWÜó7FVÁB÷ó22FR6W'fñ6R7WW'fó<:íÜ6∆íÁñ¬˜&6ÜW7G&Fñˆ‚ˆVÊvñÊRÁñí‡¢“8óFBñÊóFñ¬vóB¢÷ñÊ∆ñvÏ:ífV2˜&ñvñ‚ˆ÷ñÊ≤Ê6∆VFRˆWBÁFW7E˜F◊ˆÊˆ‚7Vófó2:óFñVÁBL:ñ¨:,:ó6VÁG2‚ñ«2ÊRfˆÁB2'FñRGR∆óg&&∆R‚V7VÊR6ˆÊÊWÜñˆ‚’CRÊíV7V‚˜&G&R‚v:óL:í∆Ê<:íVÊFÁB¬vVFóB‡¢“∆V7GW&R6˜WfW'FR¢Fˆ72ÙÑ‰DÙdbÊ÷F¬L:ñ6ó6ñˆÁ2(	3"WB&Vvó7G&R¬Fˆ72ı4‰‚ˆ¬Fˆ72ı4‰ÂÙ%D5ı$U4T$4ÇÊ÷F¬F˜W2∆W2fñ6ÜñW'2Fˆ72ı5E$DTtîU2ˆWB67&óG2ˆ¬$TD‘RˆFˆ7V÷VÁG2&6ñÊR¬6ˆFR7&2ˆ∆∆Fñ‚ˆ¬6ˆÊfñwW&FñˆÁ2¬FW7G2WB4ƒí‚∆W26ˆÁ7FG27VófÁG26ˆÊ6W&ÊVÁB6R6ˆ÷÷óB¬2V‚:óFBÜó7F˜&óVR‡†¢222‚vÜB«&VGív˜&∑0†ß¬66óL:í&˜Wl:ñR¬V◊∆6V÷VÁBÚ∆ñ÷óFR¿ß¬““◊¬““◊¿ß¬&∆ˆ6vRFR6ˆ◊FRÊˆ‚DT‘Ú¬¶WFˆ‚Bv&ˆ&Fñˆ‚¬4¬ˆ&∆ñvFˆó&R:¬v˜WfW'GW&R¬,:ñ6ˆÁG,;F∆R¬l:ó&ñfñ6Fñˆ‚FR˜6óFñˆ‚¬'&ˆ∂W'2ˆ&6RÁñ¬'&ˆ∂W'2ˆ◊CRÁñ¬&ó6≤ˆVÊvñÊRÁñ¬WÜV7WFñˆ‚˜6W'fñ6RÁñ≤v&FW"∆W2FW7G2FW7Eˆ◊CUˆ'&ˆ∂W"Áñ¬FW7EˆWÜV7WFñˆ‚Áñ¬FW7E˜&ó6µˆVÊvñÊRÁñ‚∆,:ñ7W:ó&Fñˆ‚BwVÊRfW&÷WGW&RBwW&vVÊ6R&VgW<:ñRW7BñÁ7Vffó6ÁFRá6V7Fñˆ‚#í‚¿ß¬&ˆfñ¬6Ü∆∆VÊvRfV2,:Üv∆W2ˆffñ6ñV∆∆W2<:ó,:ñW2FW2,:Üv∆W2Wá:ó&ñ÷VÁF∆W2¬6Ü∆∆VÊvRˆ÷ˆFV«2Áñ¬6Ü∆∆VÊvR˜vF6ÜFˆrÁñ¬6ˆÊfñrˆ6Ü∆∆VÊvU˜&ˆfñ∆W2ˆgF÷ıÛ'7FWˆFV÷ÚÁñ÷∆≤∆fˆÊG27GVV«2fˆ∆ˆÁFó&V÷VÁB6ˆÁ6W'fFWW'2‚¿ß¬L:ñ6˜WfW'FR¬fñ«G&vRV∆óL:í¬,:ñvñ÷W2¬7G&L:ñvñW2G&VÊBÙ'&V∂˜WBı&ÊvR¬÷&∂WBˆ¬7G&FVvñW2ˆ¬6ˆÊfñr˜7G&FVvñW2˜7G&FVvñW2Áñ÷∆≤∆W26ñvÊWÇÊR6ˆÁ7FóGVVÁB2VÊR&WWfRBvVFvR‚¿ß¬¶˜W&Ê¬¬ñÁL:ñw&óL:íWBG&:vvRFW27ñ6∆W2≤,:ñ6ˆÊ6ñ∆ñFñˆ‚FW2˜6óFñˆÁ2˜7<:ñL:ñW2¬¶˜W&Ê¬ˆ¬˜&6ÜW7G&Fñˆ‚ˆ÷ˆÊóF˜"Áñ¬&W∆íÁñ≤7ñ6∆UˆñF¬¶˜W&ÊƒWfVÁBÊñB˜6W¬G&FUˆñF¬˜vÊW'6Üó÷vñ2∂6ˆ÷÷VÁBWÜó7FVÁB‚¿ß¬&6∑FW7B6á&ˆÊˆ∆ˆvóVRfV26ñvÊ¬:∆6Ã;GGW&RVó2fñ∆¬:¬v˜V‚7VófÁB¬7&VB¬vR4¬¬,:Üv∆RñÁG&&"'VFVÁFR¬&W6V&6Çˆ&6∑FW7BÁñ¬FW7G2˜FW7Eˆ&6∑FW7BÁñ≤6ñ◊V∆FWW"VÊ6˜&RFó7FñÊ7BGR&ó6¥VÊvñÊRWBGRg&í˜'FVfWVñ∆∆R‚¿ß¬7∆óG26á&ˆÊˆ∆ˆvóVW2fV2W&vRˆV÷&&vÚ¬66˜&V6&G2¬&W6V&6Ö&W˜6óF˜'íWB∆ñfV7ñ6∆RFRfW'6ñˆ‚¬&W6V&6Ç˜7∆óG2Áñ¬66˜&V6&BÁñ¬&W˜6óF˜'íÁñ≤∆L:ñ6ó6ñˆ‚76VFGR&6∑FW7B‚vW7B2VÊRf∆ñFFñˆ‚Ùı2‚¿ß¬6ˆ6∑óB∆V7GW&R6WV∆RfV2˜6óFñˆÁ2¬&ó7VR¬6Ü∆∆VÊvR¬&F"¬¶˜W&Ê¬¬7G&FVwí∆"WB&W6V&6Ç∆"¬íˆÁñ¬í˜7FFñ2ˆñÊFWÇÊáF÷∆≤FˆÊÏ:ñW2Üó7F˜&óVW2V‚&6R¬÷ó2ñÁFW&f6RFRG&6R6WV∆V÷VÁB7W"C:ól:ñÊV÷VÁG2,:ñ6VÁG2‚¿ß¬÷ˆ6¥'&ˆ∂W"¬÷ˆ6¥vVÁB¬FW7G2fWÇ’CR¬'&ˆ∂W'2ˆ÷ˆ6≤Áñ¬vVÁG2ˆ÷ˆ6≤Áñ¬FW7G2ˆf∂Uˆ◊CRÁñ≤WFñ∆W2˜W"Wá:ó&ñ÷VÁFW"6Á26<:á2'&ˆ∂W",:ñV¬‚¿†¢22B‚FV6ó6ñˆ‚6ˆ◊∆ñÊ6R÷G&óÄ†•7FGWG2¢¢¶6ˆÊf˜&÷R¢¢“‹:ñ6Êó6÷R,:ó6VÁB≤¢ß'FñV¬¢¢“&6R,:ó6VÁFR¬WÜñvVÊ6RÊˆ‚6˜WfW'FR≤¢¶6ñ&∆R'6VÁFR¢¢“6ÜˆóÇF˜L:í÷ó226ˆL:í≤¢¶6ˆÊf∆óB¢¢“6ˆ◊˜'FV÷VÁB7GVV¬ñÊ6ˆ◊Fñ&∆R˜R6ˆÁG&B6ˆÁG&Fñ7Fˆó&R‡†ß¬L:ñ6ó6ñˆ‚DıDTB¬8óFBR6ˆ÷÷óBVFóL:í¬&WWfRWB6ˆÁ<:óVVÊ6RFR÷ñw&Fñˆ‚¿ß¬““◊¬““◊¬““◊¿ß¬4‰‚÷fó'7B¬¢¶6ñ&∆R'6VÁFR¢¢¬V7V‚4‰‚Ù'&ñ‚í≤VÊvñÊRÁñWÜñvRvVÁDFFW&¬7G&FVwï&˜WFW&&W7FRL:ñ6ó6ñˆÊÊV¬‚v&FW"6W2fˆñW26ˆ÷÷R6ˆÁG,;F∆R6∆76óVR¬Vó2'&Ê6ÜW"'&ñ‚í‚¿ß¬"&WW6R&Vf˜&R&Ww&óFR¬¢¶6ˆÊf˜&÷RV‚&6R¢¢¬’CR¬&ó7VR¬vF6ÜFˆr¬¶˜W&Ê¬¬6ˆ6∑óB¬7G&L:ñvñW2WB&6∑FW7B,:óWFñ∆ó6&∆W2‚V7V‚&V◊∆6V÷VÁBv∆ˆ&¬ßW7Fñfú:í‚¿ß¬2FWFW&÷ñÊó7Fñ2&ó6≤¬¢¶6ˆÊf˜&÷R¬6˜WfW'GW&R::óFVÊG&R¢¢¬WÜV7WFñˆÂ6W'fñ6RÁ7V&÷óFV∆∆R&ó6¥VÊvñÊVWBFˆ∂V‚≤6˜'FñW2FR˜6óFñˆ‚WB˜'FVfWVñ∆∆RG&Á7fW'6¬Ï:ñ6W76óFVÁBFW26ˆÁG&G2FR&ó7VR7WÃ:ñ÷VÁFó&W2¬6Á2Wá˜6W"6VÊEˆ˜&FW&R6W'fVR‚¿ß¬B◊V«Fí÷'&ˆ∂W"ˆ6ÊˆÊóVR¬¢ß'FñV¬¢¢¬Fñ6∂¬&&¬ñÁ7G'V÷VÁE7V6WB'&ˆ∂W$FFW&WÜó7FVÁB≤2FR6ÊˆÊñ6ƒ÷&∂WDWfVÁFÊí66óL:ó2ÊÊˆÊ<:ñW2‚7'óFÙFF&˜fñFW&f˜W&ÊóBFR∆FˆÊÏ:ñR¬2¬vWå:ñ7WFñˆ‚‚¿ß¬R7G&FVwí∆"¬¢ß'FñV¬¢¢¬27G&L:ñvñW2ñ◊Ã:ñ÷VÁL:ñW2WBL:ó;GBFR&V6ÜW&6ÜR≤∆W2WG&W2fñ6ÜW26ˆÁBáó˜Få:á6W2‚6˜W&6Rˆ∆ñ6VÊ6RˆVFóB∆V∂vRWB6¸;∑BÊR6ˆÁB2FW2˜'FW2ñ◊˜<:ñW2'F˜WB‚¿ß¬bÊÚƒƒ“'VÁFñ÷R¬¢ß'FñV¬¢¢¬∆RL:ñfWB÷ˆ6¥vVÁFfˆÊ7FñˆÊÊR6Á2ƒƒ“¬÷ó2vVÁDFFW&W7Bˆ&∆ñvFˆó&RWB6∆VFRÙ6ˆFWÇ&W7FVÁB<:ñ∆V7FñˆÊÊ&∆W2FÁ2∆&˜V6∆R‚∆R6W'fñ6RÉ#BFˆóB6Üˆó6ó"V‚÷˜FWW"∆ˆ6¬6Á2ƒƒ“WB:ñ6Ü˜VW"fW&‹:í‚¿ß¬r÷ó76ñˆ‚6ˆÁG&ˆ¬¬¢ß'FñV¬¢¢¬í¶˜W&Ê¬ˆ7ñ6∆RWB˜6óFñˆÁ2WÜó7FVÁB≤2FRfñ6ÜRL:ñ6ó6ñˆ‚7F&∆R¬6Ü'B¬˜fW&∆í¬&Wv&B¬&W∆í6∆óV&∆R‚Tí&V◊∆6R∆W2CFW&ÊñW'2:ól:ñÊV÷VÁG2‚¿ß¬Ç6W'fñ6RWFˆÊˆ÷R¬¢ß'FñV¬ˆ6ˆÊf∆óBFR÷ˆFR¢¢¬&˜V6∆RWB',:ßB&˜&RWÜó7FVÁB≤2FR7WW'fó6WW"¬6ÜV6∑ˆñÁB¬ÜV'F&VB&ˆ6W72¬WFÜVÁFñfñ6Fñˆ‚Fó7FÁFR‚ˆÜV«FÜñÊl:á&R∆g&:Ê6ÜWW"GRFW&ÊñW"7ñ6∆RÉ"÷ñ‚fóÜW2í‚Ù%4U%dRıU&WWfVÁB&ˆGVó&RVÊRfW&÷WGW&R&˜FV7G&ñ6R÷∆w,:í*≤V7V‚˜&G&R+≤FÁ2¬vñFR4ƒí‚fˆó"L:ñ6ó6ñˆ‚&˜˜<:ñR2‚¿ß¬í6Ü&VB6˜&R¶f"¬¢ß'FñV¬¢¢¬Ê˜ñRFˆÊÏ:ñW2˜&V6ÜW&6ÜR◊WGV∆ó6&∆R≤7'óFÚó6ˆÃ:íGR'&ˆ∂W$FFW&WB÷ˆL:Ü∆ReÇñ◊∆ñ6óFRFÁ2VÊófW'2˜6ó¶ñÊrˆWá˜6óFñˆ‚‚V7V‚G&Á6fW'BFR&‹:áG&W2eé(i$%D2,:ó7V‹:í‚¿ß¬ÊÚcıc"¬¢¶6ˆÊf˜&÷RR∆‚¢¢¬VÊR&6ÜóFV7GW&R6ñ&∆R≤∆W2:óFW26í÷FW76˜W26ˆÁBVÊóL:ó2FW7F&∆W2˜,:ófW'6ñ&∆W2¬2&ˆGVóG26ˆÊ7W'&VÁG2‚¿ß¬7ñ6∆R◊V«Fí◊˜6óFñˆ‚WFˆÊˆ÷R¬¢ß'FñV¬¢¢¬«W6ñWW'2˜6óFñˆÁ2WB∆ñ÷óFW2FR&ó7VR≤˜˜'GVÊóGñ‚|:ófˆ«VR2,:á2TƒîdîTBÙdî≈DU$TB¬2FRÑÙƒBÙ‘ÙDîeíı%Dî≈Ù4ƒı4RÙ4ƒı4R"6W'fVR‚Wá˜6óFñˆ‚&ó6¥6ˆÁFWáF∆ñ÷óL:ñRWÇ˜6óFñˆÁ2GR'V‚≤6˜',:ñ∆Fñˆ‚&˜fñFW"'6VÁBR&ˆ˜G7G&‚¿ß¬"ñÁ7ó&Fñˆ‚&∆6µ&ˆ6≤∆FFñ‚¬¢ß'FñV¬¢¢¬¶˜W&Ê¬˜&ó7VRˆWá˜6óFñˆ‚VÊñfú:ó2∆ˆ6∆V÷VÁB≤gVR˜'FVfWVñ∆∆RñÁFW"◊'VÁ2WB6<:ñÊ&ñ˜2G&Á7fW'6WÇ÷ÁVÁG2‚ñÁ7ó&Fñˆ‚6ˆÊ6WGVV∆∆RVÊóVV÷VÁB¬¶÷ó2&WWfRBvVffñ66óL:í‚¿†¢¢§L:ñ6ó6ñˆ‚Êˆ‚G&Ê6å:ñR¢¢¢Fˆ72ÙDT4ï4îÙÂ2ÙDT4ï4îÙ‚”2‘‘ÙDR’4dUEíÊ÷FW7BVÊR&˜˜6óFñˆ‚$ıı4TF7W"∆W2fW&÷WGW&W2&˜FV7G&ñ6W2V‚Ù%4U%dRıU"≤V7VÊRL:ñ6ó6ñˆ‚DıDTB‚vW7B÷ˆFñfú:ñR‡†¢22R‚Fˆ7V÷VÁFFñˆ‚g2ñ◊∆V÷VÁFFñˆ‚vÊ«ó6ó0†ß¬7V¶WB¬7FGWB¬&WWfRÚ6˜'&V7Fñˆ‚Fˆ7V÷VÁFó&R:,:ófˆó"¿ß¬““◊¬““◊¬““◊¿ß¬DT‘ÚˆÊ«í¬4¬¬&ó6≤¬vF6ÜFˆr¬¶˜W&Ê¬6Ü:ÊÏ:í¬¢§DÙ5T‘TÂDTB≤î’ƒT‘TÂDTB¢¢¬Fˆ72Ù$4ÑïDT5EU$RÊ÷F¬7&2ˆ∆∆Fñ‚ˆ'&ˆ∂W'2ˆ&6RÁñ¬WÜV7WFñˆ‚˜6W'fñ6RÁñ¬¶˜W&Ê¬˜&W˜6óF˜'íÁñ‚¿ß¬&'&W2&6Üól:ñW2WB&W∆í¬¢§Ù%4ÙƒUDR≤%Dî¬¢¢¬Fˆ72Ù$4ÑïDT5EU$RÊ÷FFóB*≤&'&W2Êˆ‚&6Üól:ñW2+≤≤÷&∂WBˆ&6ÜófRÁñWÜó7FR‚&W∆íÁñ&WF˜W&ÊR‹:óFFˆÊÏ:ñW2¸:ól:ñÊV÷VÁG2¬6Á2&'&W2&V6ˆÁ7G'VóFW2Êí,:í◊6ñ◊V∆Fñˆ‚‚¿ß¬U"6ñ◊V∆Fñˆ‚6ˆ◊Ã:áFR¬¢§4Ù‰dƒî5Dî‰r¢¢¬6˜&RˆVÁV◊2ÁñˆñFR4ƒí&ˆ÷WGFVÁBd¬6ñ◊VÃ:í≤VÊvñÊRÁì£sV∆∆R7V&÷óBÇ‚‚‚¬G'ï˜'V„’G'VRñWB÷&∂WB˜W"ÁñW7Bó6ˆÃ:í‚¿ß¬4‰‚¬VÊ6ˆFW"¬&Wv&B¬7W'&ó6R¬÷WF&ˆ∆ó6“¬6ˆÊÊV7Fˆ÷R¬&ˆ÷˜Fñˆ‚¬¢§DÙ5T‘TÂDTB≤‘ï54î‰r¢¢¬Fˆ72ı4‰‚ÙƒƒDîÂı4‰ÂÙ$î$ƒRÊ÷F¬d≈ïÙ%$îÂÙeT‰5DîÙ‚Ê÷FL:ñ7&ófVÁB∆6ñ&∆R≤V7VÊRñ◊Ã:ñ÷VÁFFñˆ‚6˜'&W7ˆÊFÁFRFÁ27&2ˆ‚¿ß¬7ñ6∆RFRfñR˜˜'GVÊóGíWB˜6óFñˆ‚¬¢•%Dî¬¢¢¬÷&∂WBˆ˜˜'GVÊóGíÁñWB:ól:ñÊV÷VÁG27,:ú:ó2≤2FR∆ñó6ˆ‚7F&∆R˜˜'GVÊóGû(i'&˜˜6Œ(i'&ó6æ(i&˜&FW.(i'˜6óFñˆÓ(i&˜WF6ˆ÷R≤2Bv7FñˆÁ2FRvW7Fñˆ‚WFˆÊˆ÷R‚¿ß¬'VÁFñ÷RWFˆÊˆ÷R6Á2ƒƒ“¬¢•%Dî¬¢¢¬÷ˆ6≤∆ˆ6¬WÜó7FR≤4ƒíƒƒ“˜FñˆÊÊV∆∆W2F˜V¶˜W'27W"∆R6ÜV÷ñ‚FRL:ñ6ó6ñˆ‚‚2FR4‰‚∆ˆ6¬&ˆ◊R‚¿ß¬6ˆ6∑óB66ñVÁFñfóVRWBL:ñ6ó6ñˆÁ2W'6ó7FÁFW2¬¢•%Dî¬¢¢¬¶˜W&Ê¬6ˆÁ6W'fR∆W2:ól:ñÊV÷VÁG2¬ítUBˆí˜'VÁ2˜∑'VÂˆñG“ˆ7ñ6∆W2˜∂7ñ6∆UˆñG÷≤∆G&6RTí6ˆÁ6ˆ÷÷Rˆíˆ¶˜W&Ê√ˆ∆ñ÷óC”C¬6Á2<:ñ∆V7Fñˆ‚7F&∆RÊí6Ü'B‚¿ß¬7G&FVwíÜ'fW7FW"¬¢§DÙ5T‘TÂDTB≤‘ï54î‰r¢¢¬Fˆ72ı5E$DTtîU2ı4ıU$4UÙ‘Ê÷F¬67&óG2ÙUÖDU$‰≈ı45$ïEÙTDïBÊ÷F≤V7V‚6ˆ∆∆V7FWW"˜˜'FRFR&˜fVÊÊ6Rˆ∆ñ6VÊ6R&V∆ú:í:¬vWå:ñ7WFñˆ‚‚¿ß¬4ƒí$TD‘R¬¢§Ù%4ÙƒUDR¢¢¬$TD‘RñÊFóVR'V‚≤“÷WÜV7WFU÷≤4ƒí,:ñV∆∆RWFñ∆ó6R“÷÷ˆFVWBV‚7ñ6∆R"L:ñfWBÜ6∆íÁñí‚¿ß¬ñÊFWÇFW2L:ñ6ó6ñˆÁ2¬¢§Ù%4ÙƒUDR¢¢¬Fˆ72ÙDT4ï4îÙÂ2ı$TD‘RÊ÷F∆ó7FR(	3∆˜'2VR(	3"6ˆÁBDıDTB≤6˜'&V7Fñˆ‚FÁ26R6ˆ÷÷óB‚¿ß¬66óL:ó2GR6ˆFRWRFˆ7V÷VÁL:ñW2¬¢§î’ƒT‘TÂDTB¬Fˆ2%Dî¬¢¢¬&6ÜófRñÊ7,:ñ÷VÁF∆R¬%D2FF&˜fñFW"ˆWá:ó&ñVÊ6R¬÷ˆFRU"L:ñ6∆,:í¬&W6V&6ÖW&f˜&÷Ê6U&˜fñFW&¬VÊGˆñÁG2ˆí˜&W6V&6ÜWBˆíˆ˜˜'GVÊóFñW6¬'V‚5ï5DT“’DU5F¬7∆óBDT‘ˆfñwW&VÁBFÁ2∆R6ˆFR÷ó22F˜W2FÁ2∆W2wVñFW2&6ñÊR‚¿†¢22b‚¥TUÚDBÚ$Td5Dı"Ú$Uƒ4RÚ$T‘ıdRÚ‰Up†ß¬6∆76R¬6ˆ◊˜6ÁG2¬ßW7Fñfñ6Fñˆ‚Ú∆ñ÷óFR¿ß¬““◊¬““◊¬““◊¿ß¬¥TU¬’CT'&ˆ∂W&WBv&FRDT‘Ú'&ˆ∂W$FFW"Á6VÊEˆ˜&FW&≤&ó6¥VÊvñÊV¬˜6óFñˆÂ6ó¶W&¬6Ü∆∆VÊvUvF6ÜFˆv¬&˜f≈Fˆ∂VÊ¬∂ñ∆¬7vóF6Ç¬˜vÊW'6Üó÷vñ2∂6ˆ÷÷VÁB¬6ˆÁG&G2FR<:ñ7W&óL:í:ó&˜Wl:ó2‚¶˜WFW"FW26ˆÁG,;F∆W26Á2ffñ&∆ó"∆W2∆ñ÷óFW2WÜó7FÁFW2‚¿ß¬¥TU¬¶˜W&Ê≈&W˜6óF˜'ñ¬'V‰÷ÊvW&¬˜6óFñˆ‰÷ˆÊóF˜&¬4ƒíFRl:ó&ñfñ6Fñˆ‚¬÷ˆ6¥'&ˆ∂W"WBFW7G2fWÇ’CR¬G&:vvR˜,:ñ6ˆÊ6ñ∆ñFñˆ‚FR&6RWFñ∆W2≤6˜'&ñvW"∆W2L:ñfWG26ñ&Ã:ó2‚¿ß¬DB¬Fñ6∂ˆ&&ˆñÁ7G'V÷VÁE7V6¬66ÊÊW"¬&6ÜófR¬&W∆î6ˆÁFWáF¬7∆óG2¬&6∑FW7B¬66˜&V6&G2¬¶˜WFW"&˜fVÊÊ6R¬66óL:ó2¬ñÁL:ñw&óL:íFW2fVÏ:ßG&W2¬6¸;∑G26ˆ◊&&∆W2WB&W∆í6W6¬≤,:ó6W'fW"íWÜó7FÁFRFÁBVR˜76ñ&∆R‚¿ß¬DB¬27G&L:ñvñW2¬&Vvó7G&Rˆ∆ñfV7ñ6∆R¬&W6V&6Ö&W˜6óF˜'ñ¬&W6V&6ÖW&f˜&÷Ê6U&˜fñFW&¬&6V∆ñÊW2ˆfVGW&W2ˆVÁ6VñvÊÁG2¬¶÷ó2&WWfRWFˆ÷FóVR≤fW'6ñˆÊÊW"WBñ◊˜6W"&WWfW2FR&ˆ÷˜Fñˆ‚‚¿ß¬DB¬íˆÁñWBg&ˆÁFVÊB7GVV¬¬6ˆÁ6W'fW"6'FW2˜6óFñˆÁ2ˆ6Ü∆∆VÊvR˜&ó7VRˆ∆'2≤¶˜WFW"Üó7F˜&óVRvñÏ:í¬fñ6ÜR7F&∆RWBw&ÜóVR‚¿ß¬DB¬W$WáW&ñ÷VÁDVÊvñÊV¬7'óFÙFF&˜fñFW&¬6ñ◊V∆FWW"V‚‹:ñ÷ˆó&RÊˆ‚6ˆÊÊV7L:íR÷ˆFRU"≤7'óFÚ∆V7GW&RV&∆óVRÊˆ‚'&ˆ∂W"FR&ˆGV7Fñˆ‚‚¿ß¬$Td5Dı"6ñ&Ã:í¬˜&6ÜW7G&Fñˆ‰VÊvñÊVWB&ˆ˜G7G&Áñ¬ñÁG&ˆGVó&RL:ñ6ó6ñˆ‚∆ˆ6∆R'&ñ‚ñˆ7FñˆÂ&˜˜6∆WB6ÜF˜r6Á2676W"∆fˆñR6∆76óVR≤&WFó&W"VÁ7VóFR¬vˆ&∆ñvFñˆ‚7G'V7GW&V∆∆RvVÁDFFW&‚¿ß¬$Uƒ4R&ˆw&W76ñb¬WF˜&óL:íGR7G&FVwï&˜WFW&Ù4ƒí6∆VFR‘6ˆFWÇFÁ2∆L:ñ6ó6ñˆ‚FR&ˆGV7Fñˆ‚¬v&FW"fˆñR6∆76óVR6ˆ÷÷R&6V∆ñÊR≤∆L:ñ6ó6ñˆ‚&ˆ◊VR76R"'&ñ‚íWB6ˆÁG,;F∆W2FR&ó7VRñÊ6ÜÊ|:ó2‚¿ß¬$T‘ıdR¬V7V‚6ˆ◊˜6ÁB'VÁFñ÷R÷ñÁFVÊÁB¬GFVÊG&R&WWfW2FR&VFˆÊFÊ6RWBFW7G2FR÷ñw&Fñˆ‚≤2FR7W&W76ñˆ‚÷˜Fól:ñR"¬|:&vRGR6ˆFR‚¿ß¬‰Ur¬6ÊˆÊñ6ƒ÷&∂WDWfVÁF¬6&ñ∆óGí÷ÊñfW7B¬Ê˜&÷∆ó6WW"ˆVÊ6ˆFWW"¬'&ñ‚í¬6W'fVR6ñ◊∆Rı4‰‚¬˜WF6ˆ÷R˜&Wv&B¬&Vvó7G&RFR÷ˆL:Ü∆W2ˆ6ÜV6∑ˆñÁG2¬f∆ñFFWW"FR&ˆ÷˜Fñˆ‚¬7WW'fó6ñˆ‚6W'fñ6R¬L:óFñ«2FRL:ñ6ó6ñˆ‚WB&W∆í6ˆÁG&Vf7GVV¬¬÷ÁVW2l:ó,:ó2"VFóB‚÷ˆGV∆W2:7,:ñW"6WV∆V÷VÁBVÊB∆R∆˜B6˜'&W7ˆÊFÁBFó7˜6RBwV‚6ˆÁG&BWBFRFW7G2‚¿†¢22r‚F&vWB&6ÜóFV7GW&P†¶FWá@§÷&∂WBÙ'&ˆ∂W"(i"FFW"≤6&ñ∆óFñW2(i"6ÊˆÊñ6¬÷&∂WBWfVÁBáFV◊2¬6˜W&6R¬V∆óL:íê¢(i"&6ÜófR6W6∆R(i"fVGW&W2fW'6ñˆÊÏ:ñW2(i"6VÁ6˜'íVÊ6ˆFW"(i"'&ñ‚ê¢(i"∂6∆76óVR&6V∆ñÊR¬&6V∆ñÊR6ñ◊∆R¬4‰‚6ÊFñFB˜&ˆ◊W–¢(i"7FñˆÂ&˜˜6¬ÑƒÙ‰rı4Ñı%BÙ‰ııE$DRÙÑÙƒBÙ‘ÙDîeíÙ4ƒı4R¬fW'6ñˆ‚¬6ˆÊfñÊ6R¬7FFUˆñBê¢(i"˜˜'GVÊóGí˜˜6óFñˆ‚7FFR(i"FWFW&÷ñÊó7Fñ2&ó6¥VÊvñÊR≤6Ü∆∆VÊvUvF6ÜFˆp¢(i"WÜV7WFñˆÂ6W'fñ6R(i"'&ˆ∂W"DT‘Ú˜R6ñ◊V∆FWW"U"(i"˜6óFñˆ‰÷ˆÊóF˜ ¢(i"˜WF6ˆ÷RFL:í(i"&Wv&B˜ñ‚˜7W'&ó6R(i"&W∆íˆ∆V&ÊñÊrÜ&˜V6∆R∆VÁFRê†§¶˜W&Ê¬VÊB÷ˆÊ«í≤îG2¬‹:óG&óVW2¬G&6W2WB&W∆í¢:6ÜVRg&ˆÁFú:á&R‡¶ †§∆R¢§d5B$ÙET5DîÙ‚ƒÙı¢¢ÊR∆óBRwV‚6W'fVR&ˆ◊R¬vVÃ:íWBfW'6ñˆÊÏ:í≤ñ¬ˆ'6W'fR¬&˜˜6R¬f∆ñFR¬Wå:ñ7WFRWB7W'fVñ∆∆R‚¬vñÊFó7ˆÊñ&ñ∆óL:íGR6W'fVR˜RFRFˆÊÏ:ñW26∆˜6W2ˆg&:Ê6ÜW2FˆÊÊR‰ııE$DRWB∆W'FR‚∆R¢•4ƒırƒT$‰î‰rı$Ù‘ıDîÙ‚ƒÙı¢¢WFñ∆ó6RFW26Ê6Ü˜G2ñ÷◊V&∆W2¬&W∆í¬G&ñ‚˜f∆ñFFñˆ‚ÙÙı2WB&ˆ÷˜Fñˆ‚Fˆ÷óVR6˜W26ˆÁG,;F∆RWá∆ñ6óFR≤V7VÊR<:ó&ñRFRW'FW2ÊR,:ú:ñ7&óB∆W2ˆñG27Fñg2‚VÊRL:ñ6ó6ñˆ‚FRvW7Fñˆ‚FR˜6óFñˆ‚76RW76í"V‚6ˆÁG,;F∆RWáFW&ÊRFR&ó7VRWB"WÜV7WFñˆÂ6W'fñ6V‡†§∆Rf˜&÷B6ÊˆÊóVRWá&ñ÷RFW26Ü◊2,:ñV∆∆V÷VÁBˆ'6W'l:ó2Ü&ñBˆ6≤¬ÙÑƒ26∆˜2¬fˆ«V÷R¬6˜W&6R¬Ü˜&ˆFFvRˆ6∆˜6RFñ÷R¬V∆óL:ííWB∆Fó7ˆÊñ&ñ∆óL:í"FFW"‚∆W2ñÁ7G'V÷VÁG2¬VÊóL:ó2FR&óÇ¬6ˆÁG&7B6ó¶W2¬Fñ6≤f«VR¬FWfó6RFR6ˆ◊FR¬gVÊFñÊrWB6W76ñˆÁ2ÊR6ˆÁB2gW6ñˆÊÏ:ó2"áó˜Få:á6R‚∆R&ó6¥VÊvñÊR&\:vˆóBV‚6Ê6Ü˜B˜'FVfWVñ∆∆RWBFW266óL:ó2l:ó&ñfú:ñW2≤FˆÊÏ:ñW2ˆ÷&vRˆ6˜',:ñ∆Fñˆ‚ñÊFó7ˆÊñ&∆W2FˆófVÁB6ˆÊGVó&R:V‚6ˆ◊˜'FV÷VÁBWá∆ñ6óFV÷VÁB'VFVÁB¬¶÷ó2:VÊRW7Fñ÷Fñˆ‚ñÁfVÁL:ñR‡†¢22Ç‚÷ñw&Fñˆ‚7G&FVwê†£‚˜6W"FW2FW7G2FR<:ñ7W&óL:íWB6˜'&ñvW"∆W2L:ñfWG26Á2÷ˆFñfñW"∆W2∆ñ÷óFW2GR&ˆfñ¬‡£"‚fñwW&W""FW7G2WBL:ñ6ó6ñˆ‚Fˆ7V÷VÁFó&R∆R6VÁ2FW2÷ˆFW2≤&66˜&FW"U"R6ñ◊V∆FWW"VÊóVV÷VÁB,:á2<:ó&Fñˆ‚6∆ó&RFRF˜WFRfˆñR˜&FW%˜6VÊFWBW'6ó7FÊ6RFW2˜6óFñˆÁ26ñ◊VÃ:ñW2‡£2‚fó&RFR¬v&6ÜófRWBGR&W∆íVÊR6˜W&6R6W6∆Rl:ó&ñfñ&∆R≤&6ÜófW"WÜ7FV÷VÁB¬vñÊf˜&÷Fñˆ‚Fó7ˆÊñ&∆RR÷ˆ÷VÁBFRL:ñ6ó6ñˆ‚¬fV2&˜fVÊÊ6R˜fW'6ñˆ‚ˆ6¸;∑G2‚6˜'&ñvW"ñÁ6W'Fñˆ‚F&FófR¬F˜V&∆ˆÁ26ˆÁG&Fñ7Fˆó&W2WBfVÏ:ßG&W2ñÊ6ˆ◊Ã:áFW2‡£B‚L:ñfñÊó"∆W2g&ˆÁFú:á&W26ÊˆÊóVRÙ'&ñ‚íWBFFW"∆fˆñR6∆76óVR˜W"&ˆGVó&R∆‹:¶÷R7FñˆÂ&˜˜6∆VR∆R4‰‚≤6ˆÁ6W'fW"¬vÊ6ñV‚6ÜV÷ñ‚6ˆ÷÷R6ˆÁG,;F∆RWBfó&RF˜W&ÊW"Bv&˜&B∆R6W'fVRV‚6ÜF˜r‡£R‚¶˜WFW"˜WF6ˆ÷R˜&Wv&Bˆ∆V&ÊñÊrÜ˜'2'VÁFñ÷R¬&ˆ÷˜Fñˆ‚6ˆÁG,;FÃ:ñR¬Vó2TíWB6W'fñ6RWá∆ˆóFÁB∆W2:ól:ñÊV÷VÁG2W'6ó7L:ó2‚L:ó∆˜ñW"U"Vó2DT‘Ú&ˆ∆ˆÊ|:í6WV∆V÷VÁBfV27&óL:á&W2÷W7W,:ó2‡†§6ÜVR∆˜B6ˆÁ6W'fRV‚6ÜV÷ñ‚FR&WF˜W"fW'2∆fˆñR6∆76óVR¬∆W266å:ñ÷2,:ñ<:ñFVÁG2˜R∆R6ÜV6∑ˆñÁB&ˆ◊R,:ñ<:ñFVÁB‚∆W2Ê˜WfV∆∆W2F&∆W26ˆÁBFFóFófW2≤ÊR¶÷ó2÷ˆFñfñW"¬vÜó7F˜&óVRGR¶˜W&Ê¬Êí,:ú:ñ7&ó&R∆W2,:ó7V«FG2Ï:ñvFñg2‡†¢22í‚FWVÊFVÊ7íw&ÇÚ˜&FW&ñÊp†¶FWá@•fW&÷WGW&R&˜FV7G&ñ6R≤6ˆÁG&BFR÷ˆFW0¢)IŒ)H(i"U"W'6ó7FÁBWBó6ˆÃ:íGR'&ˆ∂W ¢)IN)H(i"&6ÜófR6W6∆R≤&W∆ífñL:Ü∆R)H(i"6ñ◊V∆FWW"ˆ6¸;∑G2˜7∆óG26ˆ◊&&∆W0¢)IŒ)H(i"˜WF6ˆ÷R˜&Wv&BFL:ó0¢)IN)H(i"'&ñ‚í≤&6V∆ñÊR6∆76óVR˜6ñ◊∆P¢)IN)H(i"4‰‚6ñ◊∆R6ÜF˜r)H(i"&∆FñˆÁ2ˆ6ˆÊÊV7Fˆ÷P¢)IN)H(i"&ˆ÷˜Fñˆ‚6ˆÁG,;FÃ:ñP§¶˜W&Ê¬ÙîG2)H(i"íÜó7F˜&óVRˆL:óFñ¬˜&W∆í)H(i"÷ó76ñˆ‚6ˆÁG&ˆ¬VÁ&ñ6Üê§ÜV'F&VBˆ6ÜV6∑ˆñÁG2˜&V6ˆÊ6ñ∆R)H(i"6W'fñ6R7WW'fó<:í)H(i"DT‘Ú&ˆ∆ˆÊ|:ê•&˜fVÊÊ6Rˆ∆ñ6VÊ6R)H(i"Ü'fW7FW")H(i"7G&FVwí∆")H(i"&6V∆ñÊW2ˆVÁ6VñvÊÁG0¶ †§∆W2G&fWÇTí¬6W'fñ6RWBÜ'fW7FW"WWfVÁBfÊ6W"V‚&∆Ã:Ü∆R∆˜'7VR∆WW'26ˆÁG&G2FRFˆÊÏ:ñW26ˆÁB7F&ñ∆ó<:ó2‚∆W26˜'FñW2WFˆÊˆ÷W2L:óVÊFVÁBGR6ˆÁG&BFR&ó7VR˜W"6ÜVR7Fñˆ‚¬¶÷ó2FR∆6WV∆RFó7ˆÊñ&ñ∆óL:íGR6W'fVR‡†¢22‚FWFñ∆VBñ◊∆V÷VÁFFñˆ‚Ü6W0†§6R6ˆÁBFW2¢ßVÊóL:ó2Bvñ◊Ã:ñ÷VÁFFñˆ‚˜FW7Bˆ÷ñw&Fñˆ‚¢¢7W"VÊR&6ÜóFV7GW&R6ñ&∆RVÊóVR¬6Á2L:ñ6˜WvR&ˆGVóBcıc"‚6ÜVRÜ6R∆óg&RV‚6ˆ◊˜'FV÷VÁBl:ó&ñfñ&∆RWBWWB:ßG&RñÁFW'&ˆ◊VR6í6ˆ‚7&óL:á&R:ñ6Ü˜VR‡†ß¬VÊóL:í¬G&fñ¬WBfñ6ÜñW'2ˆ÷ˆGV∆W2&ˆ&&∆W2¬FW7G2Ï:ñ6W76ó&W2WB7&óL:á&W2Bv66WFFñˆ‚¬&WF˜W"'&ú:á&R¿ß¬““◊¬““◊¬““◊¬““◊¿ß¬(	B<:ñ7W&óL:íFW26˜'FñW2¬˜&6ÜW7G&Fñˆ‚ˆ÷ˆÊóF˜"Áñ¬WÜV7WFñˆ‚˜6W'fñ6RÁñ¬˜&6ÜW7G&Fñˆ‚ˆVÊvñÊRÁñ¬FW7G2˜FW7EˆWÜV7WFñˆ‚Áñ¬FW7Eˆ˜&6ÜW7G&Fñˆ‚Áñ¢L:óFV7FW":6ÜVR7ñ6∆RF˜WFR˜6óFñˆ‚˜7<:ñL:ñR6Á24¬¬‹:¶÷RF˜L:ñRˆÊˆ‚VÁ&Vvó7G,:ñR≤,:ó7V«FB,:ñV¬FRfW&÷WGW&R¬&WG'íˆ∆W'FR¬ÊR«W2ffó&÷W"*≤fW&‹:ñR+≤6Á26ˆÊfó&÷Fñˆ‚‚¬fWÇ'&ˆ∂W"&VgW6ÁB4ƒı4RVó2¬v66WFÁB≤DT‘Ú¬&W7F'B˜&V6ˆÊ6ñ∆R¬f˜&Vñv‚˜6óFñˆ‚ñvÊ˜,:ñR¬:ól:ñÊV÷VÁG2VÊB÷ˆÊ«í¬V7V‚4¬ffñ&∆í‚fˆó"VWBfñÊ¬‚¬V‚62FR,:ñw&W76ñˆ‚¬&∆˜VW"∆W2Ê˜WfV∆∆W2VÁG,:ñW2DT‘Ú¬∆W'FW"WB,:ñ6ˆÊ6ñ∆ñW"∆W2˜6óFñˆÁ2˜WfW'FW2fÁB&WF˜W"RFW&ÊñW"6˜'&V7Fñbf∆ñL:í≤ÊR¶÷ó2&WfVÊó"6ñ∆VÊ6ñWW6V÷VÁBRL:ñfWB‚¿ß¬"(	B÷ˆFW2WBU"¬6˜&RˆVÁV◊2Áñ¬6∆íÁñ¬˜&6ÜW7G&Fñˆ‚ˆVÊvñÊRÁñ¬÷&∂WB˜W"Áñ¬WÜV7WFñˆ‚˜6W'fñ6RÁñ¬FW7G2˜FW7EˆFV÷ˆÂˆ÷ˆFW2Áñ¬FW7E˜W%ˆVÊvñÊRÁñ¢&&óG&W"∆&˜˜6óFñˆ‚2¬L:ñfñÊó"ˆ∆óFóVW2Bv˜&G&W2"÷ˆFR¬&VÊG&RU",:ñV∆∆V÷VÁB6ñ◊VÃ:íWBW'6ó7FÁB¬&V¶˜VW"FW2˜6óFñˆÁ27W"&W7F'B‚¬FW7G2fV2W7ñˆ‚6VÊEˆ˜&FW&˜W"ıT‚Ù4ƒı4R6V∆ˆ‚6ˆÁG&BF˜L:í¬d¬W"ÊWB¬7&6Ç˜&W7F'B¬V7VÊR6ˆÁF÷ñÊFñˆ‚GR'&ˆ∂W"‚ÊR276ñ÷ñ∆W"E%ïı%TÂÙ$ıdTF:VÊRWå:ñ7WFñˆ‚‚¬&WfVÊó":Ù%4U%dR6Á26ñ◊V∆Fñˆ‚≤ÊR¶÷ó27FófW"DT‘Ú˜W"*≤,:ó&W"+≤U"‚¿ß¬2(	BFˆÊÏ:ñW26W6∆W2WB&W∆í¬6˜&Rˆ÷ˆFV«2Áñ¬'&ˆ∂W'2ˆ&6RÁñ¬÷&∂WBˆ&6ÜófRÁñ¬÷&∂WB˜66ÊÊW"Áñ¬&W∆íÁñ¬&W6V&6Ç˜7∆óG2Áñ¬FW7G2˜FW7E˜&W6V&6Ö˜&W∆íÁñ¬FW7Eˆ÷&∂WBÁñ¢÷ÊñfW7FRFR66óL:íFFW"¬&'&W26∆˜6W2˜FV◊2FRFó7ˆÊñ&ñ∆óL:í¬&˜fVÊÊ6R¬fVÏ:ßG&R6ˆ◊Ã:áFR¬F˜V&∆ˆ‚6ˆÁG&Fñ7Fˆó&R¬ñÁ6W'Fñˆ‚F&FófR¬'VFvWBFRFˆÊÏ:ñW2≤&W∆íV‚∆V7GW&R6WV∆RfV2ñÁWG2,:ñV∆∆V÷VÁBgW2‚¬76W'FñˆÁ2R7WFˆfbFV◊˜&V¬¬G&˜W2ˆGW∆ñ6FW2¬&VL:ñ÷'&vR66ÜR¬fñÊvW'&ñÁBFF6WB¬V7VÊRFˆÊÏ:ñRgWGW&R¬&W∆íñFVÁFóVR:VÁG,:ñW2&6Üól:ñW2˜R:ñ6ÜV2Wá∆ñ6óFR‚¬F&∆W2FFóFófW2WB∆V7FWW"Ê6ñV‚6ˆÁ6W'l:íGW&ÁB÷ñw&Fñˆ‚≤&V¶WFW"¶WRñÊ6ˆ◊∆WB«WL;GBVR6ˆ◊Ã:óFW"fV2FˆÊÏ:ñW2gWGW&W2‚¿ß¬B(	B&Ê2Wá:ó&ñ÷VÁF¬6ˆ÷◊V‚¬&W6V&6Çˆ&6∑FW7BÁñ¬%ˆÊ«óFñ72Áñ¬66˜&V6&BÁñ¬&W˜6óF˜'íÁñ¬÷ˆFV«2Áñ¬'F5ˆWáW&ñ÷VÁBÁñ¬FW7G2˜FW7Eˆ&6∑FW7BÁñ¬FW7Eˆ'F5ˆWáW&ñ÷VÁBÁñ¢÷˜FWW"FR6¸;∑G2˜&ó7VR˜˜6óFñˆÁ26ˆ◊&&∆W2¬&˜fVÊÊ6R¬7∆óG2WB,:ó7V«FG2Ï:ñvFñg2ñ÷◊V&∆W2≤<:ó&W",:ó7V«FBFV6ÜÊóVRWB&ˆ÷˜Fñˆ‚‚¬‹:¶÷R˜&G&RFR÷&6å:í6ñ◊VÃ:í(i"‹:¶÷W2fñ∆¬ˆ6˜7Bı"˜W"F˜W2÷ˆL:Ü∆W2≤6∆óvR˜7&VBˆg&ó2¬v2¬ñÁG&&"¬∆&V«2˜W&vR¬Ùı2Ü˜'2,:ñv∆vR≤%D2fV27&VB6˜W&6RWá∆ñ6óFR‚¬∆ó76W"Ê6ñV‚&6∑FW7B6ˆ÷÷R&6V∆ñÊR:óFóVWL:ñRÊˆ‚6ˆ◊&&∆R≤ÊR&ˆ÷˜Wfˆó"V7VÊRWá:ó&ñVÊ6RÊˆ‚&Wf∆ñL:ñR‚¿ß¬R(	BñÁFW&f6R'&ñ‚WB7ñ6∆RFRfñR¬˜&6ÜW7G&Fñˆ‚ˆVÊvñÊRÁñ¬&ˆ˜G7G&Áñ¬÷&∂WBˆ˜˜'GVÊóGíÁñ¬6˜&Rˆ÷ˆFV«2Áñ¬¶˜W&Ê¬ˆ÷ˆFV«2Áñ¬FW7G2Bv˜&6ÜW7G&Fñˆ‚¢7FñˆÂ&˜˜6∆fW'6ñˆÊÏ:ñR¬‰ııE$DRWá∆ñ6óFR¬L:ñ6ó6ñˆ‚7F&∆R¬∆ñV‚˜˜'GVÊóGû(i&ñÁFVÁN(i'&ó6æ(i'G&FR˜˜6óFñˆÓ(i&˜WF6ˆ÷R≤fˆñR6∆76óVRFL:ñR≤7FñˆÁ2FR6˜'FñR6˜W2&ó7VRL:óFW&÷ñÊó7FR‚¬fˆñR6∆76óVRfÁBˆ,:á2:ñv∆R7W"fóáGW&W2¬:óFG2f∆ñFW2¬&VgW2FR&˜˜6óFñˆ‚÷∆f˜&‹:ñR¬6˜'FñW2ı4¬ıE˜'Fñ¬6∆˜6R7W"÷ˆ6≤¬V7VÊR&˜WFRFó&V7FR'&ñÓ(i&'&ˆ∂W"‚¬f∆rFR<:ñ∆V7Fñˆ‚¢v&FW"6W'fVR6∆76óVR&ˆ◊R≤&W76W"V‚6ÜF˜r6íFófW&vVÊ6R‚¿ß¬b(	B˜WF6ˆ÷R¬&Wv&BWB6W'fVRWá:ó&ñ÷VÁF¬¬Ê˜WfVWÇ÷ˆGV∆W2'&ñ‚ˆ¬∆V&ÊñÊrˆ6WV∆V÷VÁB,:á26ˆÁG&G2R≤&W6V&6Çˆ˜W"&W∆í¬&Vvó7G&Rˆ6ÜV6∑ˆñÁG2WB6ˆÁG,;F∆W2≤FW7G2VÊóFó&W2˜&W&ˆGV7Fñ&ñ∆óL:í‚ƒîb,:ñGVóB¬&VF˜WB¬"’5DEfV2G&6R¬7W'&ó6RWB‹:óF&ˆ∆ó6÷R6Ü7V‚FW'&ú:á&R&∆Fñˆ‚‚¬,:ó7V«FBFL:í¬GG&ñ'WFñˆ‚:L:ñ6ó6ñˆ‚˜fW'6ñˆ‚¬,:ñ6ˆ◊VÁ6R‰ııE$DR6ˆÁG&Vf7GVV∆∆R<:ó,:ñRFW2FˆÊÏ:ñW2ˆ'6W'l:ñW2¬ˆñG2&W&ˆGV7Fñ&∆W2"6VVB≤V7VÊR◊WFFñˆ‚GR6ÜV6∑ˆñÁB7Fñb"∆&˜V6∆R∆VÁFR‚¬&W7FW&W"6ÜV6∑ˆñÁB&ˆ◊R,:ñ<:ñFVÁBWBL:ó67FófW"∆R6ÊFñFB≤6ˆÁ6W'fW"Wá:ó&ñVÊ6W2Ï:ñvFófW2‚¿ß¬r(	B÷ó76ñˆ‚6ˆÁG&ˆ¬¬íˆÁñ¬í˜7FFñ2ˆñÊFWÇÊáF÷∆¬¶˜W&Ê¬˜&W˜6óF˜'íÁñ¬FW7G2˜FW7EˆíÁñ¢Üó7F˜&óVRvñÏ:í"'V‚ˆ7ñ6∆RˆFV6ó6ñˆ‚îB≤L:óFñ¬•4Ù‚''WBWB&W∆íV‚∆V7GW&R6WV∆R≤6Ü'BÙÑƒ2&6Üól:íWB˜fW&∆ó2¬˜6óFñˆÁ24¬ıE¬&V¶WG2¬6ÁL:í¬7G&W72˜&Wv&B∆˜'7VRFó7ˆÊñ&∆W2‚¬L:ñ6ó6ñˆ‚66W76ñ&∆R,:á2„CÊ˜WfVWÇ:ól:ñÊV÷VÁG2˜&W7F'B≤í&VB÷ˆÊ«í¬∆ñ÷óFW2FRvñÊFñˆ‚¬ÖD‘¬:ñ6Ü:í¬V7VÊRgVóFRFR6V7&WB¬6Ü'BR&ˆ‚Fñ÷W7F◊˜6˜W&6R‚¬6ˆÁ6W'fW"vW2ˆ6&G27GVV∆∆W2≤L:ó67FófW"6WV∆V÷VÁBÊÊVWÇÊ˜WfVWÇ6í66å:ñ÷ˆfVGW&RñÊFó7ˆÊñ&∆R‚¿ß¬Ç(	B6W'fñ6R7WW'fó<:í¬6∆íÁñ¬˜&6ÜW7G&Fñˆ‚ˆVÊvñÊRÁñ¬&ˆ˜G7G&Áñ¬íˆÁñ¬Ê˜WfV∆∆W2VÊóL:ó2FRL:ó∆ˆñV÷VÁBFˆ7V÷VÁL:ñW2WBFW7G2FV÷ˆ‚¢6W'fñ6RvñÊF˜w2’CR¬ÜV'F&VB&ˆ6W72ˆ÷&∂WBˆ'&ñ‚¬6ÜV6∑ˆñÁG2Fˆ÷óVW2¬&W7F'B˜&V6ˆÊ6ñ∆R¬WFÇıD≈2GR6ˆ6∑óBFó7FÁB‚<:ó&Fñˆ‚∆ñÁWÇ6W'fVRıvñÊF˜w2Wå:ñ7WFñˆ‚6WV∆V÷VÁB6í&W6ˆñ‚÷W7W,:í‚¬7&6Ç˜&W7F'BñFV◊˜FVÁB¬6ˆ◊FRDT‘Ú&Wl:ó&ñfú:í¬FˆÊÏ:ñW2:ó&ñ‹:ñW2˜R6W'fVR'6VÁB(i"V7VÊR¢¶Ê˜WfV∆∆R¢¢VÁG,:ñR¬∆W'FR≤ÜV'F&VBWFÜVÁFóVRWB∆ófVÊW72Fó7FñÊ7FRFRg&:Ê6ÜWW"GR7ñ6∆R‚¬',:ßBGR6W'fñ6R¬∂ñ∆¬7vóF6Ç¬&WF˜W":Wå:ñ7WFñˆ‚÷ÁVV∆∆RÙ%4U%dRÙDT‘Ú6Á2fW&÷W"ñ◊∆ñ6óFV÷VÁBFW2˜6óFñˆÁ2‚¿ß¬í(	B7G&FVwí&W6V&6ÇÙÜ'fW7FW"¬&W6V&6Çˆ÷ˆFV«2Áñ¬&W˜6óF˜'íÁñ¬7G&FVvñW2˜&Vvó7G'íÁñ¬Fˆ72˜FV◊∆FW2Fˆ72ı5E$DTtîU2ˆ¬Ê˜WfVWÇ˜WFñ«2FR6ˆ∆∆V7FRó6ˆÃ:ó2¢&˜fVÊÊ6Rˆ∆ñ6VÊ6R(i",:Üv∆W2(i"∆V∂vR˜&WñÁB(i"ñ◊Ã:ñ÷VÁFFñˆ‚&˜&R(i"FW7G2˜&W∆íÙÙı2ˆ6¸;∑G2(i"U"ÙDT‘Ú(i"∂VWˆ÷ˆFñgíˆ∂ñ∆¬‚¬6˜W&6RG&:v&∆RˆÜ6å:ñR¬∆ñ6VÊ6W2l:ó&ñfú:ñW2¬V7VÊRñ◊˜'FFñˆ‚BwV‚67&óBFñW'2fW'2WÜV7WFñˆ‚ˆ˜R'VÁFñ÷R¬G&Á6óFñˆÁ2&∆˜\:ñW26Á2&WWfW2¬,:ó7V«FG2Ï:ñvFñg2fó6ñ&∆W2‚¬L:ó67FófW"6ÊFñFBˆ˜WFñ¬≤6ˆÁ6W'fW"Üó7F˜&óVRFR&˜fVÊÊ6RWBfW'6ñˆÁ2‚¿†¢22‚fñ6ÜñW'2WBg&ˆÁFú:á&W2FR&W7ˆÁ6&ñ∆óL:ê†§∆R∆˜B˜7<:ÜFRVÊóVV÷VÁB<:ñ7W&óL:íFR˜6óFñˆ‚≤"˜7<:ÜFR÷ˆFW2˜6ñ◊V∆FWW"≤2˜7<:ÜFR&6ÜófR˜&W∆í≤B˜7<:ÜFR&˜Fˆ6ˆ∆RFR6ñ◊V∆Fñˆ‚≤R˜7<:ÜFR6ˆÁG&G2FRL:ñ6ó6ñˆ‚‚8ófóFW"∆W2÷ˆFñfñ6FñˆÁ26ñ◊V«FÏ:ñW2FR˜&6ÜW7G&Fñˆ‚ˆVÊvñÊRÁñ""WBR¬˜R&W6V&6Çˆ÷ˆFV«2Áñ"BWBí‚WÜV7WFñˆ‚˜6W'fñ6RÁñ&W7FR¢¶¬wVÊóVR¢¢6ÜV÷ñ‚'&ˆ∂W"≤&ó6≤ˆWB6Ü∆∆VÊvRˆv&FVÁB∆WW'2,:Üv∆W2L:óFW&÷ñÊó7FW2≤¶˜W&Ê¬ˆW7BVÊRL:óVÊFÊ6RG&Á7fW'6∆RVÊB÷ˆÊ«í‚∆Rg&ˆÁFVÊBWB¬tíÊRG&Á6÷WGFVÁBV7VÊRñÁFVÁFñˆ‚FRG&FñÊr‚F˜WFR÷ñw&Fñˆ‚FR66å:ñ÷FˆóB6ˆ◊˜'FW"∆V7FWW"6ˆ◊Fñ&∆R¬÷ñw&Fñˆ‚Wá∆ñ6óFR¬WBFW7BFR&6RWÜó7FÁFR‡†¢22"‚FW7G2¬V∆óGívFW2WB:óFBˆ'6W'l:ê†•7W"6RL:ó;GB¢ÁfVÁe≈67&óG5«óFÜˆ‚ÊWÜR÷“óFW7B◊◊ÊÛ¶66ÜW&˜fñFW"“÷&6WFV◊“ÁFW7E˜F◊˜&ó6µ˜V∆óGïˆgV∆≈Û##c&6ˆ∆∆V7L:í¢£#É2FW7G2¢#É,:óW76ó2¬2ñvÊ˜,:ó2¢¢ÜFW7G2ˆñÁFVw&Fñˆ‚˜FW7Eˆ◊CUˆ∆ófRÁñ¬˜B÷ñ‚“◊'V‚÷◊CVí‚ÁfVÁe≈67&óG5«óFÜˆ‚ÊWÜR÷“'Vfb6ÜV6≤7&2FW7G6,:óW76í≤ÁfVÁe≈67&óG5«óFÜˆ‚ÊWÜR÷“◊óí7&2ˆ∆∆FñÊ,:óW76í7W"srfñ6ÜñW'2‚V‚W76í6ñ&Ã:í&V6ÜW&6ÜRBv&˜&B&VÊ6ˆÁG,:íW&÷ó76ñˆ‰W'&˜&7W"∆R,:óW'Fˆó&RFV◊˜&ó&Rv∆ˆ&¬¬Vó2∆7VóFR6ˆ◊Ã:áFRfV2“÷&6WFV◊∆ˆ6¬,:óW76í≤6R‚|:óFóB2VÊR76W'Fñˆ‚FR6ˆFR‚V‚fW'Fó76V÷VÁB7F&∆WGFRˆáGGÇWáFW&ÊRFV÷WW&R‚V7V‚FW7B’CR6ˆÊÊV7L:í‚v:óL:íWå:ñ7WL:í¢ñ¬WÜñvRV‚FW&÷ñÊ¬DT‘Ú≤V7V‚G&FR,:ñV¬‚v:óL:ífóB‡†¨86ÜVR∆˜B¢Wå:ñ7WFW"FW7G26ñ&Ã:ó2Vó27VóFRÜ˜'2’CR¬'Vfb6ÜV6≤7&2FW7G6¬◊óí7&6≤ÊR∆Ê6W"óFW7B“◊'V‚÷◊CVVRFÁ2V‚VÁfó&ˆÊÊV÷VÁBDT‘Úf∆ñL:í¬6W2G&ˆó2FW7G2:óFÁBV‚∆V7GW&R6WV∆R‚˜W"∆W2G&fWÇFR&V6ÜW&6ÜR¬¶˜WFW"FW7G2FR6W6∆óL:í¬L:óFW&÷ñÊó6÷R¬6ˆ◊&ó6ˆ‚ó&R:ó&RWB7G&W72FR6¸;∑G2‚V‚FW7BVíÊRl:ó&ñfñRVR¬vVÁV“˜R&V6˜ñR∆fˆÊ7Fñˆ‚‚vW7B2VÊR&WWfRfˆÊ7FñˆÊÊV∆∆R‡†¢222‚7&óL:á&W2Bv66WFFñˆ‚G&Á7fW'6WÄ†£‚V7VÊRÊ˜WfV∆∆RVÁG,:ñRƒïdRÙ4ÙÂDU5BıT‰¥‰ıt‚WBV7VÊRL:ó&ófRGR&ˆfñ¬FR&ó7VR≤4¬WBFˆ∂V‚&W7FVÁBˆ&∆ñvFˆó&W2≤∆W26˜'FñW2&˜FV7G&ñ6W26ˆÁBG&óL:ñW2Wá∆ñ6óFV÷VÁB6V∆ˆ‚L:ñ6ó6ñˆ‚2‡£"‚F˜WFRL:ñ6ó6ñˆ‚¬í6ˆ◊&ó2‰ııE$DRWB&V¶WB¬îB¬FV◊2FRFó7ˆÊñ&ñ∆óL:íFW2FˆÊÏ:ñW2¬fW'6ñˆ‚GR6W'fVR˜7G&L:ñvñR¬&˜˜6óFñˆ‚¬,:ó7V«FBGR&ó7VR¬÷ˆFRWB∆ñV‚fW'2˜WF6ˆ÷R∆˜'7Rvñ¬WÜó7FR‡£2‚&V¶WRBwV‚7ñ6∆RfV2FˆÊÏ:ñW2&6Üól:ñW2&ˆGVóB∆R‹:¶÷R6ˆÁFWáFR˜RVÊRW'&WW"BvñÁL:ñw&óL:í≤¶÷ó2VÊR7V'7FóGWFñˆ‚6ñ∆VÊ6ñWW6R"∆R÷&6å:í7GVV¬‡£B‚V‚,:ó7V«FBÙı2ÊR6W'B2R,:ñv∆vR≤F˜WFR&ˆ÷˜Fñˆ‚,:ñ6∆÷R6ˆ◊&ó6ˆ‚,:ñVÁ&Vvó7G,:ñRfV2&6V∆ñÊRWB&ˆ∆∆&6≤˜76ñ&∆R‡£R‚∆W2FW7G2FR<:ñ7W&óL:í¬6W6∆óL:í¬ñÁL:ñw&óL:íWB&W7F'B76VÁB≤V7VÊR÷ˆFñfñ6Fñˆ‚FR¬vÜó7F˜&óVR¶˜W&Ê¬˜&V6ÜW&6ÜR‡†¢22B‚&ˆ∆∆&6≤7G&FVwê†•'VÁFñ÷R¢6ˆÁ6W'fW"∆RFW&ÊñW"6W'fVR&ˆ◊RWBVÊRfˆñR6∆76óVRf∆ñL:ñR≤7FófFñˆ‚"6ˆÊfñwW&Fñˆ‚˜fW'6ñˆ‚ñ‚¬¶÷ó2WFÚ◊,:ú:ñ7&óGW&R‚FˆÊÏ:ñW2¢÷ñw&FñˆÁ2FFóFófW2¬&6∑W25∆óFRfÁB÷ñw&Fñˆ‚¬Ü6ÇˆfñÊvW'&ñÁBWB∆V7GW&RFR¬vÊ6ñV‚f˜&÷BßW7R|:&WWfRFR6ˆÁfW'6ñˆ‚≤ÊR¶÷ó2*≤,:ó&W"+≤VÊR&6ÜófRñÁf∆ñFRfV2FW2&'&W2gWGW&W2‚÷ˆFW2¢fñ¬6∆˜6VB¬Ù%4U%dR∆˜'2BwVÊRñÊ6ˆ◊Fñ&ñ∆óL:í¬∂ñ∆¬7vóF6Ç˜:ó&FñˆÊÊV¬≤∆,:ñ6ˆÊ6ñ∆ñFñˆ‚ÊRfW&÷R2VÊR˜6óFñˆ‚6ñ◊∆V÷VÁB:6W6RBwV‚&VL:ñ÷'&vR‚Tí¢ÊÊVRÊ˜WfVRL:ó67Fóf&∆RñÊL:óVÊF÷÷VÁB‚6ÜVR∆˜BFˆ7V÷VÁFR6ˆ÷÷ÊFW2FRf∆ñFFñˆ‚WB&ˆ<:ñGW&RFR&WF˜W":¬|:óFBÁL:ó&ñWW"‡†¢22R‚ˆ'6W'f&ñ∆óGí&WVó&V÷VÁG0†¨8ól:ñÊV÷VÁG27G'V7GW,:ó2WB6˜',:ñÃ:ó2"'VÂˆñF¬7ñ6∆UˆñF¬˜˜'GVÊóGïˆñF¬FV6ó6ñˆÂˆñF¬G&FUˆñF˜Fñ6∂WBWB'&ñÂ˜fW'6ñˆÊ‚86ÜVRg&ˆÁFú:á&R¢6˜W&6Rˆ66óL:ó2FW2FˆÊÏ:ñW2¬Ü˜&ˆFFvRˆ'6W'f&∆R¬L:ñ∆íˆg&:Ê6ÜWW"¬fVGW&RˆVÊ6ˆFW"fW'6ñˆ‚¬&˜˜6óFñˆ‚∂6ˆÊfñÊ6RÙ‰ııE$DR¬&V¶WG26ˆL:ó2&ó6¥VÊvñÊR¬,:ñ6ˆÁG,;F∆RˆWå:ñ7WFñˆ‚l:ó&ñfú:ñR¬6ÜÊvV÷VÁG2FR˜6óFñˆ‚¬˜WF6ˆ÷R˜&Wv&B˜7W'&ó6RWB6ÜV6∑ˆñÁB‚÷W7W&W"∆FVÊ6W2¬7F∆R÷FF¬G&˜W2Bv&6ÜófR¬&VgW2FRfW&÷WGW&R¬˜6óFñˆÁ26Á24¬¬:ñ6'G2W"ˆ'&ˆ∂W"¬G&ñgBˆ6∆ñ'&Fñˆ‚¬G&vF˜v‚¬ÜVG&ˆˆ“6Ü∆∆VÊvR¬:óFBFR∆ófVÊW72˜&W7F'B‚8ófóFW"6V7&WG2WBñFVÁFñfñÁG2'&ˆ∂W"FÁ2íˆ∆ˆw2‚ˆÜV«FÜFˆóBFó7FñÊwVW"fñRGR&ˆ6W77W2¬FW&Êú:á&Rˆ'6W'fFñˆ‚WBFW&ÊñW"7ñ6∆R,:óW76í≤¬vÜWW&RGRÊfñvFWW"‚vW7B2V‚ÜV'F&VB6W'fWW"‡†¢22b‚FFÚ&W∆í&WVó&V÷VÁG0†¶÷&∂WDFF&6ÜófV6ˆÁ7FóGVR∆RˆñÁBFRL:ó'B¬2VÊ6˜&RVÊR&WWfRFRfñL:ñ∆óL:í¢6≤á7ñ÷&ˆ¬«Fñ÷Vg&÷R«G2ñWB6W2G&ñvvW'2V◊:¶6ÜVÁBVÊR÷ˆFñfñ6Fñˆ‚5¬¬÷ó2ˆ∆7F66ÜR∆RFW&ÊñW"Fñ÷W7F◊≤VÊR&'&R'&ól:ñRF&BW7B:ñ6'L:ñR¬ı"ît‰ı$VWWB÷7VW"FW2F˜V&∆ˆÁ26ˆÁG&Fñ7Fˆó&W2WBFFVC÷∆V‚á&˜w2ñ7W&W7Fñ÷R&fˆó2¬vñÁ6W'Fñˆ‚‚∆W2,:ñl:ó&VÊ6W27ñ6∆UˆñÁWG6FˆÊÊVÁBÂˆ&'2ˆfó'7E˜G2ˆ∆7E˜G6¬6Á2v&ÁFó"VRF˜WFW2∆W2&'&W26ˆÁB&WG&˜Wf&∆W2‚∆W2&'&W2&6Üól:ñW2÷ÁVVÁB6∆˜6RFñ÷RWá∆ñ6óFR¬Fó7ˆÊñ&ñ∆óL:íFR∆FˆÊÏ:ñR¬&˜fVÊÊ6R¬&ñBˆ6≤Fñ6≤WBfW'6ñˆ‚FR6∆7V¬‚&W∆î6ˆÁFWáFÊR6Ü&vR2∆W2&'&W2≤∆4ƒí*≤&W∆í7ñ6∆R+≤ffñ6ÜRFW2,:ñl:ó&VÊ6W2‡†§fóÜW"FW27WFˆfg2ˆ'6W'f&∆W2"Fñ÷Vg&÷R¬g&ˆÁFú:á&W2G&ñ‚˜f∆ñFFñˆ‚ÙÙı2ÙDT‘Ú¬fñÊvW'&ñÁBFRFF6WBˆ6ˆFRˆ6¸;∑G2¬f«WÇFRFñ6∑2∆˜'7VR∆R6¸;∑BˆWå:ñ7WFñˆ‚∆R&WVñW'B¬WBˆ∆óFóVRFW2,:ófó6ñˆÁ2fVÊF˜"‚∆R&W∆íFˆóB˜Wfˆó"&V6ˆÁ7G'Vó&R∆gVR¢¶2÷ˆb¢¢¬6ˆ◊&W"FW27FñˆÁ26ˆÁG&Vf7GVV∆∆W26Á26ˆÁF÷ñÊW"¬vˆ'6W'l:í¬WB6ñvÊ∆W"F˜WFRFˆÊÏ:ñRñÊFó7ˆÊñ&∆R‚∆‹:¶÷R&6ÜófR¬∆R‹:¶÷R6ñ◊V∆FWW"¬∆R‹:¶÷R&ó7VR¬∆W2‹:¶÷W2g&ó2˜7&VB˜6∆óvRWB∆W2‹:¶÷W27∆óG2∆ñ÷VÁFVÁBF˜WFW2∆W2&6ÜóFV7GW&W26ÊFñFFW2‡†¢22r‚4‰‚WáW&ñ÷VÁF¬&˜Fˆ6ˆ¿†§∆R4‰‚W7BVÊRáó˜Få:á6Rf«6ñfñ&∆R‚,:ñVÁ&Vvó7G&W"ˆ&¶V7Fñb¬‹:óG&óVR&ñ÷ó&Rá"WÜV◊∆RWáV7FÊ7í"Ùı2ÊWBFR6¸;∑G2WBG&vF˜v‚ˆ6Ü∆∆VÊvRí¬6WVñ¬÷ñÊñ÷¬BvVffWB¬'VFvWBFR6ˆ◊∆WÜóL:í¬Êˆ÷'&RFR'VÁ2˜6VVG2¬6ˆÁG,;F∆RFW2W76ó2◊V«Fó∆W2WB7&óL:á&W2B|:ñ6ÜV2¢¶fÁB¢¢Bvˆ'6W'fW"Ùı2‚6ˆ◊&W"¬fV2‹:¶÷W2FˆÊÏ:ñW2ˆfVGW&W266W76ñ&∆W2¬Ü˜&ó¶ˆ‚¬6¸;∑B¬Wå:ñ7WFñˆ‚¬˜'FVfWVñ∆∆R¬7∆óG2¬6VVB6WBWB'VFvWBFRGVÊñÊr††£‚∆∆Fñ‚6∆76óVRá7G&L:ñvñW2˜&˜WFWW"í≤&6V∆ñÊR6ñ◊∆R6Á24‰‚á,:Üv∆RÊ:˜fR¬,:ñw&W76ñˆ‚˜&ñFvR˜RWG&R6ˆÁG,;F∆Rfóå:íí‡£"‚4‰‚6ñ◊∆RƒîbWB&VF˜WB≤,:ó6VRvVÃ:ífW'7W2fV2∆7Fñ6óL:í‡£2‚6ˆÊÊV7Fˆ÷R&ñˆ∆ˆvóVR'VÏ:ít€KhëÈÏ∂ªßq´^uï…ÄÅ¡…Ωë’•–ÅëïÃÅ%ÃÅëîÅ—…ÖëïÃÅì•—ï…µ•π•Õ—ïÃÉÄÅïπ—À•îÅ•ëïπ—•≈’î∏()%1LÅ5=%%ËÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†ΩµΩëï±Ãπ¡ÂÄ∞ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†Ω…ï¡ΩÕ•—Ω…‰π¡ÂÄ∞ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†ΩâÖç≠—ïÕ–π¡ÂÄ∞ÅÅ—ïÕ—ÃΩ—ïÕ—}ëÖïµΩπ}µΩëïÃπ¡ÂÄ∞ÅÅ—ïÕ—ÃΩ—ïÕ—}âÖç≠—ïÕ–π¡ÂÄ∞ÅÅëΩçÃΩ%5A159QQ%=9}A18πµëÄ∏()QMQLÅËÅAï…Õ•Õ—ÖπçîÅï–ÅŸÖ±•ëÖ—•Ω∏ÅëîÅ±ÑÅ¡…ΩŸïπÖπçî∞Åµ•ù…Ö—•Ω∏ÅME1•—îÅÖπç•ïππî∞Å•ëïµ¡Ω—ïπçîÅï–Å…ï©ï–ÅëïÃÅçΩπ—…Öë•ç—•ΩπÃ∞Å•µµ’—Öâ•±•”§ÅME0∞ÅçΩπÕï…ŸÖ—•Ω∏Åêù’∏ÅÀ•Õ’±—Ö–Åª•ùÖ—•ò∞ÅÖâÕïπçîÅëîÅ¡…ΩµΩ—•Ω∏ÅÖ’—ΩµÖ—•≈’î∞Å…ï¡…Ωë’ç—•â•±•”§ÅëïÃÅ%ÃÅï–Å∑•—…•≈’ïÃÅëîÅâÖç≠—ïÕ–∏()QMQLÅIU8ËÄ‘Å—ïÕ—ÃÅç•â≥•ÃÅIïÕïÖ…ç†Åï–ÅâÖç≠—ïÕ–ÄÏÅ…’ôòÄÏÅµÂ¡‰ÄÏÅÅù•–Åë•ôòÄ¥µç°ïç≠Ä∏ÅM’•—îÅçΩµ¡≥°—îÅë‘Å1Ω–ÅÅÖŸÖπ–ÅÄËÄÃƒ‹Å¡ÖÕÕïê∞ÄÃÅÕ≠•¡¡ïêÅ5P‘∏()IMU1QLËÄ‘Å¡ÖÕÕïêÄÏÅ…’ôòΩµÂ¡‰Ωë•ôòµç°ïç¨ÅŸï…—Ã∏Å1ÑÅÕ’•—îÅçΩµ¡≥°—îÅ∏ùÑÅ¡ÖÃÉ•”§Å…ï±Öπè•îÅÖ¡À°ÃÅ∏()I!%QQUI0Å%M%=9LËÅUπîÅï·√•…•ïπçîÅÖπç•ïππîÅÕÖπÃÅ¡Ö•…îÅô•πùï…¡…•π–Ω¡…ΩŸïπÖπçîÅ…ïÕ—îÅ±•Õ•â±îÅµÖ•ÃÅπîÅ¡…Ω’ŸîÅ¡ÖÃÅ±ÑÅçΩµ¡Ö…Öâ•±•”§∏ÅUπîÅÀ•√•—•—•Ω∏Å•ëïπ—•≈’îÅïÕ–Å•ëïµ¡Ω—ïπ—îÄÏÅ’∏ÅÀ•Õ’±—Ö–ÅçΩπ—…Öë•ç—Ω•…îÅπîÅ¡ï’–Å¡ÖÃÅ…ïµ¡±Öçï»ÅÕ•±ïπç•ï’Õïµïπ–Å∞ùÖπç•ï∏∏Å1îÅÀ•Õ’±—Ö–Å—ïç°π•≈’îÅï–Å±îÅÕ—Ö—’–ÅëîÅ¡…ΩµΩ—•Ω∏Å…ïÕ—ïπ–Åë•Õ—•πç—Ã∏()-9=]8Å1%5%QQ%=9LËÅ1Ω–ÅÅπΩ∏Å—ï…µ•ª§∏Å’ç’∏ÅçΩπ—…Ö–Å¡Ö…—Öü§ÅëîÅô•±∞ΩçøÌ—ÃΩHÅïπ—…îÅÅ	Öç≠—ïÕ—I’ππï…ÄÅï–ÅÅ	QQ°…ïï]ÖÂπù•πïÄÄÏÅ¡ÖÃÅïπçΩ…îÅëîÅÕ¡…ïÖêÅ	QÅÕΩ’…è§ÅëÖπÃÅçîÅçΩπ—…Ö–∞Åπ§ÅëîÅ¡…ï’ŸîÅëîÅçΩµ¡Ö…Ö•ÕΩ∏Å==LÅΩ‘Åêù•π”•ù…Ö—•Ω∏ÅÖ’—ΩµÖ—•≈’îÅë‘Åô•πùï…¡…•π–ÅÖ…ç°•ŸîÅëÖπÃÅç°Ö≈’îÅï·√•…•ïπçî∏()I5%9%9Å]=I,ËÅΩπ—…Ö–ÅçΩµµ’∏ÅëîÅÕ•µ’±Ö—•Ω∏Åï–ÅçøÌ—Ã∞Å—ïÕ—ÃÅëîÅ¡Ö…•”§ÅâÖÕï±•πîΩ	Q∞ÅùÖ¡ÃΩ•π—…ÖâÖ»ΩÕ±•¡¡ÖùîΩô…Ö•Ã∞Å¡…ï’ŸîÅëîÅçÖ’ÕÖ±•”§Å±Öâï±ÃΩ¡’…ùîÅï–Å==LÅ°Ω…ÃÅÀ•ù±Öùî∞Å¡’•ÃÅŸÖ±•ëÖ—•Ω∏Åë‘Å±Ω–ÅÅçΩµ¡±ï–∏()9aPÅaPÅQ%=8ËÅëÖ¡—ï»ÅÅ	QQ°…ïï]ÖÂπù•πïÄÅ¡Ω’»Å¡…Ωë’•…îÅëïÃÅÅ•±±IïçΩ…ëÄÅçΩµ¡Ö…Öâ±ïÃ∞Å¡’•ÃÅ•π”•ù…ï»Å±îÅô•πùï…¡…•π–ÅÖ…ç°•ŸîÅëÖπÃÅç°Ö≈’îÅï·√•…•ïπçî∏ÅYΩ•»Åç°ïç≠¡Ω•π–Å]ÖŸîÄÃÅç§µëïÕÕΩ’Ã∏((¥¥¥((ååÅ1UÅ%5A159QQ%=8Å]YÄÃÅ!-A=%9PÉäPÄ»¿»ÿ¥ƒ¿¥¿ÃÄ¿ƒËÃ¿Å5P¨»((åååÅ1=PÅ»ÉäPÅΩπ—…Ö–ÅçΩµµ’∏ÅëîÅô•±∞ΩçøÌ—ÃΩH(®©MQQULËÅ=5A1Q®®((®©=	)Q%YË®®Å•ô•π•»Å’∏ÅçΩπ—…Ö–ÅëîÅô•±∞ΩçøÌ—ÃÅï·¡±•ç•—îÅï–Å•µµ’—Öâ±îÅ¡ï…µï——Öπ–Å±ÑÅçΩµ¡Ö…Ö•ÕΩ∏É•≈’•—Öâ±îÅïπ—…îÅÕÂÕ”°µïÃÅëîÅì•ç•Õ•Ω∏Åë•Õ—•πç—ÃÄ°âÖç≠—ïÕ—ï»Åç±ÖÕÕ•≈’î∞Åô’—’»Å	Q∞Åô’—’»ÅM98§∏((®©I==PÅUMÄºÅ5=Q%YQ%=8Ë®®Å1îÅÅ	Öç≠—ïÕ—I’ππï…ÄÅï–Å±îÅÅ	QQ°…ïï]ÖÂπù•πïÄÅçÖ±ç’±Ö•ïπ–Å@ô0∞ÅçøÌ—ÃÅï–ÅHÅëîÅµÖπß°…îÅ•πì•¡ïπëÖπ—îÅÖŸïåÅëïÃÅçΩπŸïπ—•ΩπÃÅë•ôõ•…ïπ—ïÃÄ°±ΩÕÕ}¡ï…}±Ω–ÅŸÃÅôïï}â¡Ã∞ÅçΩµ¡’—ï}»ÅŸÃÅçÖ±ç’∞ÅµÖπ’ï∞§∏ÅMÖπÃÅçΩπ—…Ö–ÅçΩµµ’∏∞ÅÖ’ç’πîÅçΩµ¡Ö…Ö•ÕΩ∏ÅÕç•ïπ—•ô•≈’îÅ∏ùïÕ–Åô•Öâ±î∏((®©%5A159QË®®(¥ÅÅΩÕ—Ö—ïùΩ…ÂÄÄ°M—…π’¥§ËÅç±ÖÕÕ•ô•îÅç°Ö≈’îÅçΩµ¡ΩÕÖπ—îÅëîÅçøÌ–ÅçΩµµîÅ=	MIY∞Å5=1ÅΩ‘ÅiI<(¥ÅÅΩÕ—5Ωëï±ÄÄ°ô…ΩÈï∏ÅëÖ—Öç±ÖÕÃ§ËÅçΩπŸïπ—•Ω∏ÅëîÅçøÌ—ÃÅï·¡±•ç•—îÏÅëï’‡Åï·√•…•ïπçïÃÅπîÅÕΩπ–ÅçΩµ¡Ö…Öâ±ïÃÅ≈’îÅÕ§Åï±±ïÃÅ¡Ö…—Öùïπ–Å±îÅ∑©µîÅΩÕ—5Ωëï∞(¥ÅÅ•±±IïçΩ…ëÄÄ°ô…ΩÈï∏ÅëÖ—Öç±ÖÕÃ§ËÅçΩπ—…Ö–ÅëîÅô•±∞ÅçΩµµ’∏ÅçÖ¡—’…Öπ–ÅÕÂµâΩ∞∞ÅÕ•ëî∞Å¡…•‡Åïπ—…‰Ωï·•–∞ÅM0ΩQ@∞Å—•µ•πú∞Åï·•—}…ïÖÕΩ∏∞ÅŸΩ±’µî∞ÅÕ¡…ïÖë}çΩÕ–∞ÅÕ±•¡¡Öùï}çΩÕ–∞ÅçΩµµ•ÕÕ•Ω∏∞ÅÕ›Ö¿∞Åù…ΩÕÕ}¡π∞∞Åπï—}¡π∞∞Å•π•—•Ö±}…•Õ¨∞Å…}µ’±—•¡±î∞ÅçΩÕ—}µΩëï∞∞Å—…Öëï}•ê∞Åï·¡ï…•µïπ—}•ê(¥ÅÅ	Öç≠—ïÕ—I’ππï»π}}•π•—}|†•ÄÅçΩπÕ—…’•–Å’∏ÅÅΩÕ—5Ωëï±ÄÅ…ïô≥•—Öπ–ÅÕÑÅçΩπô•ù’…Ö—•Ω∏Ä°Õ¡…ïÖêı5=1∞ÅçΩµµ•ÕÕ•Ω∏ΩÕ±•¡¡Öùîı5=1ÅÕ§Ä¯¿ÅÕ•πΩ∏ÅiI<∞ÅÕ›Ö¿ıiI<§(¥ÅÅ	Öç≠—ïÕ—I’ππï»π}ô•πÖ±•Èï}—…Öëî†•ÄÅ¡…Ωë’•–Å’∏ÅÅ•±±IïçΩ…ëÄÅ¡Ω’»Åç°Ö≈’îÅ—…Öëî∞ÅÖŸïåÅÅ…}µ’±—•¡±îÄÙÙÅ…}µï—…•çÃπ…ïÖ±•Èïë}…ÄÅï–ÅÅ•π•—•Ö±}…•Õ¨ÄÙÙÅ…}µï—…•çÃπ•π•—•Ö±}…•Õ≠ÄÄ°ùÖ…Öπ—•îÅëîÅ¡Ö…•”§Åï·Öç—î§(¥ÅÅ	Öç≠—ïÕ—Q…Öëîπô•±∞ËÅ•±±IïçΩ…êÅÅ9ΩπïÄÅÖ©Ω’”§Ä°âÖç≠›Ö…êµçΩµ¡Ö—•â±î∞Å9ΩπîÅ¡Ö»Åì•ôÖ’–§((®©%1LË®®ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†Ω…}ÖπÖ±Â—•çÃπ¡ÂÄ∞ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†ΩâÖç≠—ïÕ–π¡ÂÄ∞ÅÅ—ïÕ—ÃΩ—ïÕ—}âÖç≠—ïÕ–π¡ÂÄ((®©QMQLÅË®®Äƒ‹Å—ïÕ—ÃÅëîÅ¡Ö…•”§ÅëÖπÃÅÅQïÕ—•±±IïçΩ…ëAÖ…•—ÂÄË(¥Å•±±IïçΩ…êÅï·•Õ—îÅÕ’»Åç°Ö≈’îÅ—…Öëî(¥Å•±±IïçΩ…êÅïÕ–Å•µµ’—Öâ±îÄ°ô…ΩÈï∏§(¥ÅÅ…}µ’±—•¡±îÄÙÙÅ…}µï—…•çÃπ…ïÖ±•Èïë}…ÄÅÕ’»Å—Ω’ÃÅ±ïÃÅ—…ÖëïÃÄ°ÖŸïåÅçøÌ—ÃÅŸÖ…ß•Ã§(¥ÅÅ•π•—•Ö±}…•Õ≠ÄÅçΩ£•…ïπ–Åïπ—…îÅô•±∞Åï–Å…}µï—…•çÃ(¥ÅΩÕ—5Ωëï∞Å…ïô≥°—îÅ±ÑÅçΩπô•ù’…Ö—•Ω∏Åë‘Å…’ππï»(¥ÅÅπï—}¡π∞ÄÙÙÅù…ΩÕÕ}¡π∞Ä¥ÅÕ±•¡¡ÖùîÄ¥ÅçΩµµ•ÕÕ•Ω∏Ä¨ÅÕ›Ö¡ÄÄ°€•…•ô•çÖ—•Ω∏ÅÖ±ü•â…•≈’î§(¥ÅHÅì•…•ŸÖâ±îÅëïÃÅŸÖ±ï’…ÃÅµΩª•—Ö•…ïÃÄ°Åπï—}¡π∞ÄºÅ•π•—•Ö±}…•Õ¨Éä& Å…}µ’±—•¡±ïÄ§(¥Å1=9Å›•ππï»ÄºÅ1=9Å±ΩÕï»Ä°¡Ö…Ö∑•—À§§(¥ÅM!=IPÅ—…ÖëîÅÖŸïåÅÕ•ëîÙ¥ƒ(¥ÅM0Åï·•–ÅÖŸïåÅï·•—}…ïÖÕΩ∏ÅçΩπ—ïπÖπ–ÄâM0àÅï–ÅHÄÙÄ¿(¥Å9}=}QÅï·•–ÅçÖ¡—’À§(¥ÅÕ¡…ïÖë}çΩÕ–Ä¯ÙÄ¿(¥Åiï…ºµçΩÕ–Å…’ππï»ËÅù…ΩÕÕ}¡π∞ÄÙÙÅπï—}¡π∞(¥Å—…Öëï}•êÅçΩ£•…ïπ–Åïπ—…îÅô•±∞Åï–Å¡ΩÕ•—•Ω∏(¥ÅÕÂµâΩ∞Åï–Å—•µ•πúÅçΩ£•…ïπ—Ã(¥ÅAÖ…•”§ÅçΩµ¡≥°—îÅÖŸïåÅÕ¡…ïÖêÄ¨ÅçΩµµ•ÕÕ•Ω∏Ä¨ÅÕ±•¡¡ÖùîÄ¨ÅŸΩ±’µîÄ¨Å±ΩÕÕ}¡ï…}±Ω–((®©QMQLÅIU8Ë®®Ä‘ƒÅ—ïÕ—ÃÅç•â≥•ÃÅâÖç≠—ïÕ–Ä†Ã–Åï·•Õ—Öπ—ÃÄ¨Äƒ‹ÅπΩ’ŸïÖ’‡§ÅAMLÄÏÅÕ’•—îÅçΩµ¡≥°—îÄÃÃÿÅ¡ÖÕÕïê∞ÄÃÅÕ≠•¡¡ïêÅ5P‘ÄÏÅ…’ôòÅAMLÄÏÅµÂ¡‰ÅAMLÄ†‹‹Åô•ç°•ï…Ã§ÄÏÅÅù•–Åë•ôòÄ¥µç°ïç≠ÄÅAML∏((®©I!%QQUI0Å%M%=9LË®®(¥ÅÅçΩµ¡’—ï}»†•ÄÅ…ïÕ—îÅ%9!9$ÄËÅ±îÅ•±±IïçΩ…êÅïÕ–Å’πîÅçΩ’ç°îÅÖëë•—•Ωππï±±î∞Å¡ÖÃÅ’∏Å…ïµ¡±Öçïµïπ–(¥ÅÅ…}µ’±—•¡±ïÄÅï–ÅÅ•π•—•Ö±}…•Õ≠ÄÅëÖπÃÅ±îÅ•±±IïçΩ…êÅÕΩπ–Åë•…ïç—ïµïπ–Å¡…•ÃÅëîÅÅ…}µï—…•çÕÄÅ¡Ω’»ÅùÖ…Öπ—•îÅëîÅ¡Ö…•”§Åï·Öç—îÄ°¡ÖÃÅëîÅë•Ÿï…ùïπçîÅ¡Ö»ÅÖ……Ωπë§§(¥Å1ïÃÅŸÖ±ï’…ÃÅµΩª•—Ö•…ïÃÄ°ù…ΩÕÕ}¡π∞∞Åπï—}¡π∞∞ÅçΩÕ—Ã§ÅÕΩπ–ÅçÖ±ç’≥•ïÃÅ•πì•¡ïπëÖµµïπ–Åëï¡’•ÃÅ±ïÃÅ∑©µïÃÅ¡…•‡ΩŸΩ±’µïÃÉäPÅ±ïÃÅ—ïÕ—ÃÅ€•…•ô•ïπ–Å±ÑÅçΩ£•…ïπçîÅÖ±ü•â…•≈’î(¥Å1îÅÕ¡…ïÖêÅïÕ–Å5=1Ä°¡Ö…Ö∑°—…îÅô•·îÅÕ¡…ïÖë}¡•¡Ã§∞Å¡ÖÃÅ=	MIYÄ°Ω∏ÅπîÅ±•–Å¡ÖÃÅ±îÅâ•êΩÖÕ¨ÅÀ•ï∞Åë‘ÅµÖ…ç£§Å°•Õ—Ω…•≈’î§(¥Å1îÅ•±±IïçΩ…êÅïÕ–Åô…ΩÈï∏Ä°•µµ’—Öâ±î§Å¡Ω’»Å¡À•Ÿïπ•»Å—Ω’—îÅµ’—Ö—•Ω∏Å¡ΩÕ–µçΩπÕ—…’ç—•Ω∏((®©UM1%QdÅUI9QLË®®(¥Å’ç’∏Åç°Öπùïµïπ–ÅÖ’‡ÅùÖ…Öπ—•ïÃÅçÖ’ÕÖ±ïÃÅë‘Å1Ω–ÅÄ°Ö…ç°•Ÿî∞Å…ï¡±Ö‰∞ÅÖŸÖ•±Öâ±ï}Ö–§(¥Å1îÅ•±±IïçΩ…êÅπîÅµΩë•ô•îÅ¡ÖÃÅ±îÅ—•µ•πúÅêùï„•ç’—•Ω∏Åë‘ÅâÖç≠—ïÕ–Ä°¡ïπë•πúÅÕ•ùπÖ∞ÉäHÅπï·–ÅâÖ»ÅΩ¡ï∏§(¥Å’ç’πîÅ•πôΩ…µÖ—•Ω∏Åô’—’…îÅ∏ùïÕ–Å’—•±•œ•îÅëÖπÃÅ±îÅçÖ±ç’∞ÅëïÃÅçøÌ—ÃÅΩ‘Åë‘ÅH((®©-9=]8Å1%5%QQ%=9LË®®(¥ÅÅ	QQ°…ïï]ÖÂπù•πïÄÅ∏ù’—•±•ÕîÅ¡ÖÃÅïπçΩ…îÅ±îÅçΩπ—…Ö–ÅçΩµµ’∏ÉäPÅ•∞ÅçÖ±ç’±îÅ@ô0ΩHÅµÖπ’ï±±ïµïπ–ÅÖŸïåÅÕïÃÅ¡…Ω¡…ïÃÅçΩπŸïπ—•ΩπÃÄ°ôïï}â¡Ã§(¥ÅAÖÃÅïπçΩ…îÅêù•π”•ù…Ö—•Ω∏ÅÖ’—ΩµÖ—•≈’îÅë‘Åô•πùï…¡…•π–ÅÖ…ç°•ŸîÅëÖπÃÅç°Ö≈’îÅï·√•…•ïπçî(¥ÅAÖÃÅïπçΩ…îÅëîÅ¡…ï’ŸîÅëîÅçΩµ¡Ö…Ö•ÕΩ∏Å==LÅ°Ω…ÃÅÀ•ù±Öùî(¥ÅAÖÃÅëîÅ¡…ï’ŸîÅëîÅ±Öâï±ÃΩ¡’…ùîÅçÖ’ÕÖ’‡ÅëÖπÃÅ±îÅçΩπ—…Ö–ÅëîÅô•±∞(¥Å0ùÖëÖ¡—Ö—ï’»Å	QÅπÖ—•òÅ…ïÕ—îÉÄÅçÀ•ï»Ä°±ïÃÅÕÂµâΩ±ïÃÅ5P‘Å	QΩQ ÅÕΩπ–ÅëïÃÅQÅ…ÖÂÕçÖ±î∞ÅALÅë‘ÅÕ¡Ω–Åç…Â¡—º§((®©I5%9%9Å]=I,Ä°1Ω–ÅÃ¨§Ë®®(ƒ∏ÅëÖ¡—ï»ÅÅ	QQ°…ïï]ÖÂπù•πîπ}ç±ΩÕï}¡ΩÕ•—•Ω∏†•ÄÅ¡Ω’»Å¡…Ωë’•…îÅ’∏ÅÅ•±±IïçΩ…ëÄÅÖŸïåÅ±îÅ∑©µîÅçΩπ—…Ö–(»∏Å%π”•ù…ï»Å±îÅô•πùï…¡…•π–ÅÖ…ç°•ŸîÅëÖπÃÅÅM—…Ö—ïùÂ·¡ï…•µïπ—ÄÅÖ’—ΩµÖ—•≈’ïµïπ–Å±Ω…ÃÅë‘ÅâÖç≠—ïÕ–(Ã∏ÅA…Ω’Ÿï»Å±ÑÅçÖ’ÕÖ±•”§Å±Öâï±ÃΩ¡’…ùîÅëÖπÃÅ±îÅ¡•¡ï±•πîÅëîÅÕ¡±•—Ã(–∏ÅA…ï’ŸîÅëîÅçΩµ¡Ö…Ö•ÕΩ∏Å==LÅ°Ω…ÃÅÀ•ù±Öùî(‘∏Å	ÖÕï±•πîÅôÖ•…πïÕÃÄËÅ€•…•ô•ï»Å≈‘ù’πîÅÕ—…Ö”•ù•îÅç±ÖÕÕ•≈’îÅï–Å±îÅô’—’»ÅM98ÅÕΩπ–É•ŸÖ±◊•ÃÅÕΩ’ÃÅ±ïÃÅ∑©µïÃÉ•çΩπΩµ•ïÃ((®©9aPÅaPÅQ%=8Ë®®ÅYΩ•»Å]ÖŸîÄ–Åç§µëïÕÕΩ’ÃÉäPÅ1Ω–ÅÅïÕ–Å=5A1Q∏((¥¥¥((ååÅ1UÅ%5A159QQ%=8Å]YÄ–ÉäPÅ1=PÅÅ%91%iQ%=8ÉäPÄ»¿»ÿ¥ƒ¿¥¿ÃÄ¿»Ë¿¿Å5P¨»((åååÅ1=PÅÉäPÅ	ÖπåÅï·√•…•µïπ—Ö∞ÅçΩµµ’∏(®©MQQULËÅ=5A1Q®®((ååååÅƒÉäPÅA…ΩŸïπÖπçîÅï·√•…•µïπ—Ö±îÄ°ÕïÕÕ•Ω∏Å¡À•è•ëïπ—î§(¥ÅÅM—…Ö—ïùÂ·¡ï…•µïπ—ÄÅÖŸïåÅÅëÖ—ÖÕï—}ô•πùï…¡…•π—ÄΩÅëÖ—ÖÕï—}¡…ΩŸïπÖπçïÄÅ¡Ö•»ÅŸÖ±•ì§(¥Å%µµ’—Öâ•±•”§ÅME1•—îÄ°—…•ùùï…ÃÅUAQΩ1QÅ•π—ï…ë•—Ã§(¥Å%ëïµ¡Ω—ïπçîÄ°∑©µîÅ%Ä¨Å∑©µîÅçΩπ—ïπ‘ÄÙÅÕ•±ïπç•ï’‡ÏÅçΩπ—ïπ‘ÅçΩπ—…Öë•ç—Ω•…îÄÙÅï……ï’»§(¥Å%ÃÅëîÅ—…ÖëïÃÅì•—ï…µ•π•Õ—ïÃÄ°Å’’•ê’ÄÅÕ’»Åç≥§ÅçΩµ¡ΩÕ•—î§((ååååÅ»ÉäPÅΩπ—…Ö–ÅçΩµµ’∏Åô•±∞ΩçøÌ—ÃΩHÄ°]ÖŸîÄÃ§(¥ÅÅΩÕ—Ö—ïùΩ…ÂÄÄ°=	MIYΩ5=1ΩiI<§∞ÅÅΩÕ—5Ωëï±Ä∞ÅÅ•±±IïçΩ…ëÄÅëÖπÃÅÅ…}ÖπÖ±Â—•çÃπ¡ÂÄ(¥ÅÅ	Öç≠—ïÕ—I’ππï…ÄÅ¡…Ωë’•–Å’∏ÅÅ•±±IïçΩ…ëÄÅ¡Ö»Å—…ÖëîÅŸ•ÑÅÅ}ô•πÖ±•Èï}—…Öëî†•Ä(¥ÅAÖ…•”§Åï·Öç—îÄËÅÅô•±∞π…}µ’±—•¡±îÄÙÙÅ…}µï—…•çÃπ…ïÖ±•Èïë}…Ä∞ÅÅô•±∞π•π•—•Ö±}…•Õ¨ÄÙÙÅ…}µï—…•çÃπ•π•—•Ö±}…•Õ≠Ä(¥Äƒ‹Å—ïÕ—ÃÅëîÅ¡Ö…•”§((ååååÅÃÉäPÅ…ΩÕÃµïπù•πîÅ¡Ö…•—‰Ä°]ÖŸîÄ–§(¥ÅÅ	QQ°…ïï]ÖÂπù•πîπ}ç±ΩÕï}¡ΩÕ•—•Ω∏†•ÄÅ¡…Ωë’•–Å’∏ÅÅ•±±IïçΩ…ëÄÅÖŸïåÅÅΩÕ—5Ωëï∞°Õ¡…ïÖêı=	MIY∞ÅçΩµµ•ÕÕ•Ω∏ı5=1•Ä(¥ÅÅ	Q·¡ï…•µïπ—AΩÕ•—•Ω∏πô•±∞ËÅ•±±IïçΩ…êÅÅ9ΩπïÄÅÖ©Ω’”§(¥Å’¡±•çÖ—îÅ@ô0ΩHÅ±Ωù•åÉ•±•µ•ª§ÄËÅÅ¡π±}’Õë—ÄÅï–ÅÅ¡π±}…ÄÅì•…•€•ÃÅëïÃÅ∑©µïÃÅçÖ±ç’±ÃÅ≈’îÅ±îÅ•±±IïçΩ…ê(¥ÅQïÕ—ÃÅëîÅ¡Ö…•”§Åç…ΩÕÃµïπù•πîÄËÅ1=9ΩM!=IPÅ›•ππï»Ω±ΩÕï»ÉÄÅçøÌ—ÃÅÎ•…ºÉäHÅHÅ•ëïπ—•≈’îÄÏÅÖŸïåÅçΩµµ•ÕÕ•Ω∏ÉäHÅù…ΩÕÃΩπï–Å•ëïπ—•≈’ïÃ∞ÅHÅë•ôõ°…îÅçÖ»Å	Öç≠—ïÕ—I’ππï»Å•πç±’–ÅçΩµµ•ÕÕ•Ω∏ÅëÖπÃÅ•π•—•Ö±}…•Õ¨Ä°ëΩç’µïπ”§∞Å¡ÖÃÅ’∏Åâ’ú§((ååååÅ–ÉäPÅÖ—ÖÕï–Ωï·¡ï…•µïπ–Å¡…ΩŸïπÖπçîÅâ•πë•πúÄ°]ÖŸîÄ–§(¥ÅÅ	Öç≠—ïÕ—IïÕ’±–π—Ω}ï·¡ï…•µïπ–†•ÄÅçÀ•îÅ’∏ÅÅM—…Ö—ïùÂ·¡ï…•µïπ—ÄÅÖŸïåÅô•πùï…¡…•π–∞Å¡…ΩŸïπÖπçîÅï–ÅçΩÕ—}µΩëï±}±Öâï∞(¥Å1îÅô•πùï…¡…•π–ÅëÖ—ÖÕï–Å¡…ΩŸ•ïπ–Åë‘ÅÕÂÕ”°µîÅêùÖ…ç°•ŸîÄ°ô…Ωπ—ß°…îÅï·¡±•ç•—îÄËÅ±îÅçÖ±±ï»ÅôΩ’…π•–Å±îÅô•πùï…¡…•π–§(¥Å1îÅçΩÕ—}µΩëï±}±Öâï∞ÅïÕ–ÅÕ—ΩçØ§ÅëÖπÃÅÅ¡Ö…Öµï—ï…ÕlâçΩÕ—}µΩëï∞âuÄ(¥ÅQïÕ—ÃÅëîÅ…ï¡…Ωë’ç—•â•±•”§ÄËÅ∑©µîÅïπ—À•îÉäHÅ∑©µïÃÅ—…ÖëîÅ%ÃÅï–ÅHÄÏÅçøÌ–Åë•ôõ•…ïπ–ÉäHÉ•çΩπΩµ•ïÃÅë•ôõ•…ïπ—ïÃÄÏÅô•πùï…¡…•π–Åë•ôõ•…ïπ–Å¡Ω’»ÅëΩπª•ïÃÅë•ôõ•…ïπ—ïÃÄÏÅô•πùï…¡…•π–Ω¡…ΩŸïπÖπçîÅëΩ•Ÿïπ–É©—…îÅ¡Ö•À•Ã((ååååÅ‘ÉäPÅ==LÅÕ—…’ç—’…Ö∞Åù’Ö…Öπ—ïîÄ°]ÖŸîÄ–§(¥Å1ïÃÅ—…ÖëïÃÅ==LÅ∏ùï·•Õ—ïπ–Å≈’îÅëÖπÃÅ±ÑÅôïª©—…îÅ==LÄ°—ïÕ”§§(¥ÅQI%8Åï–Å==LÅπîÅÕîÅç°ïŸÖ’ç°ïπ–Å¡ÖÃÄ°¡’…ùîΩïµâÖ…ùºÅçÀ•îÅ’∏ÅùÖ¿∞Å—ïÕ”§§(¥Å1ÑÅÕ—…Ö”•ù•îÅπîÅŸΩ•–Å≈’îÅ±îÅ¡ÖÕœ§Å¡ïπëÖπ–Å==LÄ°ì•—ïç—ï’»ÅÖπ—§µ±ΩΩ≠Ö°ïÖê∞Å—ïÕ”§§((ååååÅ’πç—•ΩπÖ∞Åπêµ—ºµπêÅAÖ—†(¥ÅQïÕ–ÅçΩµ¡±ï–ÄËÅâÖ……ïÃÅ°•Õ—Ω…•≈’ïÃÉäHÅô•πùï…¡…•π–ÉäHÅ	Öç≠—ïÕ—I’ππï»ÉäHÅ•±±IïçΩ…êÉäHÅHÉäHÅM—…Ö—ïùÂ·¡ï…•µïπ–ÉäHÅ·¡ï…•µïπ—IïÕ’±–(¥Å°áππîÅëîÅ¡…ΩŸïπÖπçîÄËÅëÖ—ÖÕï–Å•ëïπ—•—‰Ä¨ÅçΩÕ–ÅµΩëï∞Ä¨ÅÕ—…Ö—ïù‰ÉäHÅÀ•Õ’±—Ö–Å—…áùÖâ±î((®©I=MLµ9%9ÅAI%QdË®®(¥Åiï…ºµçΩÕ–ÄËÅ	Öç≠—ïÕ—I’ππï»Åï–Å	QQ°…ïï]ÖÂπù•πîÅ¡…Ωë’•Õïπ–ÅëïÃÅù…ΩÕÕ}¡π∞∞Åπï—}¡π∞∞Å•π•—•Ö±}…•Õ¨Åï–ÅHÅ•ëïπ—•≈’ïÃ(¥Å]•—†ÅçΩÕ—ÃÄËÅù…ΩÕÃÅï–Åπï–Å¡π∞Å•ëïπ—•≈’ïÃÄÏÅHÅë•ôõ°…îÅçÖ»Å	Öç≠—ïÕ—I’ππï»Å•πç±’–ÅçΩµµ•ÕÕ•Ω∏ΩÕ±•¡¡ÖùîÅëÖπÃÅ•π•—•Ö±}…•Õ¨Å—Öπë•ÃÅ≈’îÅ	QQ°…ïï]ÖÂπù•πîÅ’—•±•ÕîÅ’π•≈’ïµïπ–Å±îÅ…•Õ≈’îÅëîÅ¡…•‡ÉäPÅë•ôõ•…ïπçîÅÖ…ç°•—ïç—’…Ö±îÅëΩç’µïπ”•îÅï–Å—ïÕ”•î((®©QMPΩAI=Y99Ë®®(¥ÅÅM—…Ö—ïùÂ·¡ï…•µïπ–πëÖ—ÖÕï—}ô•πùï…¡…•π—ÄÄ°M!¥»‘ÿÅ°ï‡∞Äÿ–Åç°Ö…Ã§Å±•îÅ∞ùï·√•…•ïπçîÅÖ‘ÅëÖ—ÖÕï–Åï·Öç–(¥ÅÅM—…Ö—ïùÂ·¡ï…•µïπ–πëÖ—ÖÕï—}¡…ΩŸïπÖπçïÄÅ•ëïπ—•ô•îÅ±ÑÅÕΩ’…çîÄ°Ö…ç°•Ÿî∞Åô•ç°•ï»∞Åï—å∏§(¥Å1ïÃÅëï’‡ÅëΩ•Ÿïπ–É©—…îÅôΩ’…π•ÃÅïπÕïµâ±îÄ°ŸÖ±•ëÖ—•Ω∏ÅAÂëÖπ—•å§(¥Å1îÅçΩÕ–ÅµΩëï∞ÅïÕ–Åïπ…ïù•Õ—À§ÅëÖπÃÅ¡Ö…Öµï—ï…ÃÅ¡Ω’»Å—…áùÖâ•±•”§((®©==LÅUI9QË®®(¥ÅQI%8ÄÅY1%Q%=8ÄÅ==LÅÕ—…•ç—ïµïπ–Åç°…ΩπΩ±Ωù•≈’î(¥ÅA’…ùîΩïµâÖ…ùºÅçΩπô•ù’…Öâ±îÄ°ÅÖ—ÖÕï—M¡±•—Ωπô•úπ¡’…ùï}âÖ…ÕÄ∞ÅÅïµâÖ…ùΩ}âÖ…ÕÄ§(¥Åπ—§µ±ΩΩ≠Ö°ïÖêÅ¡…Ω’€§Å¡Ö»Åì•—ïç—ï’»ÅëîÅâÖ……ïÃÅŸ•Õ•â±ïÃ((®©%1LÅ5=%%Ë®®(¥ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†Ω…}ÖπÖ±Â—•çÃπ¡ÂÄ∞ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†ΩâÖç≠—ïÕ–π¡ÂÄ∞ÅÅÕ…åΩÖ±±Öë•∏Ω…ïÕïÖ…ç†Ωâ—ç}ï·¡ï…•µïπ–π¡ÂÄ(¥ÅÅ—ïÕ—ÃΩ—ïÕ—}âÖç≠—ïÕ–π¡ÂÄÄ†¨»‹Å—ïÕ—Ã§∞ÅÅ—ïÕ—ÃΩ—ïÕ—}â—ç}ï·¡ï…•µïπ–π¡ÂÄÄ†¨‡Å—ïÕ—Ã§(¥ÅÅëΩçÃΩ%5A159QQ%=9}A18πµëÄ((®©QMQLË®®ÄÃ‘–Å¡ÖÕÕïê∞ÄÃÅÕ≠•¡¡ïêÄÏÅ…’ôòÅAMLÄÏÅµÂ¡‰ÅAMLÄ†‹‹Åô•ç°•ï…Ã§ÄÏÅÅù•–Åë•ôòÄ¥µç°ïç≠ÄÅAML((®©-9=]8Å1%5%QQ%=9LË®®(¥Å1îÅçΩÕ—}µΩëï∞Å∏ùïÕ–Å¡ÖÃÅëÖπÃÅ±îÅÕç£•µÑÅME1•—îÅì•ëß§ÉäPÅÕ—ΩçØ§ÅëÖπÃÅ¡Ö…Öµï—ï…ÃÅ)M=8(¥Å0ùÖëÖ¡—Ö—ï’»Å	QÅπÖ—•òÅ…ïÕ—îÉÄÅçÀ•ï»Ä°ÕÂµâΩ±ïÃÅ5P‘Å	QΩQ ÄÙÅQÅ…ÖÂÕçÖ±î∞Å¡ÖÃÅÕ¡Ω–Åç…Â¡—º§(¥Å1îÅ¡’…ùîΩïµâÖ…ùºÅïÕ–ÅçΩπô•ù’…Öâ±îÅµÖ•ÃÅ¡ÖÃÅçΩπ—…Ö•π–ÅÖ‘Åπ•ŸïÖ‘Åë‘Å…ï¡ΩÕ•—Ω…‰((®©9aPÅaPÅ1=PË®®Å1Ω–ÅÉäPÅ	…Ö•∏ÅA$Åï–Å±•ôïçÂç±î∏((¥¥¥((ååÅ=`Å!-A=%9PÉäPÅ1=PÅÄËÅ	…Ö•∏Å•π—ï…ôÖçîÅï–ÅçÂç±îÅì•ç•Õ•Ω∏Ω¡ΩÕ•—•Ω∏Ä†»¿»ÿ¥ƒ¿¥¿Ã§((®´%—Ö–ÄË®®Åô…Ωπ—ß°…îÅÖ…ç°•—ïç—’…Ö±îÅ±•ŸÀ•îÄÏÅÖ’ç’πîÅ•µ¡≥•µïπ—Ö—•Ω∏ÅM98∏((åååÅ’ë•–Åë‘ÅçΩëîÅÖŸÖπ–Åç°Öπùïµïπ–((¥Å1îÅ…’π—•µîÅÀ•ï∞É•—Ö•–ÅÅ5Ö…≠ï—MçÖππï»ÉäHÅM—…Ö—ïùÂIΩ’—ï»ÉäHÅM—…Ö—ïù‰πïŸÖ±’Ö—îÉäHÅùïπ—ëÖ¡—ï»π¡…Ω¡ΩÕîÉäHÅùïπ—%π—ïπ—…Öô–ÉäHÅQ…Öëï%π—ïπ–ÉäHÅ·ïç’—•ΩπMï…Ÿ•çîπÕ’âµ•–ÉäHÅI•Õ≠πù•πîÉäHÅâ…Ω≠ï…Ä∏Å1îÅÅQ…Öëï%π—ïπ—ÄÅïÕ–Å±ÑÅ¡…Ω¡ΩÕ•—•Ω∏Åêùïπ—À•îÅ°•Õ—Ω…•≈’îÄÏÅÅI•Õ≠ïç•Õ•Ω∏π•π—ïπ—}•ëÄÅ…ï±•Ö•–Å±îÅ…•Õ≈’îÉÄÅ∞ù•π—ïπ—•Ω∏∏(¥Å1ïÃÅÅ=¡¡Ω…—’π•—ÂÄÉ•—Ö•ïπ–Å©Ω’…πÖ±•œ•ïÃÅÖŸïåÅëïÃÅ%ÃÅÖ≥•Ö—Ω•…ïÃ∞ÅÕÖπÃÅ±•ï∏Åïπ…ïù•Õ—À§ÅëÖπÃÅÅQ…Öëï%π—ïπ—Ä∞ÅÅI•Õ≠ïç•Õ•ΩπÄÅΩ‘ÅÅQ…ÖëïIïçΩ…ëÄ∏ÅU∏ÅÅçÂç±ï}•ëÄÅï·•Õ—Ö•–ÅëÖπÃÅ±îÅ©Ω’…πÖ∞Åï–Å±ïÃÅ—…ÖëïÃ∏(¥Å1ïÃÅ¡…Ω—ïç—•ΩπÃÄ°M0Å…ï—•À§∞Åç±ΩÕîÅêù’…ùïπçî∞Å›Ö—ç°ëΩú§ÅÃùï„•ç’—Ö•ïπ–Å°Ω…ÃÅç°ïµ•∏ÅëîÅì•ç•Õ•Ω∏ÅëîÅ∞ùÖùïπ–∏Å=	MIYΩAAHÉ•—Ö•ïπ–ÅÕÖπÃÅΩ…ë…ïÃÅâ…Ω≠ï»ÅëÖπÃÅ±ïÃÅçÂç±ïÃÅ—ïÕ”•ÃÄÏÅ5<Å¡ÖÕÕÖ•–Å¡Ö»Å—Ω≠ï∏Åï–Å€•…•ô•çÖ—•Ω∏ÅëîÅçΩµ¡—î∏(¥Å1ÑÅëΩç’µïπ—Ö—•Ω∏ÅM98Ω%M%=8¥¿ƒƒÅì•ç…•–Å±ÑÅùïÕ—•Ω∏ÅÖ’—ΩπΩµîÅëïÃÅ¡ΩÕ•—•ΩπÃÅçΩµµîÅç•â±îÄÏÅ±îÅçΩëîÅπîÅ¡ΩÕœ°ëîÅ¡ÖÃÅïπçΩ…îÅëîÅ¡Ω±•—•≈’îÅI•Õ≠πù•πîÅπ§ÅëîÅçÖ¡Öç•”•ÃÅâ…Ω≠ï»Å¡Ω’»Å5=%e}MQ=@∞Å5=%e}QIPÅï–ÅAIQ%1}1=M∏Å1îÅ1$ÅçΩπÕï…ŸîÅ±ïÃÅÖπç•ïπÃÅÖùïπ—ÃÅ114ÅΩ¡—•Ωππï±Ã∞ÅµÖ±ùÀ§Å±ÑÅç•â±îÉ
+¨Å…’π—•µîÅ »–ÅÕÖπÃÅ114É
+ÏÅëîÅ%M%=8¥¿¿ÿ∏ÅîÅ±Ω–ÅπîÅç°ÖπùîÅ¡ÖÃÅçïÃÅµΩëïÃÅëîÅ±Öπçïµïπ–∏((åååÅΩπ—…Ö–Åÿƒ()ÅÕ…åΩÖ±±Öë•∏Ωâ…Ö•∏π¡ÂÄÅì•ô•π•–ÅÅ	…Ö•∏πëïç•ëî°	…Ö•πΩπ—ï·–§Ä¥¯Åç—•ΩπA…Ω¡ΩÕÖ±ÄÅï–ÅÅ±ÖÕÕ•ç	…Ö•πëÖ¡—ï…Ä∏ÅÅ	…Ö•πΩπ—ï·—ÄÅçΩπ—•ïπ–Å…’∏∞ÅçÂç±î∞Å—•µïÕ—Öµ¿∞ÅµÖ¡¡•πúÅÕÂµâΩ±îÉäHÅΩ¡¡Ω…—’π•”§Å≈’Ö±•ôß•îÅï–ÅÕπÖ¡Õ°Ω–Å)M=8ÅëîÅµÖ…ç£§ΩçΩπ—ï·—îÄÏÅÖ’ç’∏ÅΩâ©ï–Åâ…Ω≠ï»∞ÅÕï…Ÿ•çîÅêùï„•ç’—•Ω∏∞ÅÕïç…ï–ÅΩ‘Å©ï—Ω∏Å∏ùïÕ–Å—…ÖπÕµ•Ã∏Å1îÅÅ±ÖÕÕ•ç	…Ö•πëÖ¡—ï…ÄÅÖ¡¡ï±±îÅ∞ùÖùïπ–Å°•Õ—Ω…•≈’îÅÕÖπÃÅç°Öπùï»ÅÕΩ∏Åç±ÖÕÕïµïπ–ÅΩ‘ÅÕÑÅœ•±ïç—•Ω∏Åï–Å—…ÖπÕôΩ…µîÅÅQIÄΩÅ9=}QIÄÅï∏Å¡…Ω¡ΩÕ•—•Ω∏Åï·¡±•ç•—î∏()Åç—•ΩπA…Ω¡ΩÕÖ±ÄÅïÕ–Å•µµ’Öâ±î∞Å•π—ï…ë•–Å±ïÃÅç°Öµ¡ÃÅ•πçΩππ’ÃÅï–Åï·•ùîÅÅÕç°ïµÖ}Ÿï…Õ•Ω∏Ù≈Ä∞ÅÅ¡…Ω¡ΩÕÖ±}•ëÄ∞ÅÅÕΩ’…çï}•ëÄ∞ÅÅÕΩ’…çï}Ÿï…Õ•ΩπÄ∞ÅÅ…’π}•ëÄ∞ÅÅçÂç±ï}•ëÄ∞ÅÅΩ¡¡Ω…—’π•—Â}•ëÄÅ¡Ω’»Å’πîÅÖç—•Ω∏ÅëîÅµÖ…ç£§∞ÅÅÕÂµâΩ±Ä∞ÅÅÖç—•ΩπÄ∞ÅÅ—•µïÕ—Öµ¡Ä∞Å…Ö•ÕΩπÃÅÕ—…’ç—’À•ïÃÄ°Å±•Õ—mÕ—…uÄ§∞ÅçΩπô•ÖπçîÅôÖç’±—Ö—•ŸîÅï–ÅÅA…Ω¡ΩÕÖ±AÖ…Öµï—ï…ÕÄÅŸÖ±•ì•Ã∏Åç—•ΩπÃÄËÅ1=9∞ÅM!=IP∞Å9=}QI∞Å!=1∞Å1=M∞Å5=%e}MQ=@∞Å5=%e}QIP∞ÅAIQ%1}1=M∏Å0ù•ëïπ—•”§ÅÅ@µ’’•ê‘°…’∏∞ÅçÂç±î∞ÅΩ¡¡Ω…—’π•”§∞ÅÕΩ’…çî∞ÅŸï…Õ•Ω∏ÅÕΩ’…çî•ÄÅïÕ–ÅÕ—Öâ±îÅ¡Ω’»Å’∏Å∑©µîÅ¡Ω•π–ÅëîÅì•ç•Õ•Ω∏ÄÏÅ’πîÅŸï…Õ•Ω∏ÅëîÅÕΩ’…çîÉ•µï–ÅÖ‘Å¡±’ÃÅ’πîÅ¡…Ω¡ΩÕ•—•Ω∏Å¡Ö»ÅΩ¡¡Ω…—’π•”§Åï–ÅçÂç±î∏Å1ïÃÅΩ¡¡Ω…—’π•”•ÃÅ’—•±•Õïπ–Åì•ÕΩ…µÖ•ÃÅÅ=A@µ’’•ê‘°…’∏∞ÅçÂç±î∞ÅÕÂµâΩ±î•Ä∏ÅYï…Õ•Ω∏Å•πçΩππ’î∞ÅÖç—•Ω∏Å•πçΩππ’î∞ÅÕÂµâΩ±îÅÖâÕïπ–∞ÅçΩπô•ÖπçîΩô…Öç—•Ω∏Å•πŸÖ±•ëî∞ÅŸÖ±ï’»ÅëîÅµΩë•ô•çÖ—•Ω∏ÅÖâÕïπ—î∞Å¡Ö…Ö∑°—…ïÃÅçΩπ—…Öë•ç—Ω•…ïÃÅï–Å%ÅôΩ…ü§ÅÕΩπ–Å…ï©ï”•Ã∏((åååÅ±’‡Åï–É•ç°ïå()UπîÅïπ—À•îÅŸÖ±•ëîÅïÕ–ÅçΩπŸï…—•îÅï∏ÅÅQ…Öëï%π—ïπ—ÄÅÖŸïåÅÅ•π—ïπ—}•êı¡…Ω¡ΩÕÖ±}•ëÄ∞Å¡’•ÃÉ•ŸÖ±◊•îÅ¡Ö»Ä®©±îÅI•Õ≠πù•πîÅï·•Õ—Öπ–®®∞ÅÕÖπÃÅÀ°ù±îÅëîÅÕ•È•πúÅπ§ÅŸΩ•îÅêü•ŸÖ±’Ö—•Ω∏ÅÕ√•ç•Ö±î∏Å1îÅçΩπ—À—±îÅëîÅÕ°Ω…—±•Õ–Åï–ÅëîÅŸï…Õ•Ω∏ÅëîÅÕ—…Ö”•ù•îÅ…ïÕ—îÅï∏Å¡±Öçî∏Å1ÑÅçΩπô•ÖπçîÅë‘ÅÅQ…Öëï%π—ïπ—ÄÅïÕ–Åì•ÕΩ…µÖ•ÃÅôÖç’±—Ö—•ŸîÅçΩµµîÅëÖπÃÅ±îÅçΩπ—…Ö–Å	…Ö•∏ÄÏÅ±îÅI•Õ≠πù•πîÅπîÅ∞ù’—•±•ÕîÅ¡ÖÃ∏ÅÅ·ïç’—•ΩπMï…Ÿ•çïÄÉ•ç…•–ÅÅ¡…Ω¡ΩÕÖ±}•ëÄΩÅΩ¡¡Ω…—’π•—Â}•ëÄÅëÖπÃÅ±ÑÅì•ç•Õ•Ω∏ÅëîÅ…•Õ≈’îÅï–ÅëÖπÃÅÅQ…ÖëïIïçΩ…ëÄÏÅ’πîÅµ•ù…Ö—•Ω∏ÅME1•—îÅÖëë•—•ŸîÅπ’±±Öâ±îÅ¡À•Õï…ŸîÅ±ïÃÅÖπç•ïππïÃÅ±•ùπïÃ∏Å1ïÃÉ•€•πïµïπ—ÃÅÖ¡¡ïπêµΩπ±‰ÅÅëïç•Õ•Ω∏πÖç—•Ωπ}¡…Ω¡ΩÕÖ±Ä∞ÅÅëïç•Õ•Ω∏πâ…Ö•π}ôÖ•±’…ïÄ∞ÅÅ¡ΩÕ•—•Ω∏πÖç—•ΩπÄÅï–ÅÅ¡ΩÕ•—•Ω∏πÖç—•Ωπ}…ï©ïç—ïëÄÅçΩµ¡≥°—ïπ–Å±îÅ©Ω’…πÖ∞∏Å1ïÃÉ•€•πïµïπ—ÃÅëîÅ¡ΩÕ•—•Ω∏ÅAAHÅï·¡ΩÕïπ–Å±ïÃÅ%ÃÅ—•À•ÃÅëîÅ±ï’»Å•π—ïπ—•Ω∏Å¡ï…Õ•Õ”•îÄÏÅ±ïÃÅç≥——’…ïÃÅ5<Å©Ω’…πÖ±•Õïπ–Å±ïÃÅ%ÃÅë‘Å—…Öëî∏()Å9=}QIÄÅ•π—ïπ—•Ωππï∞ÅïÕ–Å’πîÅ¡…Ω¡ΩÕ•—•Ω∏Å¡ï…Õ•Õ”•îÅï–Å±ß•îÉÄÅÅëïç•Õ•Ω∏ππΩ}—…ÖëïÄ∏Å·çï¡—•Ω∏∞Å•πë•Õ¡Ωπ•â•±•”§∞Å¡…Ω¡ΩÕ•—•Ω∏ÅµÖ±ôΩ…∑•îÅΩ‘Å•πçΩ£•…ïπçîÅ…’∏ΩçÂç±îΩÕΩ’…çîΩΩ¡¡Ω…—’π•”§Å¡…Ωë’•Õïπ–Å’∏É•€•πïµïπ–Åêü•ç°ïåÅï–ÅÅ9=}QIÄ∞ÅÕÖπÃÅÖ¡¡ï∞Åêùï„•ç’—•Ω∏∏Å1ïÃÅ¡…Ω¡ΩÕ•—•ΩπÃÅëîÅùïÕ—•Ω∏Å—…ÖŸï…Õïπ–Å’πîÅ¡Ω…—îÅì•—ï…µ•π•Õ—îÅÅI•Õ≠πù•πîπïŸÖ±’Ö—ï}¡ΩÕ•—•Ωπ}Öç—•ΩπÄÄËÅΩ›πï…Õ°•¿∞ÅµΩëîÅ5<∞Å—Â¡îÅëîÅçΩµ¡—î∞Å≠•±∞ÅÕ›•—ç†Åï–É•—Ö–Åë‘Å…’∏ÅÕΩπ–Å€•…•ôß•ÃÄÏÅÕï’∞Å!=1Å¡ï’–É©—…îÅÖ¡¡…Ω’€§∞ÅÕÖπÃÅΩ…ë…î∏Å1=MΩ5=%e}MQ=@Ω5=%e}QIPΩAIQ%1}1=MÅÕΩπ–Å…ï©ï”•ÃÅÖŸïåÅµΩ—•òÅÅA=M%Q%=9}Q%=9}U9MUAA=IQÄÅ—Öπ–Å≈’îÅ±ïÃÅçÖ¡Öç•”•ÃÅï–ÅÀ°ù±ïÃÅêùï„•ç’—•Ω∏Å∏ùï·•Õ—ïπ–Å¡ÖÃ∏Å1îÅµΩπ•—Ω»Ωç±ΩÕîÅ¡…Ω—ïç—ï’»Å5<Å¡À•è°ëîÅ∞ùÖ¡¡ï∞Å	…Ö•∏Åï–Å…ïÕ—îÅ•πì•¡ïπëÖπ–ÅëîÅÕÑÅë•Õ¡Ωπ•â•±•”§∏Å=	MIYÅ…ïÕ—îÅ±ïç—’…îÅÕ—…•ç—î∞ÅAAHÅ¡ÖÕÕîÅ¡Ö»ÅÕ•µ’±Ö—•Ω∏∞Å5<ÅùÖ…ëîÅ±îÅâ…Ω≠ï»Åœ•ç’…•œ§∞Å1%YÅ…ïÕ—îÅ•π—ï…ë•–∏((åååÅIï¡±Ö‰Åï–ÅçΩµ¡Ö—•â•±•”§()0ùÖ…ç°•ŸîÅï–ÅÅIï¡±ÖÂΩπ—ï·–πô…Ωµ}çÂç±ïÄÅ…ïÕ—ïπ–Å•πç°Öπü•ÃÄËÅ±îÅ…ï¡±Ö‰Å…ïÕ—•—’îÅ±ïÃÅâÖ……ïÃÅÖ…ç°•€•ïÃÅï–Å∞ü•€•πïµïπ–ÅëîÅ¡…Ω¡ΩÕ•—•Ω∏∞ÅÕÖπÃÅôï—ç†Åâ…Ω≠ï»∏Å1ïÃÅ%ÃÅ’—•±•Õïπ–Å…’∏ΩçÂç±îΩΩ¡¡Ω…—’π•”§ΩÕΩ’…çî∞ÅÕÖπÃÅëΩπª•îÅô’—’…îÄÏÅ±ïÃÅ∑©µïÃÅïπ—À•ïÃÅÖ…ç°•€•ïÃÅ¡ï’Ÿïπ–É©—…îÅçΩµ¡ÖÀ•ïÃÅ¡±’ÃÅ—Ö…êÅÖŸïåÅ’πîÅŸï…Õ•Ω∏ÅëîÅçï…ŸïÖ‘Åô•„•î∏Å1îÅâÖπåÅ1Ω–ÅÄ°ÅΩÕ—5Ωëï±Ä∞ÅÅ•±±IïçΩ…ëÄ∞ÅH∞ÅÕ¡±•—ÃÅ==L§Å∏ùÑÅ¡ÖÃÉ•”§ÅµΩë•ôß§∏Å1ïÃÅô•·—’…ïÃÅç±ÖÕÕ•≈’ïÃÅçΩπÕï…Ÿïπ–ÅQIΩ9=}QI∞Å…•Õ≈’îÅï–ÅµΩëîÅêùï„•ç’—•Ω∏ÄÏÅÕï’±ïÃÅ±ïÃÅ…ï¡À•Õïπ—Ö—•ΩπÃΩ%ÃΩ©Ω’…πÖ’‡ÅçÖ’ÕÖ’‡ÅÃùÖ©Ω’—ïπ–∏((åååÅYÖ±•ëÖ—•Ω∏()QïÕ—ÃÅç•â≥•ÃÄËÅŸÖ±•ëÖ—•Ω∏Åë‘ÅÕç£•µÑ∞Å•ëïπ—•”§ΩŸï…Õ•Ω∏∞Å9=}QIÅï·¡±•ç•—î∞ÅÖëÖ¡—Ö—ï’»Åç±ÖÕÕ•≈’î∞Åï……ï’»ΩµÖ±ôΩ…µÖ—•Ω∏Ω°Ω…ΩëÖ—ÖùîÅ	…Ö•∏∞Å…•Õ≈’îΩ…ï©ï–∞Å5<ΩAAHΩ=	MIY∞Å!=1Åï–Å¡…Ω¡…ß•”§ÅëîÅ¡ΩÕ•—•Ω∏∞Å±•ïπÃÅ©Ω’…πÖ∞Åï–Å…ï¡±Ö‰∞Å¡…Ω—ïç—•Ω∏Å•πì•¡ïπëÖπ—î∞Åµ•ù…Ö—•Ω∏ÅME1•—îÅÖëë•—•Ÿî∏ÅK•õ•…ïπçîÅÖŸÖπ–Å1Ω–ÅÄËÄÃÿÅ—ïÕ—ÃÅΩ…ç°ïÕ—…Ö—•Ω∏ΩµΩëïÃÅ¡ÖÕœ•Ã∏ÅYÖ±•ëÖ—•Ω∏Åô•πÖ±îÄËÄÃÿ‡Å—ïÕ—ÃÅ¡ÖÕœ•Ã∞ÄÃÅ—ïÕ—ÃÅêù•π”•ù…Ö—•Ω∏Å5P‘ÅÕÖ’”•ÃÄÏÅÅ…’ôòÅç°ïç¨ÅÕ…åÅ—ïÕ—ÕÄ∞ÅÅµÂ¡‰ÅÕ…çÄÅï–ÅÅù•–Åë•ôòÄ¥µç°ïç≠ÄÅ¡ÖÕœ•Ã∏Å’ç’∏ÅΩ…ë…îÅÀ•ï∞Å¡ïπëÖπ–Å±ïÃÅ—ïÕ—ÃÄ°5Ωç≠	…Ω≠ï»§∏((åååÅ1•µ•—ïÃÅï–Å¡…Ωç°Ö•∏Å±Ω–Åï·Öç–()1îÅÕΩç≠ï–ÅÖççï¡—îÅ±ïÃÅÖç—•ΩπÃÅëîÅùïÕ—•Ω∏ÅµÖ•ÃÅ∏ùÖç—•ŸîÅ≈’îÅ!=1ÅÕÖπÃÅΩ…ë…î∏ÅÅ	…Ö•πΩπ—ï·—ÄÅôΩ’…π•–Å—•ç≠ï–Ω%ÅëîÅ—…ÖëîÅï–Å±•ïπÃÅçÖ’ÕÖ’‡Å¡Ω’»Å±ïÃÅ¡ΩÕ•—•ΩπÃÅ5<Å¡ΩÕœ•ì•ïÃ∞ÅµÖ•ÃÅ¡ÖÃÅïπçΩ…îÅ’πîÅŸ’îÅçÖπΩπ•≈’îÅ’π•ôß•îÅÖŸïåÅAAH∏ÅÅ	…Ω≠ï…Ö¡Öâ•±•—•ïÕÄÅ∏ùÖππΩπçîÅ¡ÖÃÅ±ïÃÅ¡…•µ•—•ŸïÃÅëîÅµΩë•ô•çÖ—•Ω∏Ωôï…µï—’…îÅ¡Ö…—•ï±±î∏Å0ù•ëïπ—•”§Åêù’πîÅ¡ΩÕ•—•Ω∏ÅAAHÅ…ïÕ—îÅÕΩ∏ÅÅ¡Ö¡ï…}•ëÄÅë•Õ—•πç–Åë‘Å—…ÖëîÅ5<∏Å1ÑÅ¡ï…Õ•Õ—ÖπçîÅëîÅ±ÑÅ¡…Ω¡ΩÕ•—•Ω∏ÅπîÅçÖ¡—’…îÅ¡ÖÃÅïπçΩ…îÅ’∏Å°ÖÕ†ÅçΩµ¡±ï–ÅëïÃÅôïÖ—’…ïÃÅπ§Å∞ü•—Ö–Å•π—ï…πîÅêù’∏Åçï…ŸïÖ‘Åô’—’»∏((®©9aPÄË®®Å•µ¡≥•µïπ—ï»Åï–Å—ïÕ—ï»Å’πîÅ¡Ω±•—•≈’îÅì•—ï…µ•π•Õ—îÅëîÅùïÕ—•Ω∏Å¡Ö»Å¡ΩÕ•—•Ω∏ÅëÖπÃÅI•Õ≠πù•πîΩ·ïç’—•ΩπMï…Ÿ•çîÄ°Ω›πï…Õ°•¿∞Å¡ΩÕ•—•Ω∏Å%ÅçÖπΩπ•≈’îÅ5<ΩAAH∞ÅçÖ¡Öç•”•ÃÅâ…Ω≠ï»∞ÅµΩëî∞Å≠•±∞ÅÕ›•—ç†∞Åç°Ö±±ïπùî∞ÅçΩπô•…µÖ—•Ω∏ÅëîÅÀ•Õ’±—Ö–§∞Å¡’•ÃÅ’π•ô•ï»Å±ÑÅŸ’îÅëïÃÅ¡ΩÕ•—•ΩπÃÅ¡ΩÕœ•ì•ïÃÅëÖπÃÅ	…Ö•πΩπ—ï·–∏ÅAÀ•Õï…Ÿï»Å±ïÃÅÕΩ…—•ïÃÅ¡…Ω—ïç—…•çïÃÅ•πì•¡ïπëÖπ—ïÃ∏Å¡À°ÃÅçï——îÅ¡…ï’ŸîÅÕï’±ïµïπ–∞ÅïπŸ•ÕÖùï»Å’∏Åçï…ŸïÖ‘ÅM98Åï·√•…•µïπ—Ö∞ÄÏÅπîÅ¡ÖÃÅ±îÅì•µÖ……ï»ÅëÖπÃÅ±îÅ1Ω–Å∏(((¥¥¥((ååÅA1Q=I4Å!-A=%9PÉäPÅ11%8ÄºÅ)HÅM!IÅ=IÉäPÄ»¿»ÿ¥ƒ¿¥¿Ã((®©MQQULË®®ÅÖ…ç°•—ïç—’…Ö∞Åëïç•Õ•ΩπÃÅ…ïçΩ…ëïê∞Å…’π—•µîÅ)ÖôÖ»ÅπΩ–Å•µ¡±ïµïπ—ïê∏((åååÅëΩ¡—ïêÅëïç•Õ•ΩπÃ(¥Å%M%=8¥¿ƒ–ÉäPÅ•ÕΩ±Ö—ïêÅ±±Öë•∏Ω)ÖôÖ»Å›Ω…≠Õ¡ÖçïÃÅΩŸï»ÅÕ°Ö…ïêÅçΩ…î∏(¥Å%M%=8¥¿ƒ‘ÉäPÅâ…Ω≠ï»ΩÖççΩ’π–Åâ•πë•πùÃÅÖπêÅçÖ¡Öâ•±•—•ïÃÏÅπºÅ°Ö…ëçΩëïêÅ·πïÕÃΩ5P‘ÅëΩµÖ•∏ÅµΩëï∞∏(¥Å%M%=8¥¿ƒÿÉäPÅô’—’…îÅù±ΩâÖ∞ÅΩµµÖπêÅïπ—ï»Å›•—†Åë•Õ—•πç–Å±±Öë•∏Ω)ÖôÖ»Å•ëïπ—•—•ïÃÅÖπêÅ…ïÖêµΩπ±‰ÅÕ’¡ï…Ÿ•Õ•Ω∏ÅÕïµÖπ—•çÃ∏((åååÅ’……ïπ–Å•πŸÖ…•Öπ–)ÅÅÅ—ï·–)]Ω…≠Õ¡ÖçîÅ5Ö…≠ï–ΩΩπ—ï·–(ÄÄÄÄ¥¯Å	…Ö•∏(ÄÄÄÄ¥¯Åç—•ΩπA…Ω¡ΩÕÖ∞(ÄÄÄÄ¥¯Åëï—ï…µ•π•Õ—•åÅI•Õ¨(ÄÄÄÄ¥¯Å·ïç’—•Ω∏(ÄÄÄÄ¥¯Å	…Ω≠ï…ëÖ¡—ï»ÄºÅççΩ’π—	•πë•πú)ÅÅÄ((åååÅ%ÕΩ±Ö—•Ω∏Å…ï≈’•…ïµïπ—Ã)]Ω…≠Õ¡ÖçîµÕçΩ¡ïêÅµ’—Öâ±îÅÕ—Ö—îËÅ…’πÃΩçÂç±ïÃ∞Å’π•Ÿï…Õî∞ÅÕ—…Ö—ïù•ïÃ∞Å	…Ö•∏Ωç°ïç≠¡Ω•π—Ã∞Å¡ΩÕ•—•ΩπÃ∞Å…•Õ¨Ω›Ω…≠•πúµçÖ¡•—Ö∞Ωç°Ö±±ïπùîÅÕ—Ö—î∞Å…ïÕïÖ…ç†ÅçΩπô•ù’…Ö—•Ω∏ÅÖπêÅâ…Ω≠ï»ΩÖççΩ’π–Åâ•πë•πú∏((åååÅ)ÖôÖ»Åë•…ïç—•Ω∏)…Â¡—ºµΩ…•ïπ—ïêÅ›Ω…≠Õ¡ÖçîÅ›•—†Åëïï¿µ…ïêΩç…•µÕΩ∏ÅU$Å•ëïπ—•—‰∞ÅÖâ±îÅ—ºÅ’ÕîÅÑÅç…Â¡—ºµçÖ¡Öâ±îÅ5P‘Åâ…Ω≠ï»Å›°ï∏ÅçΩµ¡Ö—•â±î∞Å›°•±îÅ¡…ïÕï…Ÿ•πúÅ—°îÅΩ¡—•Ω∏ÅΩòÅô’—’…îÅπÖ—•ŸîÅç…Â¡—ºΩï·ç°ÖπùîÅÖëÖ¡—ï…Ã∏ÅM°Ö…ïêÅïπù•πîÅëΩïÃÅπΩ–Å•µ¡±‰ÅÕ°Ö…ïêÅ±ïÖ…πïêÅ¡Ö…Öµï—ï…Ã∏((åååÅIïÖ∞µµΩπï‰ÅâΩ’πëÖ…‰)1%YÅ…ïµÖ•πÃÅâ±Ωç≠ïê∏Å’—’…îÅ…ïÖ∞µÖççΩ’π–ÅÕ’¡¡Ω…–Å…ï≈’•…ïÃÅï·¡±•ç•–Å¡…ΩµΩ—•Ω∏ÅùÖ—ïÃ∞ÅçÖ¡Öâ•±•—‰ÅŸï…•ô•çÖ—•Ω∏∞Å…ïçΩπç•±•Ö—•Ω∏∞Å≠•±∞ÅÕ›•—ç†∞ÅÖ’ë•—Öâ•±•—‰ÅÖπêÅ°’µÖ∏ÅÖç—•ŸÖ—•Ω∏∏((åååÅIïçΩµµïπëïêÅëï¡ïπëïπç‰ÅΩ…ëï…•πú(ƒ∏ÅΩµ¡±ï—îÅëï—ï…µ•π•Õ—•åÅ¡ΩÕ•—•Ω∏µµÖπÖùïµïπ–Å±•ôïçÂç±îËÅ1=MÄºÅ5=%e}MQ=@ÄºÅ5=%e}QIPÄºÅAIQ%1}1=MÅ›•—†ÅçΩπô•…µÖ—•Ω∏ÅÕïµÖπ—•çÃ∏(»∏ÅUπ•ô‰ÅΩ›πïêµ¡ΩÕ•—•Ω∏Å•ëïπ—•—‰ΩŸ•ï‹ÅÖç…ΩÕÃÅ5<ΩAAHÅÖπêÅï·—ïπêÅâ…Ω≠ï»ÅçÖ¡Öâ•±•—•ïÃ∏(Ã∏Å%π—…Ωë’çîÅï·¡±•ç•–Å›Ω…≠Õ¡ÖçîΩÖççΩ’π–Å•ÕΩ±Ö—•Ω∏Å¡…•µ•—•ŸïÃ∏(–∏ÅëêÅ)ÖôÖ»Å…’π—•µîÅÕ≠ï±ï—Ω∏ÅΩ∏Å—°îÅÕ°Ö…ïêÅçΩ…î∏(‘∏ÅëêÅù±ΩâÖ∞ÅΩµµÖπêÅïπ—ï»ÅÖπêÅ›Ω…≠Õ¡ÖçîÅÕ›•—ç†∏(ÿ∏Å=π±‰Å—°ï∏ÅÕ¡ïç•Ö±•ÈîÅç…Â¡—ºÅ	…Ö•∏Ω…ïÕïÖ…ç†Ω…’π—•µîÅÖπêÅïŸÖ±’Ö—îÅçÖπë•ëÖ—îÅâ…Ω≠ï…ÃΩÖëÖ¡—ï…Ã∏(((åååÅïç•Õ•Ω∏µ…ïù•Õ—…‰ÅÖ’ë•–ÉäPÄ»¿»ÿ¥ƒ¿¥¿Ã()¡À°ÃÅÖ’ë•–Åç…Ω•œ§ÅëïÃÅì•ç•Õ•ΩπÃÅëîÅçΩπçï¡—•Ω∏Åì•´ÄÅ¡…•ÕïÃÅï–Åë‘Å…ïù•Õ—…î∞Å±ïÃÅì•ç•Õ•ΩπÃÄ¿ƒ‹ÉÄÄ¿»»ÅΩπ–É•”§ÅÖ©Ω’”•ïÃÅ¡Ω’»Å…ïπë…îÅï·¡±•ç•—ïÃÅ±ïÃÅçΩπ—…Ö•π—ïÃÅì•´ÄÅ’—•±•œ•ïÃÅ¡Ö»Å±ïÃÅ±Ω—ÃÅΩΩÅï–Å±ÑÅ…ΩÖëµÖ¿ÄËÅçÖ’ÕÖ∞Å…ï¡±Ö‰∞Å¡Ö…•”§Åï·√•…•µïπ—Ö±î∞Åô…Ωπ—ß°…îÅ	…Ö•∏Ωç—•ΩπA…Ω¡ΩÕÖ∞∞Å¡…ΩµΩ—•Ω∏ÅçΩπ—À—≥•î∞Å’π•Ÿï…ÃÅâ…Ω≠ï»ÅëÂπÖµ•≈’îÅï–ÅùΩ’Ÿï…πÖπçîÅM—…Ö—ïù‰Å!Ö…ŸïÕ—ï»∏ÅYΩ•»ÅÅëΩçÃΩ%M%=9LΩI5πµëÄ∏((ååÅ1Ω–ÅÉäPÅç°ïç≠¡Ω•π–Å¡Ö…—•ï∞Åêù’…ùïπçîÄ†»¿»ÿ¥ƒ¿¥¿Ã§((¥ÅK•Ö±•œ§ÄËÅµΩì°±îÅçÖπΩπ•≈’îÅÅ=›πïëAΩÕ•—•ΩπÄ∞ÅÀ•õ•…ïπçîÅÅ¡ΩÕ•—•Ωπ}•ëÄÅëÖπÃÅÅç—•ΩπA…Ω¡ΩÕÖ±ÄÅï–ÅŸ’îÅ¡ΩÕ•—•ΩπÃÅëÖπÃÅÅ	…Ö•πΩπ—ï·—ÄÏÅçÖ¡Öç•”•ÃÅï·¡±•ç•—ïÃÅç±ΩÕîΩ¡Ö…—•Ö∞ΩM0ΩQ@Ω…ïçΩπç•±•Ö—•Ω∏ÏÅ¡…•µ•—•ŸîÅâ…Ω≠ï»ÅÅ5=%eÄÏÅ©ï—Ω∏ÅëîÅùïÕ—•Ω∏Å±ß§ÉÄÅ±ÑÅ¡…Ω¡ΩÕ•—•Ω∏ÏÅçΩµ¡Ω…—ïµïπ—ÃÅì•—ï…µ•π•Õ—ïÃÅ5Ωç≠	…Ω≠ï»Å¡Ω’»ÅµΩë•ô•çÖ—•Ω∏Åï–Åôï…µï—’…îÅ¡Ö…—•ï±±îÏÅ…ï≈◊©—îÅ5P‘ÅÅQI}Q%=9}M1QAÄ∏(¥Å%πçΩµ¡±ï–ÄËÅÀ°ù±ïÃÅÅI•Õ≠πù•πîπïŸÖ±’Ö—ï}¡ΩÕ•—•Ωπ}Öç—•ΩπÄ∞ÅΩ…ç°ïÕ—…Ö—•Ω∏ÅŸ•ÑÅÅ·ïç’—•ΩπMï…Ÿ•çïÄ∞ÅAAH∞ÅçΩπô•…µÖ—•Ω∏ΩÀ•çΩπç•±•Ö—•Ω∏∞Å•ëïµ¡Ω—ïπçî∞Å©Ω’…πÖ∞ÅçΩµ¡±ï–∞Åµ•ù…Ö—•ΩπÃÅï–ÅµÖ—…•çîÅëîÅ—ïÕ—ÃÅ1Ω–Å∏(¥ÅYÖ±•ëÖ—•Ω∏Åï„•ç’”•îÄËÅI’ôòÅÕ’»Å±ïÃÅÕï¡–Åô•ç°•ï…ÃÅAÂ—°Ω∏ÅµΩë•ôß•ÃÏÅÅ—ïÕ—ÃΩ—ïÕ—}Öùïπ—Ãπ¡ÂÄÅï–ÅÅ—ïÕ—ÃΩ—ïÕ—}µ–’}â…Ω≠ï»π¡ÂÄÄ†Ã‡Å—ïÕ—Ã§ÏÅÅù•–Åë•ôòÄ¥µç°ïç≠Ä∏ÅQΩ’–ÅïÕ–ÅŸï…–∏ÅUπîÅ¡…ïµß°…îÅçΩµµÖπëîÅ¡Â—ïÕ–ÅÑÉ•ç°Ω◊§Å’π•≈’ïµïπ–ÅçÖ»ÅÅ—ïÕ—ÃΩ—ïÕ—}â…Ö•∏π¡ÂÄÅ∏ùï·•Õ—îÅ¡ÖÃ∏(¥Å1•µ•—îÄËÅçîÅç°ïç≠¡Ω•π–ÅπîÅ…ïπêÅ¡ÖÃÅïπçΩ…îÅ±ïÃÅÖç—•ΩπÃÅ1Ω–ÅÅï„•ç’—Öâ±ïÃÅëï¡’•ÃÅ±îÅ	…Ö•∏ÏÅ±îÅùÖ…ëîµôΩ‘Å1Ω–ÅÅçΩπ—•π’îÅëΩπåÉÄÅ±ïÃÅ…ï©ï—ï»∏(¥ÅIï¡…•ÕîÅï·Öç—îÄËÅçΩµ¡≥•—ï»ÅêùÖâΩ…êÅ±îÅçΩπ—ï·—îÅï–Å±ÑÅì•ç•Õ•Ω∏Åì•—ï…µ•π•Õ—îÅëîÅùïÕ—•Ω∏∞Å¡’•ÃÅâ…Öπç°ï»ÅÅ·ïç’—•ΩπMï…Ÿ•çïÄ∞ÅAAH∞ÅÀ•çΩπç•±•Ö—•Ω∏Ω•ëïµ¡Ω—ïπçîΩ©Ω’…πÖ∞Åï–ÅÖ©Ω’—ï»Å±ÑÅµÖ—…•çîÅç•â≥•îÅÖŸÖπ–ÅëîÅì•ç±Ö…ï»Å1Ω–ÅÅ—ï…µ•ª§∏((åååÅ1Ω–ÅÉäPÅœ•ç’…•ÕÖ—•Ω∏ÅëïÃÅ¡…•µ•—•ŸïÃÅâ…Ω≠ï»Ä†»¿»ÿ¥ƒ¿¥¿Ã∞Å…ï¡…•ÕîÅΩëï‡§()0ùÖ’ë•–ÅëîÅÄ‹…ÖëÖÖâÄÅÑÅ•ëïπ—•ôß§ÅëïÃÅì•ôÖ’—ÃÉÄÅçΩ……•ùï»ÅÖŸÖπ–Å∞ùÖç—•ŸÖ—•Ω∏ÅëïÃÅÖç—•ΩπÃÅëîÅùïÕ—•Ω∏∏((¥Å5P‘ÅÅ5=%eÄÅ…ï±•–Å±ÑÅ¡ΩÕ•—•Ω∏Å¡Ö»Å—•ç≠ï–∞Å€•…•ô•îÅÕÂµâΩ±îΩµÖù•åΩçΩµµïπ–Åï–Å•πç±’–Åï·¡±•ç•—ïµïπ–Å±ïÃÅëï’‡Å¡…Ω—ïç—•ΩπÃÅëÖπÃÅÅQI}Q%=9}M1QAÄ∏Å1îÅM0ÅΩ‘ÅQ@ÅπΩ∏ÅëïµÖπì§ÅïÕ–ÅçΩπÕï…€§Åëï¡’•ÃÅ±ÑÅ¡ΩÕ•—•Ω∏Åô…áπç°îÄÏÅ’πîÅ¡ΩÕ•—•Ω∏ÅÖâÕïπ—î∞Å’πîÅ±ïç—’…îÅ•µ¡ΩÕÕ•â±îÅΩ‘Å’πîÅµΩë•ô•çÖ—•Ω∏ÅŸ•ëîÅïÕ–Å…ïô’œ•îÅÖŸÖπ–ÅÅΩ…ëï…}ç°ïç≠ÄΩÅΩ…ëï…}ÕïπëÄ∏(¥Å1ïÃÅπΩ’ŸïÖ’‡Å©ï—ΩπÃÅëîÅùïÕ—•Ω∏Åï·•ùïπ–ÅÅ…ï≈’ïÕ–ıÄÅï–Å±•ïπ–Å∞ùÖ¡¡…ΩâÖ—•Ω∏ÉÄÅ±ÑÅ…ï≈◊©—îÅçΩµ¡≥°—î∞ÅπΩ—Öµµïπ–Å—•ç≠ï–∞ÅÕïπÃ∞ÅM0ΩQ@∞ÅŸΩ±’µîÅï–Å•ëïπ—•”§∏ÅUπîÅ…ï≈◊©—îÅµΩë•ôß•îÅÖ¡À°ÃÅÖ¡¡…ΩâÖ—•Ω∏ÅïÕ–Å…ïô’œ•î∏Å1ïÃÅ©ï—ΩπÃÅ°•Õ—Ω…•≈’ïÃÅ=A8Ω1=MÅ…ïÕ—ïπ–ÅçΩµ¡Ö—•â±ïÃÄÏÅ5=%dÅï·•ùîÅ’∏Å©ï—Ω∏Å±ß§ÉÄÅ±ÑÅ…ï≈◊©—îÅçΩµ¡≥°—î∏(¥Å5Ωç≠	…Ω≠ï»Å€•…•ô•îÅÕÂµâΩ±îΩµÖù•åΩçΩµµïπ–Å¡Ω’»Å1=MΩ5=%d∏ÅUπîÅôï…µï—’…îÅï·•ùîÅ±îÅÕïπÃÅΩ¡¡Ωœ§Åï–Å’∏ÅŸΩ±’µîÅô•π§Å…ïÕ¡ïç—Öπ–Å±îÅµ•π•µ’¥Ω¡ÖÃ∞ÅÕÖπÃÅ…ï±•≈’Ö–ÅπΩ∏Åª•ùΩç•Öâ±î∏Å1ÑÅôï…µï—’…îÅ¡Ö…—•ï±±îÅŸÖ±•ëîÅçΩπÕï…ŸîÅ±îÅ—•ç≠ï–∞ÅM0ΩQ@Åï–Å±îÅŸΩ±’µîÅ…ïÕ—Öπ–∏(¥ÅQïÕ—ÃÄËÅÅ—ïÕ—ÃΩ—ïÕ—}¡ΩÕ•—•Ωπ}¡…•µ•—•ŸïÃπ¡ÂÄÅÖ©Ω’—îÄÃÿÅçÖÃÄÏÅ±îÅôÖ’‡ÅµΩë’±îÅ5P‘ÅÕ•µ’±îÅM1Q@ÅÕÖπÃÅôï…µï»Å±ÑÅ¡ΩÕ•—•Ω∏Åπ§ÅçÀ•ï»ÅëîÅëïÖ∞∏ÅM’•—îÅçΩµ¡≥°—îÄËÄ–¿–Å—ïÕ—ÃÅ¡ÖÕœ•Ã∞ÄÃÅ•π”•ù…Ö—•ΩπÃÅ5P‘ÅÕÖ’”•ïÃÄÏÅI’ôò∞ÅµÂ¡‰Åï–ÅÅù•–Åë•ôòÄ¥µç°ïç≠ÄÅ¡…Ω¡…ïÃ∏Å’ç’∏Å—ï…µ•πÖ∞Åπ§ÅΩ…ë…îÅï·—ï…πîÅ’—•±•œ§∏((®©1•µ•—ïÃÄËÅ1Ω–ÅÅ…ïÕ—îÅ•πçΩµ¡±ï–∏®®Å1îÅI•Õ≠πù•πîΩΩ…ç°ïÕ—…Ö—ï’»ÅçΩπ—•π’îÅëîÅ…ïô’Õï»Å1=MΩ5=%dΩAIQ%1}1=MÅ¡…Ω¡Ωœ•ÃÅ¡Ö»Å±îÅ	…Ö•∏∏ÅïÃÅçΩ……ïç—•ôÃÅπîÅçΩπÕ—•—’ïπ–Åπ§Å’πîÅ¡Ω±•—•≈’îÅëîÅùïÕ—•Ω∏∞Åπ§Å’πîÅçΩπô•…µÖ—•Ω∏ÅÖ¡À°ÃÅï„•ç’—•Ω∏∞Åπ§Å∞ù•ëïµ¡Ω—ïπçî∏Å1ÑÅçΩπÕï…ŸÖ—•Ω∏ÅM0ΩQ@Å…ï¡ΩÕîÅÕ’»Å’∏ÅÕπÖ¡Õ°Ω–Åô…Ö•ÃÅµÖ•ÃÅ∏ùïÕ–Å¡ÖÃÅÖ—Ωµ•≈’îÅŸ•Ã∑ÄµŸ•ÃÅêù’πîÅµΩë•ô•çÖ—•Ω∏ÅçΩπç’……ïπ—îÅÖ‘Å—ï…µ•πÖ∞ÄÏÅ±ÑÅçΩπô•…µÖ—•Ω∏ΩÀ•çΩπç•±•Ö—•Ω∏Å…ïÕ—îÅ•πë•Õ¡ïπÕÖâ±îÅëÖπÃÅ±ÑÅÕ’•—îÅë‘Å±Ω–∏ÅYÖ±•ëÖ—•Ω∏ÅÀ•ï±±îÅ5P‘ÉÄÅïôôïç—’ï»ÅÕ’»Å]•πëΩ›ÃÅÖŸÖπ–ÅÖç—•ŸÖ—•Ω∏∏Å’ç’πîÅµ•ù…Ö—•Ω∏ÅëîÅâÖÕî∞ÅÖ’ç’∏Åç°Öπùïµïπ–ÅU$ΩM98Ω)ÖôÖ»∏((®©Iï¡…•ÕîÅï·Öç—îÄË®®Å•µ¡≥•µïπ—ï»Å±ÑÅ¡Ω±•—•≈’îÅì•—ï…µ•π•Õ—îÅëîÅùïÕ—•Ω∏Åï–Å±îÅçΩπ—ï·—îÅçÖπΩπ•≈’îÅ5<ΩAAH∞Å¡’•ÃÅ·ïç’—•ΩπMï…Ÿ•çî∞ÅçΩπô•…µÖ—•Ω∏ΩÀ•çΩπç•±•Ö—•Ω∏∞Å•ëïµ¡Ω—ïπçîÅï–Å©Ω’…πÖ∞∏ÅÖ…ëï»Å±ïÃÅÖç—•ΩπÃÅì•ÕÖç—•€•ïÃÅ©’Õ≈‘üÄÅŸÖ±•ëÖ—•Ω∏ÅëîÅçï——îÅç°áππî∏((åååÅ1Ω–ÅÉäPÅ¡Ω±•—•≈’îÅëîÅ…•Õ≈’îÅï–ÅŸ’ïÃÅëîÅ¡ΩÕ•—•ΩπÃÄ°…ï¡…•ÕîÅΩëï‡∞Ä»¿»ÿ¥ƒ¿¥¿Ã§()ÅI•Õ≠πù•πîπ¡±Öπ}¡ΩÕ•—•Ωπ}Öç—•ΩπÄÅ¡…Ωë’•–Åì•ÕΩ…µÖ•ÃÅ’∏Å¡±Ö∏Åì•—ï…µ•π•Õ—îÅÕÖπÃÅ©ï—Ω∏Åï„•ç’—Öâ±îÅπ§Åïôôï–Åâ…Ω≠ï»∏ÅÅAΩÕ•—•Ωπç—•ΩπΩπ—ï·—ÄÅ¡Ω…—îÅ±ÑÅ¡ΩÕ•—•Ω∏ÅçÖπΩπ•≈’î∞Å±îÅ…’∏ΩµΩëîΩçΩµ¡—î∞Å±ïÃÅ°Ω…ΩëÖ—ÖùïÃ∞Å—•ç¨ΩÕ¡ïå∞ÅçÖ¡Öç•”•Ã∞É•—Ö–Åë‘Å…’∏Åï–Å≠•±∞ÅÕ›•—ç†∏Å1îÅçΩπ—…Ö–ÅëîÅ¡…Ω¡ΩÕ•—•Ω∏ÅïÕ–Å…ïŸÖ±•ì§ÅÖŸÖπ–É•ŸÖ±’Ö—•Ω∏∏Å1ïÃÅçΩπ—À—±ïÃÅçΩ’Ÿ…ïπ–Å•ëïπ—•”§ÅçÖπΩπ•≈’îΩ—•ç≠ï–Ω±•ïπÃÅçÖ’ÕÖ’‡∞Å=A8∞Åœ•¡Ö…Ö—•Ω∏Å5<ΩAAHΩ=	MIY∞ÅçΩµ¡—îÅ5<∞Å≠•±∞ÅÕ›•—ç†ø•—Ö–Å—ï…µ•πÖ∞∞ÅëΩπª•ïÃÅô•π•ïÃÅï–ÅçΩ£•…ïπ—ïÃ∞Åô…áπç°ï’»Ä†ÿ¿ÅÕïçΩπëïÃÅµÖ·•µ’¥∞ÅÖ’ç’∏Å—•µïÕ—Öµ¿Åô’—’»§∞Å¡ï…µ•ÕÕ•ΩπÃÅ5<Åï–ÅçÖ¡Öç•”•ÃΩÀ•çΩπç•±•Ö—•Ω∏∏()AΩ±•—•≈’îÅçΩπÕï…ŸÖ—•ŸîÄËÅ!=1ÅÕÖπÃÅΩ…ë…îÄÏÅ1=MÅë‘ÅŸΩ±’µîÅ…ïÕ—Öπ–ÄÏÅAIQ%1}1=MÅÖŸïåÅÖ……Ωπë§Åì•ç•µÖ∞ÅÕ—…•ç–ÅŸï…ÃÅ±îÅâÖÃÅï–Å…ï±•≈’Ö–Åª•ùΩç•Öâ±î∞Åô…Öç—•Ω∏ÄƒÅ…ïô’œ•îÅÖ‘Å¡…Ωô•–Åêù’∏Å1=MÅï·¡±•ç•—îÄÏÅ5=%e}MQ=@ÅπîÅ¡ï’–Å≈‘ü•ùÖ±ï»Ω…ïÕÕï……ï»Å±îÅÕ—Ω¿ÄÏÅ5=%e}QIPÅçΩπÕï…ŸîÅ±îÅÕ—Ω¿∏ÅM0ΩQ@ÅëΩ•Ÿïπ–Å…ïÕ¡ïç—ï»Åù…•±±îÅ—•ç¨∞Åè—”§Åë‘Å¡…•‡Åï„•ç’—Öâ±î∞ÅÕ—Ω¡ÃΩô…ïïÈîÅâ…Ω≠ï»∏ÅUπîÅ¡ΩÕ•—•Ω∏ÅÕÖπÃÅM0Å¡ï’–É©—…îÅôï…∑•î∞ÅµÖ•ÃÅ¡ÖÃÅµΩë•ôß•îÅ¡Ö»ÅçîÅ¡±Ö∏∏ÅU∏Åç°Ö±±ïπùîÅâ±Ω≈◊§Å¡Ω’»ÅπΩ’Ÿï±±ïÃÅïπ—À•ïÃÅ∏ù•π—ï…ë•–Å¡ÖÃÅ’∏Å¡±Ö∏Å¡À•Õï…ŸÖπ–ΩÀ•ë’•ÕÖπ–Å∞ùï·¡ΩÕ•—•Ω∏ÄÏÅ’∏Å…’∏Å—ï…µ•πÖ∞ÅΩ‘Å≠•±∞ÅÕ›•—ç†Åâ±Ω≈’îÅ—Ω’©Ω’…ÃÅ±îÅ	…Ö•∏∞Å±ïÃÅÕΩ…—•ïÃÅ¡…Ω—ïç—…•çïÃÅ…ïÕ—ïπ–Å•πì•¡ïπëÖπ—ïÃ∏()Å·ïç’—•ΩπMï…Ÿ•çîπΩ›πïë}¡ΩÕ•—•ΩπÕÄÅôΩ’…π•–Å’πîÅŸ’îÅçÖπΩπ•≈’îÅÕ—Öâ±îÅÖ‘ÅÅ	…Ö•πΩπ—ï·–π¡ΩÕ•—•ΩπÕÄÄËÅ5<Åï·•ùîÅΩ›πï…Õ°•¿ÅµÖù•åΩçΩµµïπ–Åï–Å—…ÖëîÅ=A8ÅçΩ£•…ïπ–ÄÏÅ±îÅŸΩ±’µîÅΩ…•ù•πÖ∞ÅŸ•ïπ–Åë‘ÅQ…ÖëïIïçΩ…ê∞Å±îÅŸΩ±’µîÅ…ïÕ—Öπ–Åï–Å±ïÃÅ¡…Ω—ïç—•ΩπÃÅŸ•ïππïπ–Åë‘Åâ…Ω≠ï»∏ÅAAHÅ’—•±•ÕîÅï·ç±’Õ•Ÿïµïπ–Å±îÅ¡Ω…—ïôï’•±±îÅÕ•µ’≥§Åë‘Å∑©µîÅ…’∏Åï–ÅçΩπÕï…ŸîÅ±ïÃÅ%ÃÅÖ¡À°ÃÅ…ïÕ—Ω…î∏Å=	MIYÅ¡ï’–Å±•…îÅ±ïÃÅ¡ΩÕ•—•ΩπÃÅ5<ÅÕÖπÃÅÖç≈◊•…•»ÅëîÅë…Ω•–Åêùï„•ç’—•Ω∏∏()YÖ±•ëÖ—•Ω∏ÄËÄƒ¿‡ÅπΩ’ŸïÖ’‡Å—ïÕ—ÃÅçΩ’Ÿ…ïπ–Å±ïÃÅ¡±ÖπÃÅ	UdΩM10ÅëÖπÃÅ±ïÃÅëï’‡ÅµΩëïÃ∞Å±ïÃÅ…ïô’ÃÅï–ÅâΩ…πïÃÅëîÅ…•Õ≈’î∞Å±ïÃÅëΩπª•ïÃÅ•πŸÖ±•ëïÃ∞Åç±Ωç≠Ã∞ÅçÖ¡Öç•”•Ã∞ÅÕç£•µÖÃÅÖ±”•À•Ã∞ÅΩ›πï…Õ°•¿∞ÅŸΩ±’µîÅΩ…•ù•πÖ∞Ω…ïÕ—Öπ–Åï–Å…ïÕ—Ω…îÅAAH∏ÅM’•—îÅçΩµ¡≥°—îÄËÄ‘ƒ»Å—ïÕ—ÃÅ¡ÖÕœ•Ã∞ÄÃÅ•π”•ù…Ö—•ΩπÃÅ5P‘ÅÕÖ’”•ïÃÄÏÅI’ôò∞ÅµÂ¡‰Åï–ÅÅù•–Åë•ôòÄ¥µç°ïç≠ÄÅ¡…Ω¡…ïÃ∏Å’ç’∏ÅΩ…ë…îÅï·—ï…πî∏((®©1Ω–ÅÅ—Ω’©Ω’…ÃÅ•πçΩµ¡±ï–ÄºÅÖç—•ŸÖ—•Ω∏Å•πç°Öπü•îÄË®®Å±ÑÅ¡Ω…—îÅ…’π—•µîÅ°•Õ—Ω…•≈’îÅ∏ùÖ¡¡…Ω’ŸîÅïπçΩ…îÅ≈’îÅ!=1Å5<Å¡Ö»Å—•ç≠ï–∏Å1ÑÅπΩ’Ÿï±±îÅ¡Ω±•—•≈’îÅ∏ùïÕ–ÅŸΩ±Ωπ—Ö•…ïµïπ–Å¡ÖÃÅâ…Öπç£•îÅÕ’»Åçï——îÅ¡Ω…—î∞ÅçÖ»Å∞ùΩ…ç°ïÕ—…Ö—ï’»Å•π—ï…¡À°—îÅÖ’©Ω’…êù°’§Å—Ω’—îÅÖ¡¡…ΩâÖ—•Ω∏ÅëîÅùïÕ—•Ω∏ÅçΩµµîÅ!=1∏Å1ïÃÅπΩ’ŸïÖ’‡Å¡±ÖπÃÅπîÅÕΩπ–Å¡ÖÃÅëïÃÅï„•ç’—•ΩπÃ∏Å0ùï„•ç’—•Ω∏∞Å±ÑÅçΩπô•…µÖ—•Ω∏∞Å±ÑÅÀ•çΩπç•±•Ö—•Ω∏∞Å∞ù•ëïµ¡Ω—ïπçîÅ¡ï…Õ•Õ—Öπ—îÅï–Å±îÅ©Ω’…πÖ∞ÅëïÃÅÖç—•ΩπÃÅ•π—ï…∑•ë•Ö•…ïÃÅ…ïÕ—ïπ–ÉÄÅ•π”•ù…ï»ÅÖŸÖπ–ÅÖç—•ŸÖ—•Ω∏∏ÅAAHÅπîÅÕ•µ’±îÅ¡ÖÃÅïπçΩ…îÅ±ïÃÅµΩë•ô•çÖ—•ΩπÃΩôï…µï—’…ïÃÅ¡Ö…—•ï±±ïÃÄÏÅÕΩ∏ÅŸΩ±’µîÅΩ…•ù•πÖ∞ÅçΩ……ïÕ¡ΩπêÅëΩπåÅÖ‘ÅŸΩ±’µîÅëîÅÕÑÅ¡ΩÕ•—•Ω∏ÅÖç—’ï±±ïµïπ–ÅΩ’Ÿï…—î∞ÉÄÅ¡À•Õï…Ÿï»ÅëÖπÃÅÕÑÅô’—’…îÅµ•ù…Ö—•Ω∏∏ÅAÖÃÅëîÅç°Öπùïµïπ–ÅU$ΩM98Ω)ÖôÖ»∏((®©A…Ωç°Ö•∏Å•πçÀ•µïπ–Åï·Öç–ÄË®®ÅÖ©Ω’—ï»Å’∏ÅÀ•Õ’±—Ö–ÅêùÖç—•Ω∏ÅëîÅ¡ΩÕ•—•Ω∏Åë•Õ—•πç–ÅëîÅ!=1∞Å’πîÅÀ•ç±ÖµÖ—•Ω∏Å¡ï…Õ•Õ—Öπ—îÅ’π•≈’îÅ¡Ö»Å¡…Ω¡ΩÕÖ±}•êÅï–Å±ÑÅçΩπô•…µÖ—•Ω∏ÅëîÅ∞ü•—Ö–Å¡ΩÕ–µÖç—•Ω∏ÄÏÅ•µ¡≥•µïπ—ï»Åµ’—Ö—•ΩπÃÅAAHÅÖ—Ωµ•≈’ïÃÅï–Å…ïÕ—Ö’…Ö—•Ω∏ÅÖŸÖπ–ÅëîÅçΩππïç—ï»ÅÅ¡±Öπ}¡ΩÕ•—•Ωπ}Öç—•ΩπÄÅÖ‘Åç°ïµ•∏Å	…Ö•∏∏Å9îÅ©ÖµÖ•ÃÅçΩπŸï…—•»Å’πîÅÖ¡¡…ΩâÖ—•Ω∏Åï∏ÅÕ’çè°ÃÅÕÖπÃÅΩâÕï…ŸÖ—•Ω∏Åë‘ÅÀ•Õ’±—Ö–∏((åååÅ1Ω—ÃÅÅï–ÅÉäPÅŸÖ±•ëÖ—•Ω∏Å±Ωù•ç•ï±±îÅ—ï…µ•ª•îÄ†»¿»ÿ¥ƒ¿¥¿Ã§()Å1Ω–ÅÅ…•”°…îÅÅA…ï’ŸîÅ)Ä¥¥¥ÅÄ¥¥¥ÅÄ¥¥¥Å)ÅÅÅïÕ—•Ω∏ÅÖ’—ΩπΩµîÅëïÃÅç•πƒÅÖç—•ΩπÃÅŸ•ÑÅI•Õ¨Ω·ïç’—•Ω∏ÅÅ—ïÕ—ÃΩ—ïÕ—}¡ΩÕ•—•Ωπ}±•ôïçÂç±îπ¡‰ÄÏÅ—ïÕ—ÃΩ—ïÕ—}¡ΩÕ•—•Ωπ}…•Õ¨π¡‰Å)ÅÅÅΩπô•…µÖ—•Ω∏∞Åç±Ö•¥Åë’…Öâ±î∞ÅÖ’ç’πîÅÀ•√•—•—•Ω∏ÅÖµâ•ù◊¨ÅÅ…ï¡…•ÕîÅÕ’»Åô•ç°•ï»ÅME1•—î∞ÅÀ•¡ΩπÕîÅ¡ï…ë’î∞Å—…ÖπÕÖç—•Ω∏ÅAAHÅÖππ’≥•îÅ)ÅÅÅÂç±îÅΩ’Ÿï…—’…î∞ÅµÖ•π—•ï∏∞ÅµΩë•ô•çÖ—•Ω∏∞Åç≥——’…îÅÅ•π”•ù…Ö—•Ω∏Å=…ç°ïÕ—…Ö—•Ωππù•πîÅ5<ÅµΩç¨Åï–ÅAAHÅ)ÅÅÅ]Ω…≠Õ¡Öçî∞Åâ•πë•πúÅçΩµ¡—îÅï–Å¡±ÖùïÃÅµÖù•åÅÅ—ïÕ—ÃΩ—ïÕ—}›Ω…≠Õ¡ÖçïÃπ¡‰Å)ÅÅÅ%ÕΩ±Ö—•Ω∏Å©Ω’…πÖ∞∞Å¡ΩÕ•—•ΩπÃ∞Å…ïç°ï…ç°î∞ÅÖ…ç°•ŸîΩ…ï¡±Ö‰ÅÅ∑©µîÅâÖÕîÅï–Å∑©µïÃÅ•ëïπ—•ô•Öπ—Ã∞Å…ï≈◊©—ïÃÅÕçΩ¡ïêÅ)ÅÅÅΩµ¡Ö—•â•±•”§Å°•Õ—Ω…•≈’îÅÅµ•ù…Ö—•ΩπÃÅëïÃÅâÖÕïÃÅ±ïùÖç‰∞Å°ÖÕ°ïÃÅï–Å•µµ’—Öâ•±•”§ÅçΩπÕï…€•ÃÅ()Iïçï——îÅ5P‘ÅÀ•ï±±îÅïπçΩ…îÅ…ï≈’•ÕîÅÕ’»ÅçΩµ¡—îÅ5<∏Å1ÑÅÕ’•—îÅ¡Ω…—îÅÕ’»Å±ïÃÅ±Ω—Ã)Õ’•ŸÖπ—ÃÅëîÅ±ÑÅ¡±Ö—ïôΩ…µîÄÏÅÖ’ç’πîÅçÖ¡Öç•”§Å1%YÅπ§ÅÕ—…Ö”•ù•îÅ)ÖôÖ»Å∏ùïÕ–)Ω’Ÿï…—îÅ•µ¡±•ç•—ïµïπ–Å¡Ö»Åçï——îÅŸÖ±•ëÖ—•Ω∏∏()Ωπ—À—±ïÃÅô•πÖ’‡ÄËÄ®®‘‘»Å¡ÖÕÕïê∞ÄÃÅÕ≠•¡¡ïê®®Ä°•π”•ù…Ö—•Ω∏Å5P‘§∞ÅI’ôòÅÕÖπÃ)ï……ï’»∞ÅµÂ¡‰ÅÕÖπÃÅï……ï’»ÅÕ’»Ä‡ƒÅô•ç°•ï…ÃÅÕΩ’…çî∞Åù•–Åë•ôòÄ¥µç°ïç¨Å¡…Ω¡…î∏((åååÅ1Ω—ÃÅ Ω$ÉäPÅ•µ¡≥•µïπ—Ö—•Ω∏Åï–Å…ïçï——îÅ±Ωù•ç•ï±±îÄ†»¿»ÿ¥ƒ¿¥¿–§()Å1Ω–ÅÅ1•Ÿ…Öâ±îÅÅYÖ±•ëÖ—•Ω∏Å)Ä¥¥¥ÅÄ¥¥¥ÅÄ¥¥¥Å)Å ÅÅÖ”•ùΩ…•ïÃÅç…Â¡—ºÅï–ÅçÖ¡Öâ•±•—•ïÃÅ°Ωπª©—ïÃÅÅÕΩ’…çîÅ¡’â±•≈’îÅÕÖπÃÅë…Ω•—ÃÅêùï„•ç’—•Ω∏Å)Å ÅÅ5Ö≠ï»Ω—Ö≠ï»∞Å…ïµ•ÕïÃÅï–Åô’πë•πúÅÕ•ùª§ÅÅ•πçΩππ’ÃΩ9Ö8Å…ïô’œ•Ã∞ÅâΩ…πïÃÅï–Å•ëïπ—•”•Ã∞ÅHÅœ•¡ÖÀ§Åë‘ÅÕ›Ö¿Å)Å ÅÅMïÕÕ•ΩπÃÅçΩπô•ù’…Öâ±ïÃÅÅ—•µïÈΩπîΩ©Ω’…ÃΩôïª©—…ïÃ∞ÅÕçÖ∏Ωïπ—À•îÅâ±Ω≈◊•Ã∞ÅÕΩ…—•îÅ¡…Ω—ïç—…•çîÅ¡ï…µ•ÕîÅ)Å$ÅÅI’π—•µîÅ)ÖôÖ»Å=	MIYÅÅÕçÖ∏ÅÕ¡Ω–∞ÅÖ…ç°•ŸîΩ…ï¡±Ö‰∞Å…ï¡…•ÕîÅME1•—î∞Å	…Ö•∏Å9=}QIÅ)Å$ÅÅ1$Åï–ÅçΩç≠¡•–ÅÕçΩ¡ïêÅÅπï‹Ω…’∏ΩÕï…ŸîΩ≠•±∞Ωç±ïÖ»∞Å…Ω’ùî∞ÅPµΩπ±‰∞Åâ’ëùï–ÅŸ•…—’ï∞Åï·¡±•ç•—îÅ)Å$ÅÅÖ•∞µç±ΩÕïêÅÅAAHΩ5<Ωï·ïç’—îΩïπ—…‰ΩµÖπÖùïµïπ–Å…ïô’œ•ÃÅ()’ç’πîÅÕ—…Ö”•ù•îÅç…Â¡—ºÅπ§ÅçΩµ¡—îÅêùï·ç°ÖπùîÅÖç—•€§∏Å’πë•πúÄËÅÕï——±ïµïπ—Ã)ôΩ’…π•Ã∞ÅçΩ’Ÿï…—’…îÅπΩ∏Å•πŸïπ”•î∏ÅQïÕ—ÃÅ¡’â±•åµ¡…ΩŸ•ëï»ÅÕ’»Åô•·—’…ïÃÄÏÅÖ’ç’∏)Öçè°ÃÅÀ•ÕïÖ‘ÅÀ•ï∞Åì•ç±ÖÀ§ÅŸÖ±•ì§∏ÅA…Ωç°Ö•πîÅôΩπëÖ—•Ω∏ÄËÅ1Ω–Å(∏()YÖ±•ëÖ—•Ω∏Å Ω$ÄËÄ®®‘‰¿Å¡ÖÕÕïê∞ÄÃÅÕ≠•¡¡ïê®®Ä°5P‘§∞ÅI’ôòÅï–ÅµÂ¡‰Å¡…Ω¡…ïÃ(†‡–Åô•ç°•ï…ÃÅÕΩ’…çî§∏ÅQïÕ—ÃÅçΩµ¡≥•µïπ—Ö•…ïÃÅë‘Å¡Ö…çΩ’…ÃÅ≠•±∞Ωç±ïÖ»Ωπï‹Ω…’∏+•ùÖ±ïµïπ–ÅŸï…—Ã∏Å’ç’∏Å—ï…µ•πÖ∞Å5P‘Åπ§Åïπë¡Ω•π–Åç…Â¡—ºÅÀ•ï∞Å’—•±•œ§∏((åååÅ1Ω–Å(ÉäPÅ=’—çΩµîΩIï›Ö…êÅï–Å¡À•¡Ö…Ö—•Ω∏ÅAÄ†»¿»ÿ¥ƒ¿¥¿–§()ΩπëÖ—•Ω∏Å•µ¡≥•µïπ”•îÄËÅçΩ±±ïç—îÅAAHΩ5<Åç≥——’À•Ã∞ÅÕπÖ¡Õ°Ω—ÃÅ•µµ’Öâ±ïÃÅï–ÅÖ’ë•–ÅÖ—Ωµ•≈’î∞Å¡Ω±•—•≈’îÅ°ÖÕ£•î∞Å…ï¡…•ÕîÅ•ëïµ¡Ω—ïπ—î∞ÅHÅï–Åï·ç’…Õ•ΩπÃÅµΩª•—Ö•…ïÃÉ•ç°Öπ—•±±Ωπª•ïÃ∞Å…ï›Ö…êÅï·¡±•ç•—îÅÖŸïåÅÕ—Ö—’–Å•πçΩµ¡±ï–∞ÅçΩπ—…ïôÖç—’ï±ÃÅ±•µ•”•ÃÅ9=}QIΩ!=1Åâ…’–∞ÅçΩπÕ’±—Ö—•Ω∏ÅΩôô±•πîΩA$ΩçΩç≠¡•–∏Å’ç’∏Åïπ—…áππïµïπ–ÅΩ‘Åç°Öπùïµïπ–Åë‘Åçï…ŸïÖ‘ÅÖç—•ò∏ÅQïÕ—ÃÅçΩ’Ÿ…ïπ–ÅçøÌ—Ã∞Å…ïâÖ—ïÃ∞Åç≥——’…îÅ¡Ö…—•ï±±îΩ…ï¡…•Õî∞ÅçΩµ¡—îÅ±ß§∞ÅçΩπ—Öµ•πÖ—•Ω∏Å›Ω…≠Õ¡Öçî∞ÅçΩ……’¡—•Ω∏∞Å…Ω±±âÖç¨Åï–ÅçΩ±±ïç—ï’…ÃÅçΩπç’……ïπ—Ã∏ÅIïçï——îÅAÅëΩç’µïπ”•îÅëÖπÃÅÅA}AQ9πµëÄ∞ÅÕÖ’ŸïùÖ…ëîÅME1•—îÅçΩ£•…ïπ—îÅÖŸÖπ–ÅçΩπ—À—±ïÃ∏Å,Å…ïÕ—îÉÄÅ•µ¡≥•µïπ—ï»ÄÏÅŸÖ±•ëÖ—•Ω∏Å—ï…µ•πÖ∞ÅÀ•ï±±îÅΩÅï–ÅÖçè°ÃÅç…Â¡—ºÅ¡’â±•åÅ—Ω’©Ω’…ÃÅΩ’Ÿï…—Ã∏()Ωπ—À—±ïÃÅë‘Åç°ïç≠¡Ω•π–Å(ÄËÄÿ»‰Å¡ÖÕÕïêÄºÄÃÅÕ≠•¡¡ïêÅ5P‘∞ÅI’ôòÅ¡…Ω¡…î∞ÅµÂ¡‰Ä‡‘ÅÕΩ’…çïÃ∞Å9ΩëîÅÕÂπ—Ö·îÅëÖÕ°âΩÖ…êÅŸÖ±•ëî∏Å„•ç’—•Ω∏Å]•πëΩ›ÃΩAΩ›ï…M°ï±∞ÅπΩ∏ÅÀ•Ö±•œ•îÅ•ç§∏(((ååÅ·—ïπÕ•Ω∏Å¡Ö…Ö±≥°±îÅM98µ`ÉäPÄ»¿»ÿ¥ƒ¿¥¿–()1ïÃÅì•ç•Õ•ΩπÃÄ¿»”äL¿»‰Åë‘Å…ïù•Õ—…îÅÅëΩçÃΩ%M%=9LΩÄÅçΩµ¡≥°—ïπ–ÅçîÅëΩç’µïπ–ÅÕÖπÃÅ±îÅ…ïµ¡±Öçï»ÄËÅµΩë’±ïÃÅΩ¡—•Ωππï±ÃÅï–ÅÖâ±Ö—•ΩπÃ∞ÅMPΩM1=\∞ÅÕ’…Ÿï•±±ÖπçîÅ	QÅçΩπ—•π’î∞ÅΩâ©ïç—•òÅÕΩ’ÃÅçΩπ—…Ö•π—ïÃ∞ÅM°ÖëΩ‹Å	…Ö•∏Åï–Å…ïÖ¥Åπù•πî∏ÅYΩ•»ÅÅëΩçÃΩ!9=πµëÄÅ¡Ω’»Å±ÑÅ…ï¡…•ÕîÅ±Ö’ëî∏Å…ç°•—ïç—’…îÅç•â±îÅÖëΩ¡”•î∞ÅπΩ∏Å•µ¡≥•µïπ”•îÅ¡Ö»Åçï–ÅÖ©Ω’–ÄÏÅ¡À•Õï…Ÿï»Å±ïÃÅ—…ÖŸÖ’‡Åï∏ÅçΩ’…ÃÅï–ÅùÖ—ïÃÅëîÅ…ïçï——î∏Å1ïÃÅŸÖ…•Öπ—ïÃÅëîÅ…ï›Ö…êÅï–Å±ÑÅ¡±ÖÕ—•ç•”§Å…ïÕ—ïπ–Åï·√•…•µïπ—Ö±ïÃÄÏÅÖ’ç’∏ÅÖçè°ÃÅë•…ïç–Åë‘Å	…Ö•∏ÉÄÅ≥äeï„•ç’—•Ω∏∞ÅÖ’ç’πîÅÖ’—ºµ¡…ΩµΩ—•Ω∏∏(

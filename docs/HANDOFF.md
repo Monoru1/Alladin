@@ -1,10 +1,16 @@
 # ALLADIN — Agent Handoff & Operating Manual
 
-**Dernière mise à jour : 2026-10-02**  
-**Audience : Claude Code, Codex, ChatGPT et tout agent travaillant sur le repository**  
+**Dernière mise à jour : 2026-10-04**
+**Audience : Claude Code, Codex, ChatGPT et tout agent travaillant sur le repository**
 **Rôle : point d'entrée obligatoire avant toute modification structurelle**
 
 ---
+
+## Décisions SNN-X — reprise Claude du 2026-10-04
+
+Lire les [décisions 024 à 029](DECISIONS/README.md) (alias SNN-X-01 à SNN-X-06) : extension parallèle, boucles FAST/SLOW, observation continue, objectif sous contraintes, Shadow Brain et Dream Engine. Architecture adoptée ; modules et performance encore expérimentaux. Aucun remplacement du programme scientifique ni des travaux Alladin existants, aucune nouvelle version produit.
+
+Pour reprendre : inspecter l’état Git/code, conserver la recette `PC_ACCEPTANCE.md` et les étapes déjà prévues, puis décliner ces extensions progressivement dans le lot K avec critères d’ablation et dépendances. Ne pas traiter toute la cible comme un prérequis bloquant. Poids actifs gelés, apprentissage durable hors chemin critique, promotion contrôlée ; Jafar reste OBSERVE. La surveillance 24/7 exige un hôte disponible et n’est pas déclarée opérationnelle par ces documents. Ce commit est documentaire uniquement.
 
 ## 0. Mission de ce document
 
