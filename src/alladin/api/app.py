@@ -83,18 +83,28 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             evts = repo.events(rec.run_id, ["cycle.end"], limit=1, desc=True)
             if evts:
                 last_cycle_at = evts[0].ts.isoformat()
-            modes = repo.events(rec.run_id, ["mode.change"], limit=1, desc=True)
-            if modes:
-                run_mode = modes[0].payload.get("run_mode")
+            if workspace is WorkspaceId.JAFAR:
+                jafar_modes = repo.events(rec.run_id, ["jafar.mode.change"], limit=1, desc=True)
+                if jafar_modes:
+                    run_mode = jafar_modes[0].payload.get("to")
+            else:
+                modes = repo.events(rec.run_id, ["mode.change"], limit=1, desc=True)
+                if modes:
+                    run_mode = modes[0].payload.get("run_mode")
             runtime = RuntimeHealthTracker.load_latest(journal, rec.run_id)
         else:
             runtime = None
         last_dt = datetime.fromisoformat(last_cycle_at) if last_cycle_at else None
         stale = last_dt is None or observed_at - last_dt.astimezone(UTC) > timedelta(minutes=2)
+        live_locked = workspace is WorkspaceId.JAFAR
+        # observe_only = aucune exécution simulée ni réelle (mode OBSERVE pur ou inconnu)
+        # En PAPER, observe_only=False car des positions simulées sont créées
+        observe_only = live_locked and run_mode not in ("PAPER", "TESTNET")
         payload: dict[str, Any] = {
             "status": "ok",
             "workspace": workspace.value,
-            "observe_only": workspace is WorkspaceId.JAFAR,
+            "observe_only": observe_only,
+            "live_locked": live_locked,
             "reference_budget_virtual": workspace is WorkspaceId.JAFAR,
             "run_id": rec.run_id if rec else None,
             "run_kind": rec.kind if rec else None,

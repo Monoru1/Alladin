@@ -1119,8 +1119,13 @@ async function refreshFast() {
     setChip("h-heartbeat", "POLL", new Date().toLocaleTimeString(), "ok");
 
     const banner = $id("blocked-banner");
-    if (ov.observe_only) {
-      banner.textContent = "EXECUTION DISABLED \u2014 PUBLIC DATA / OBSERVE ONLY";
+    if (ov.live_locked) {
+      const curMode = health.run_mode || ov.run_mode || "OBSERVE";
+      if (curMode === "PAPER") {
+        banner.textContent = "PAPER SIMUL\u00c9 \u2014 donn\u00e9es publiques \u2014 aucun ordre Binance production";
+      } else {
+        banner.textContent = "OBSERVE \u2014 donn\u00e9es publiques \u2014 aucune ex\u00e9cution";
+      }
       banner.style.display = "block";
     } else {
       banner.textContent = "EXECUTION BLOCKED \u2014 compte non DEMO";
