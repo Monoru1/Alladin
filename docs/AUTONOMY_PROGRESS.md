@@ -2,8 +2,8 @@
 
 **Date de référence :** 2026-10-05  
 **Branche :** `main`  
-**HEAD de départ vérifié :** `afbdf96`
-**Dernière validation longue connue avant ce lot :** **833 tests passed, 3 skipped**
+**HEAD vérifié :** `a661b7f`  
+**Dernière validation logicielle connue :** **857 tests passed, 3 skipped (MT5)**
 
 > Ce document est un tableau de bord de progression. Le code et les tests restent la source de vérité pour ce qui est réellement implémenté. Les pourcentages ci-dessous sont des **indicateurs de readiness**, pas une mesure mathématique du nombre de lignes de code réalisées.
 
@@ -32,9 +32,9 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | MT5 / Forex lifecycle | **82%** | 5 actions + idempotence implémentées | recette DEMO Windows réelle |
 | Replay causal / archive | **86%** | Implémenté | provenance tick/bid/ask plus fine |
 | Outcomes / Reward | **82%** | Implémenté | exploiter les outcomes pour apprentissage/promotion |
-| Mission Control | **82%** | Fonctionnel | historique, santé runtime, alertes |
+| Mission Control | **86%** | API health runtime disponible, cockpit existant | afficher health/freshness/errors dans l'UI |
 | Jafar OBSERVE | **95%** | Fonctionnel | endurance 24/7 |
-| Jafar PAPER engine | **85%** | Boucle scanner → Brain baseline → RiskEngine → lifecycle → fill/position raccordée et testée | valider sorties/outcomes et endurance sur longue durée |
+| Jafar PAPER engine | **92%** | Boucle end-to-end + outcomes + restore + endurance déterministe testés | vraie session longue sur données publiques réelles |
 | Jafar Order Lifecycle | **88%** | Implémenté | tests d'intégration exchange prolongés |
 | Jafar restart reconciliation | **88%** | Implémenté, fail-closed | validation avec cas exchange réels |
 | Binance Testnet adapter | **72%** | submit/query/cancel implémentés, garde URL stricte | recette réelle TESTNET + intégration runtime continue |
@@ -44,13 +44,13 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | FAST/SLOW K3 foundation | **45%** | frontière FAST/SLOW présente | boucle learning complète + critères de promotion |
 | World Model | **20%** | décision/architecture | runtime expérimental |
 | Dream Engine | **25%** | frontière slow/replay prévue | consolidation et candidats réellement entraînés |
-| Crash recovery global | **68%** | forte base lifecycle/reconciliation | supervision processus + scénarios multi-services |
-| Kill switches / fail-closed | **72%** | protections déjà nombreuses | health-based shutdown et règles serveur |
-| Observabilité 24/7 | **50%** | logs/cockpit disponibles | heartbeat, métriques, alertes, watchdog |
-| Daemon/service autonome | **48%** | runtime existe | superviseur, auto-restart, checkpoints, service OS |
+| Crash recovery global | **86%** | restart, restore, anti-duplication et fault injection testés | validation longue avec pannes réelles + supervision OS |
+| Kill switches / fail-closed | **84%** | FAILED/STALE/STOPPING bloquent les nouvelles entrées ; tests endurance | validation terrain et supervision externe |
+| Observabilité 24/7 | **74%** | heartbeat, health persistant, stale/provider state et API disponibles | affichage Mission Control + alerting externe |
+| Daemon/service autonome | **72%** | boucle continue, backoff, SIGINT/SIGTERM, graceful shutdown, health | systemd/superviseur OS + long-run réelle |
 | Déploiement Linux | **25%** | architecture compatible | packaging, systemd/Docker, secrets, backups |
 | Serveur dédié | **10%** | non déployé | infrastructure + recette de déploiement |
-| Autonomie OBSERVE/PAPER sur serveur | **~72%** | proche mais pas prête à être déclarée production-like | chemin critique ci-dessous |
+| Autonomie OBSERVE/PAPER sur serveur | **~80%** | runtime logiciel largement prêt ; non déployé/non validé 24/7 réel | UI health, packaging Linux, long-run réelle |
 | Autonomie LIVE fiable | **~35%** | volontairement bloquée | preuves statistiques + TESTNET/DEMO prolongés + autorisation explicite |
 
 
@@ -67,7 +67,7 @@ xychart-beta
     title "Alladin — trading et execution"
     x-axis ["Core", "Risk", "MT5", "Jafar OBS", "Jafar PAPER", "Testnet"]
     y-axis "Readiness (%)" 0 --> 100
-    bar [92, 88, 82, 95, 82, 72]
+    bar [92, 88, 82, 95, 92, 72]
 ```
 
 ### 3.2 Intelligence, résilience et infrastructure
@@ -77,24 +77,24 @@ xychart-beta
     title "Alladin — intelligence et infrastructure"
     x-axis ["SNN K1", "Shadow K2", "Recovery", "Observ.", "Daemon", "Linux", "Serveur"]
     y-axis "Readiness (%)" 0 --> 100
-    bar [82, 65, 68, 50, 48, 25, 10]
+    bar [82, 65, 86, 74, 72, 25, 10]
 ```
 
 ### 3.3 Chemin critique vers le serveur
 
 ```mermaid
 flowchart LR
-    A["PAPER endurance<br/>boucle complète"] --> B["Recette MT5<br/>lifecycle réel"]
-    B --> C["Heartbeat + Watchdog<br/>Crash recovery"]
-    C --> D["Observabilité<br/>Mission Control"]
-    D --> E["Packaging Linux<br/>systemd / secrets / backups"]
+    A["Endurance harness<br/>IMPLEMENTED + TESTED"] --> B["Observabilité<br/>Mission Control health UI"]
+    B --> C["Packaging Linux<br/>systemd / secrets / backups"]
+    C --> D["Long-run PAPER<br/>données publiques réelles"]
+    D --> E["Recette MT5 DEMO<br/>lifecycle réel"]
     E --> F["Serveur dédié<br/>OBSERVE / PAPER 24/7"]
     F --> G["TESTNET prolongé"]
     G --> H["SNN-X K2/K3<br/>apprentissage continu"]
     H --> I["LIVE_GATED<br/>si preuves suffisantes"]
 ```
 
-> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~72 %.**  
+> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~80 %.**  
 > Le graphe représente l'état du code au HEAD de référence et ne remplace pas les validations d'endurance ou les recettes broker réelles.
 
 ---
@@ -123,9 +123,11 @@ La CLI PAPER exécute désormais scanner → `JafarPaperBrain` baseline → `Act
 restent abstention : Binance Spot ne doit pas être traité comme un marché permettant
 d'ouvrir un short. L'idempotence d'une même proposition est testée.
 
-Cette validation est logicielle et déterministe. Il reste à prouver sur une exécution
-longue que les positions se ferment, que les outcomes sont collectés après SL/TP,
-que les pannes fournisseur sont absorbées et qu'aucune dérive/duplication n'apparaît.
+Cette validation est désormais renforcée par un **Paper Endurance Harness** déterministe :
+100 et 1 000 cycles propres, pannes provider, stale data, restart, duplicate storm,
+SL/TP, graceful shutdown, fail-closed et replay même seed ont été testés sans
+invariant failure. Cela reste une validation logicielle accélérée : une vraie session
+longue 24/7 sur données publiques réelles reste à effectuer.
 
 ### Binance TESTNET
 
@@ -168,21 +170,12 @@ K1 existe et K2 est déjà intégré en Shadow Brain passif. La frontière FAST/
 
 ## 5. Chemin critique avant serveur autonome
 
-### Étape A — Valider PAPER sur longue durée
+### Étape A — Endurance logicielle PAPER (**IMPLEMENTED + TESTED**)
 
-Objectif :
+Le harness déterministe couvre déjà 100/1 000 cycles, pannes provider, stale data,
+restart, duplications, SL/TP, graceful shutdown et fail-closed, avec rapport d'invariants.
 
-- génération d'opportunités ;
-- ouverture simulée ;
-- SL/TP ;
-- gestion de position ;
-- clôture ;
-- PnL/fees ;
-- persistence ;
-- redémarrage ;
-- aucune duplication.
-
-**Sortie attendue :** plusieurs sessions longues reproductibles sans intervention manuelle.
+**Reste :** transformer cette preuve accélérée en vraie session longue sur données Binance publiques réelles.
 
 ### Étape B — Terminer la recette MT5 réelle
 
@@ -198,18 +191,18 @@ Le code du lifecycle Forex est déjà largement présent.
 - restart sans double ordre ;
 - reconciliation avec l'état réel du broker.
 
-### Étape C — Runtime 24/7 robuste
+### Étape C — Runtime 24/7 robuste (**fondation IMPLEMENTED + TESTED**)
 
-Ajouter/valider :
-
-- heartbeat ;
-- watchdog ;
-- restart automatique ;
-- checkpoint ;
+Déjà présents :
+- heartbeat persistant ;
+- health states HEALTHY/DEGRADED/STALE/STOPPING/STOPPED/FAILED ;
 - stale-data detection ;
-- reconnexion broker ;
-- arrêt fail-closed ;
-- gestion propre des interruptions réseau.
+- backoff/recovery provider ;
+- fail-closed ;
+- graceful SIGINT/SIGTERM ;
+- restart/restore sans duplication dans le harness.
+
+**Reste :** supervision OS/auto-restart et validation sur panne/réseau réels.
 
 ### Étape D — Observabilité serveur
 
@@ -272,20 +265,22 @@ Le serveur doit donc être vu comme **le laboratoire permanent d'Alladin**, pas 
 La mention **AUTONOMOUS PAPER READY** ne doit être utilisée que si toutes les conditions suivantes sont vérifiées :
 
 - [ ] runtime stable pendant une fenêtre prolongée sans intervention ;
-- [ ] restart du service sans duplication d'ordre ;
+- [x] restart logique sans duplication dans les tests/harness ;
 - [ ] reconciliation cohérente après restart ;
-- [ ] PAPER ouvre et ferme réellement des positions simulées ;
-- [ ] SL/TP et management de position validés ;
-- [ ] heartbeat et watchdog opérationnels ;
-- [ ] stale market data détectée ;
-- [ ] broker/API outage gérée sans comportement dangereux ;
+- [x] PAPER ouvre et ferme des positions simulées dans les tests/harness ;
+- [x] SL/TP et management de position validés logiciellement ;
+- [x] heartbeat/health runtime opérationnels ;
+- [ ] superviseur OS/watchdog externe opérationnel ;
+- [x] stale market data détectée et bloque l'entrée ;
+- [x] pannes provider simulées gérées avec backoff/fail-closed ;
+- [ ] panne provider/réseau réelle validée sur longue durée ;
 - [ ] kill switch testé ;
 - [ ] logs et journal permettent de reconstruire un incident ;
 - [ ] Mission Control montre l'état opérationnel ;
 - [ ] service démarre automatiquement après reboot serveur ;
 - [ ] secrets non stockés dans Git ;
 - [ ] backup/persistence testés ;
-- [ ] suite software verte ;
+- [x] suite software verte au checkpoint : 857 passed, 3 skipped ;
 - [ ] recette d'acceptation serveur documentée.
 
 ---
@@ -312,38 +307,36 @@ Autonome signifie :
 Ordre de priorité actuel :
 
 ```text
-1. PAPER endurance / boucle complète
+1. Mission Control : afficher le runtime health
         ↓
-2. Recette MT5 lifecycle
+2. Packaging Linux / systemd / secrets / logs
         ↓
-3. Heartbeat + watchdog + crash recovery global
+3. Long-run PAPER sur données Binance publiques réelles
         ↓
-4. Observabilité Mission Control
+4. Recette MT5 DEMO lifecycle réelle
         ↓
-5. Packaging Linux / systemd
+5. Déploiement serveur OBSERVE/PAPER
         ↓
-6. Déploiement serveur OBSERVE/PAPER
+6. TESTNET prolongé
         ↓
-7. TESTNET prolongé
+7. SNN-X K2/K3 + apprentissage expérimental continu
         ↓
-8. SNN-X K2/K3 + apprentissage expérimental continu
-        ↓
-9. LIVE_GATED uniquement après preuves suffisantes
+8. LIVE_GATED uniquement après preuves suffisantes
 ```
 
 ---
 
 ## 10. Indicateur global
 
-À partir du code présent au HEAD `347c6f1` :
+À partir du code présent au HEAD `a661b7f` :
 
 - **Socle logiciel général : ~88–90 %**
-- **Jafar OBSERVE/PAPER : ~82–90 %**
-- **Résilience/reconciliation : ~70–85 %**
+- **Jafar OBSERVE/PAPER : ~90–93 %**
+- **Résilience/reconciliation : ~85–88 %**
 - **SNN-X opérationnel expérimental : ~55–65 %**
-- **Infrastructure 24/7 : ~45–50 %**
+- **Infrastructure 24/7 : ~70–75 %**
 - **Déploiement serveur : ~25 %**
-- **Objectif "Alladin autonome OBSERVE/PAPER sur serveur" : ~72 %**
+- **Objectif "Alladin autonome OBSERVE/PAPER sur serveur" : ~80 %**
 - **Objectif "LIVE suffisamment prouvé pour être envisagé" : ~35 %**
 
 Le principal risque n'est plus de manquer de fonctionnalités. Le principal risque est désormais de **confondre fonctionnalité implémentée avec fonctionnalité validée en conditions longues et réelles**.
