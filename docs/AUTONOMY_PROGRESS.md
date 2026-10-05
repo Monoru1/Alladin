@@ -53,9 +53,41 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Autonomie OBSERVE/PAPER sur serveur | **~72%** | proche mais pas prête à être déclarée production-like | chemin critique ci-dessous |
 | Autonomie LIVE fiable | **~35%** | volontairement bloquée | preuves statistiques + TESTNET/DEMO prolongés + autorisation explicite |
 
+
 ---
 
-## 3. Corrections par rapport aux anciennes estimations
+## 3. Graphe de progression
+
+Vue synthétique des principaux blocs qui conditionnent l'autonomie sur serveur :
+
+```mermaid
+xychart-beta
+    title "Alladin — readiness vers l'autonomie serveur"
+    x-axis ["Core", "Risk", "MT5", "Jafar OBS", "Jafar PAPER", "Testnet", "SNN K1", "Shadow K2", "Recovery", "Observabilité", "Daemon", "Linux", "Serveur"]
+    y-axis "Readiness (%)" 0 --> 100
+    bar [92, 88, 82, 95, 82, 72, 82, 65, 68, 50, 48, 25, 10]
+```
+
+### Chemin critique vers le serveur
+
+```mermaid
+flowchart LR
+    A["PAPER endurance<br/>boucle complète"] --> B["Recette MT5<br/>lifecycle réel"]
+    B --> C["Heartbeat + Watchdog<br/>Crash recovery"]
+    C --> D["Observabilité<br/>Mission Control"]
+    D --> E["Packaging Linux<br/>systemd / secrets / backups"]
+    E --> F["Serveur dédié<br/>OBSERVE / PAPER 24/7"]
+    F --> G["TESTNET prolongé"]
+    G --> H["SNN-X K2/K3<br/>apprentissage continu"]
+    H --> I["LIVE_GATED<br/>si preuves suffisantes"]
+```
+
+> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~72 %.**  
+> Le graphe représente l'état du code au HEAD de référence et ne remplace pas les validations d'endurance ou les recettes broker réelles.
+
+---
+
+## 4. Corrections par rapport aux anciennes estimations
 
 Les estimations précédentes sous-évaluaient plusieurs blocs.
 
@@ -115,7 +147,7 @@ K1 existe et K2 est déjà intégré en Shadow Brain passif. La frontière FAST/
 
 ---
 
-## 4. Chemin critique avant serveur autonome
+## 5. Chemin critique avant serveur autonome
 
 ### Étape A — Valider PAPER sur longue durée
 
@@ -196,7 +228,7 @@ Préparer :
 
 ---
 
-## 5. Ce qui peut continuer après le déploiement serveur
+## 6. Ce qui peut continuer après le déploiement serveur
 
 Le serveur ne nécessite pas que toute la recherche soit terminée.
 
@@ -216,7 +248,7 @@ Le serveur doit donc être vu comme **le laboratoire permanent d'Alladin**, pas 
 
 ---
 
-## 6. Conditions minimales pour déclarer « Alladin tourne de ses propres ailes »
+## 7. Conditions minimales pour déclarer « Alladin tourne de ses propres ailes »
 
 La mention **AUTONOMOUS PAPER READY** ne doit être utilisée que si toutes les conditions suivantes sont vérifiées :
 
@@ -239,7 +271,7 @@ La mention **AUTONOMOUS PAPER READY** ne doit être utilisée que si toutes les 
 
 ---
 
-## 7. Ce que « autonome » ne veut pas dire
+## 8. Ce que « autonome » ne veut pas dire
 
 Autonome ne signifie pas :
 
@@ -256,7 +288,7 @@ Autonome signifie :
 
 ---
 
-## 8. Priorité de travail recommandée
+## 9. Priorité de travail recommandée
 
 Ordre de priorité actuel :
 
@@ -282,7 +314,7 @@ Ordre de priorité actuel :
 
 ---
 
-## 9. Indicateur global
+## 10. Indicateur global
 
 À partir du code présent au HEAD `347c6f1` :
 
@@ -299,7 +331,7 @@ Le principal risque n'est plus de manquer de fonctionnalités. Le principal risq
 
 ---
 
-## 10. Règle de mise à jour de ce document
+## 11. Règle de mise à jour de ce document
 
 À chaque jalon significatif :
 
