@@ -2,8 +2,8 @@
 
 **Date de référence :** 2026-10-05  
 **Branche :** `main`  
-**HEAD vérifié :** `a661b7f`  
-**Dernière validation logicielle connue :** **857 tests passed, 3 skipped (MT5)**
+**HEAD vérifié :** `581a8d7`  
+**Dernière validation logicielle connue :** **869 tests passed, 3 skipped (MT5)**
 
 > Ce document est un tableau de bord de progression. Le code et les tests restent la source de vérité pour ce qui est réellement implémenté. Les pourcentages ci-dessous sont des **indicateurs de readiness**, pas une mesure mathématique du nombre de lignes de code réalisées.
 
@@ -32,7 +32,7 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | MT5 / Forex lifecycle | **82%** | 5 actions + idempotence implémentées | recette DEMO Windows réelle |
 | Replay causal / archive | **86%** | Implémenté | provenance tick/bid/ask plus fine |
 | Outcomes / Reward | **82%** | Implémenté | exploiter les outcomes pour apprentissage/promotion |
-| Mission Control | **86%** | API health runtime disponible, cockpit existant | afficher health/freshness/errors dans l'UI |
+| Mission Control | **92%** | Runtime Health UI opérationnelle : status, provider, heartbeat/cycle/market, failures, errors | alerting externe et validation en long-run |
 | Jafar OBSERVE | **95%** | Fonctionnel | endurance 24/7 |
 | Jafar PAPER engine | **92%** | Boucle end-to-end + outcomes + restore + endurance déterministe testés | vraie session longue sur données publiques réelles |
 | Jafar Order Lifecycle | **88%** | Implémenté | tests d'intégration exchange prolongés |
@@ -46,11 +46,11 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Dream Engine | **25%** | frontière slow/replay prévue | consolidation et candidats réellement entraînés |
 | Crash recovery global | **86%** | restart, restore, anti-duplication et fault injection testés | validation longue avec pannes réelles + supervision OS |
 | Kill switches / fail-closed | **84%** | FAILED/STALE/STOPPING bloquent les nouvelles entrées ; tests endurance | validation terrain et supervision externe |
-| Observabilité 24/7 | **74%** | heartbeat, health persistant, stale/provider state et API disponibles | affichage Mission Control + alerting externe |
+| Observabilité 24/7 | **84%** | heartbeat, health persistant, stale/provider state, API et UI Mission Control | alerting externe + validation long-run |
 | Daemon/service autonome | **72%** | boucle continue, backoff, SIGINT/SIGTERM, graceful shutdown, health | systemd/superviseur OS + long-run réelle |
 | Déploiement Linux | **25%** | architecture compatible | packaging, systemd/Docker, secrets, backups |
 | Serveur dédié | **10%** | non déployé | infrastructure + recette de déploiement |
-| Autonomie OBSERVE/PAPER sur serveur | **~80%** | runtime logiciel largement prêt ; non déployé/non validé 24/7 réel | UI health, packaging Linux, long-run réelle |
+| Autonomie OBSERVE/PAPER sur serveur | **~83%** | runtime + observabilité UI prêts ; non déployé/non validé 24/7 réel | packaging Linux, long-run réelle, déploiement |
 | Autonomie LIVE fiable | **~35%** | volontairement bloquée | preuves statistiques + TESTNET/DEMO prolongés + autorisation explicite |
 
 
@@ -77,14 +77,14 @@ xychart-beta
     title "Alladin — intelligence et infrastructure"
     x-axis ["SNN K1", "Shadow K2", "Recovery", "Observ.", "Daemon", "Linux", "Serveur"]
     y-axis "Readiness (%)" 0 --> 100
-    bar [82, 65, 86, 74, 72, 25, 10]
+    bar [82, 65, 86, 84, 72, 25, 10]
 ```
 
 ### 3.3 Chemin critique vers le serveur
 
 ```mermaid
 flowchart LR
-    A["Endurance harness<br/>IMPLEMENTED + TESTED"] --> B["Observabilité<br/>Mission Control health UI"]
+    A["Endurance harness<br/>IMPLEMENTED + TESTED"] --> B["Mission Control health<br/>IMPLEMENTED + TESTED"]
     B --> C["Packaging Linux<br/>systemd / secrets / backups"]
     C --> D["Long-run PAPER<br/>données publiques réelles"]
     D --> E["Recette MT5 DEMO<br/>lifecycle réel"]
@@ -94,7 +94,7 @@ flowchart LR
     H --> I["LIVE_GATED<br/>si preuves suffisantes"]
 ```
 
-> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~80 %.**  
+> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~83 %.**  
 > Le graphe représente l'état du code au HEAD de référence et ne remplace pas les validations d'endurance ou les recettes broker réelles.
 
 ---
@@ -204,9 +204,9 @@ Déjà présents :
 
 **Reste :** supervision OS/auto-restart et validation sur panne/réseau réels.
 
-### Étape D — Observabilité serveur
+### Étape D — Observabilité serveur (**Mission Control health IMPLEMENTED + TESTED**)
 
-Mission Control doit pouvoir montrer au minimum :
+Mission Control montre désormais le runtime health. Le périmètre opérationnel cible reste :
 
 - état du runtime ;
 - dernier heartbeat ;
@@ -276,11 +276,11 @@ La mention **AUTONOMOUS PAPER READY** ne doit être utilisée que si toutes les 
 - [ ] panne provider/réseau réelle validée sur longue durée ;
 - [ ] kill switch testé ;
 - [ ] logs et journal permettent de reconstruire un incident ;
-- [ ] Mission Control montre l'état opérationnel ;
+- [x] Mission Control montre l'état runtime opérationnel ;
 - [ ] service démarre automatiquement après reboot serveur ;
 - [ ] secrets non stockés dans Git ;
 - [ ] backup/persistence testés ;
-- [x] suite software verte au checkpoint : 857 passed, 3 skipped ;
+- [x] suite software verte au checkpoint : 869 passed, 3 skipped ;
 - [ ] recette d'acceptation serveur documentée.
 
 ---
@@ -307,13 +307,11 @@ Autonome signifie :
 Ordre de priorité actuel :
 
 ```text
-1. Mission Control : afficher le runtime health
+1. Packaging Linux / systemd / secrets / logs
         ↓
-2. Packaging Linux / systemd / secrets / logs
+2. Long-run PAPER sur données Binance publiques réelles
         ↓
-3. Long-run PAPER sur données Binance publiques réelles
-        ↓
-4. Recette MT5 DEMO lifecycle réelle
+3. Recette MT5 DEMO lifecycle réelle
         ↓
 5. Déploiement serveur OBSERVE/PAPER
         ↓
@@ -328,15 +326,15 @@ Ordre de priorité actuel :
 
 ## 10. Indicateur global
 
-À partir du code présent au HEAD `a661b7f` :
+À partir du code présent au HEAD `581a8d7` :
 
 - **Socle logiciel général : ~88–90 %**
 - **Jafar OBSERVE/PAPER : ~90–93 %**
 - **Résilience/reconciliation : ~85–88 %**
 - **SNN-X opérationnel expérimental : ~55–65 %**
-- **Infrastructure 24/7 : ~70–75 %**
+- **Infrastructure 24/7 : ~80–84 %**
 - **Déploiement serveur : ~25 %**
-- **Objectif "Alladin autonome OBSERVE/PAPER sur serveur" : ~80 %**
+- **Objectif "Alladin autonome OBSERVE/PAPER sur serveur" : ~83 %**
 - **Objectif "LIVE suffisamment prouvé pour être envisagé" : ~35 %**
 
 Le principal risque n'est plus de manquer de fonctionnalités. Le principal risque est désormais de **confondre fonctionnalité implémentée avec fonctionnalité validée en conditions longues et réelles**.
