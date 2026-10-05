@@ -20,6 +20,7 @@ from alladin.journal.models import EventType
 from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
 from alladin.market.universe import MarketUniverse
+from alladin.orchestration.health import RuntimeHealthTracker, RuntimeStatus
 from alladin.research.models import StrategyStatus
 from alladin.research.repository import ResearchRepository
 from alladin.risk import sizing
@@ -69,7 +70,10 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        acct = broker.account_info() if broker else None
+        try:
+            acct = broker.account_info() if broker else None
+        except Exception:
+            acct = None
         observed_at = datetime.now(UTC)
         runs = repo.list_runs()
         rec = next((r for r in reversed(runs) if r.kind == "RUN"), None)
@@ -82,9 +86,12 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             modes = repo.events(rec.run_id, ["mode.change"], limit=1, desc=True)
             if modes:
                 run_mode = modes[0].payload.get("run_mode")
+            runtime = RuntimeHealthTracker.load_latest(journal, rec.run_id)
+        else:
+            runtime = None
         last_dt = datetime.fromisoformat(last_cycle_at) if last_cycle_at else None
         stale = last_dt is None or observed_at - last_dt.astimezone(UTC) > timedelta(minutes=2)
-        return {
+        payload: dict[str, Any] = {
             "status": "ok",
             "workspace": workspace.value,
             "observe_only": workspace is WorkspaceId.JAFAR,
@@ -100,6 +107,41 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             "demo": acct is not None and acct.account_type is AccountType.DEMO,
             "last_cycle_at": last_cycle_at,
         }
+        if runtime is not None:
+            heartbeat_stale = (
+                observed_at - runtime.last_heartbeat_at.astimezone(UTC)
+            ).total_seconds() > settings.runtime_stale_after_s
+            runtime_payload = runtime.model_dump(mode="json")
+            if heartbeat_stale and runtime.status not in (
+                RuntimeStatus.STOPPED, RuntimeStatus.FAILED
+            ):
+                runtime_payload["status"] = RuntimeStatus.STALE.value
+            payload.update({
+                "status": runtime_payload["status"],
+                "runtime": runtime_payload,
+                "heartbeat_stale": heartbeat_stale,
+                "stale": runtime_payload["status"] == RuntimeStatus.STALE.value,
+                "last_cycle_at": runtime_payload["last_cycle_at"],
+            })
+        return payload
+
+    @app.get("/api/runtime/health")
+    def runtime_health() -> dict[str, Any]:
+        records = repo.list_runs()
+        rec = next((r for r in reversed(records) if r.kind == "RUN"), None)
+        if rec is None:
+            raise HTTPException(404, "run inconnu")
+        runtime = RuntimeHealthTracker.load_latest(journal, rec.run_id)
+        if runtime is None:
+            raise HTTPException(404, "runtime health indisponible")
+        observed_at = datetime.now(UTC)
+        heartbeat_stale = (
+            observed_at - runtime.last_heartbeat_at.astimezone(UTC)
+        ).total_seconds() > settings.runtime_stale_after_s
+        payload = runtime.model_dump(mode="json")
+        if heartbeat_stale and runtime.status not in (RuntimeStatus.STOPPED, RuntimeStatus.FAILED):
+            payload["status"] = RuntimeStatus.STALE.value
+        return {**payload, "observed_at": observed_at.isoformat(), "heartbeat_stale": heartbeat_stale}
 
     @app.get("/api/overview")
     def overview(run_id: str | None = None) -> dict[str, Any]:

@@ -481,6 +481,7 @@ def test_paper_runtime_traverses_brain_risk_lifecycle_and_execution(settings) ->
     from alladin.jafar.paper import JafarPaperRuntime
     from alladin.market.models import ScanCandidate, ScanReport
     from alladin.orchestration.bootstrap import build_services
+    from alladin.orchestration.health import RuntimeHealthTracker
     from alladin.orchestration.jafar import JafarModeStore, JafarPaperBrain
 
     provider = _provider()
@@ -501,6 +502,7 @@ def test_paper_runtime_traverses_brain_risk_lifecycle_and_execution(settings) ->
         candidates=[ScanCandidate(symbol="BTCUSDT", category=AssetCategory.CRYPTO_SPOT,
                                   regime=MarketRegime.TREND, regime_confidence=0.8, score=0.9,
                                   bias=Side.BUY, metrics={"atr": 1_000.0}, tick=tick, spec=spec)],
+        last_market_update_at=_now(),
     )
     engine = JafarPaperEngine(provider=provider, run_id=comps.run.run_id,
                               workspace=WorkspaceId.JAFAR, initial_capital=100_000,
@@ -509,7 +511,12 @@ def test_paper_runtime_traverses_brain_risk_lifecycle_and_execution(settings) ->
     runtime = JafarPaperRuntime(broker=broker, scanner=scanner, brain=JafarPaperBrain(),
                                 risk=comps.risk, engine=engine, journal=comps.journal,
                                 outcomes=comps.outcomes,
-                                run_state=lambda: comps.run.watchdog.run_state)
+                                run_state=lambda: comps.run.watchdog.run_state,
+                                health=RuntimeHealthTracker(
+                                    comps.journal, comps.run.run_id, WorkspaceId.JAFAR, "PAPER",
+                                    stale_after_s=60, max_failures=3, backoff_base_s=1,
+                                    backoff_cap_s=4, clock=provider.now,
+                                ))
     result = runtime.run_cycle()
     assert result.decision == "TRADE"
     assert len(engine.open_positions()) == 1

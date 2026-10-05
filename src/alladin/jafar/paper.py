@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import signal
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -43,6 +45,7 @@ from alladin.journal.models import EventType
 from alladin.market.opportunity import opportunity_identity
 from alladin.market.scanner import MarketScanner
 from alladin.orchestration.engine import CycleOutcome
+from alladin.orchestration.health import RuntimeHealthTracker, RuntimeStatus, StaleMarketDataError
 from alladin.research.outcomes import OutcomeEngine
 from alladin.risk.engine import RiskEngine
 
@@ -842,19 +845,20 @@ class JafarPaperRuntime:
         self, *, broker: CryptoObserveBroker, scanner: MarketScanner, brain: Brain,
         risk: RiskEngine, engine: JafarPaperEngine, journal: JournalService,
         outcomes: OutcomeEngine, run_state: Callable[[], RunState],
+        health: RuntimeHealthTracker,
     ) -> None:
         self.broker, self.scanner, self.brain = broker, scanner, brain
         self.risk, self.engine, self.journal = risk, engine, journal
-        self.outcomes, self.run_state, self._cycle = outcomes, run_state, 0
+        self.outcomes, self.run_state, self.health, self._cycle = outcomes, run_state, health, 0
+        self._stop_requested = False
 
     def run_cycle(self) -> CycleOutcome:
         self._cycle += 1
         cycle_id = f"CYC-{self.broker.now():%Y%m%d-%H%M%S}-{uuid4().hex[:4]}"
         self.journal.current_cycle = cycle_id
         try:
+            self.health.heartbeat()
             self.journal.log(self.engine.run_id, EventType.CYCLE_START, {"cycle": self._cycle, "mode": "PAPER"})
-            if self.engine.tick_all():
-                self.outcomes.collect_run(self.engine.run_id, include_existing=False)
             state = self.run_state()
             if state not in (RunState.RUNNING, RunState.TARGET_REACHED):
                 outcome = CycleOutcome(cycle=self._cycle, cycle_id=cycle_id, run_state=state.value,
@@ -864,6 +868,11 @@ class JafarPaperRuntime:
             snap = self.engine.portfolio_snapshot()
             scan = self.scanner.scan(cycle_id=cycle_id, max_trade_risk=None)
             self.journal.log(self.engine.run_id, EventType.SCAN, scan.summary())
+            if scan.last_market_update_at is None:
+                raise RuntimeError("provider sans donnée marché exploitable")
+            self.health.market_progress(scan.last_market_update_at)
+            if self.engine.tick_all():
+                self.outcomes.collect_run(self.engine.run_id, include_existing=False)
             opportunities = {c.symbol: opportunity_identity(self.engine.run_id, cycle_id, c.symbol)
                              for c in scan.candidates}
             for candidate in scan.candidates:
@@ -886,9 +895,17 @@ class JafarPaperRuntime:
             if proposal.action is Action.NO_TRADE:
                 outcome = self._no_trade(scan.rejected, symbols, proposal)
                 self._finish(outcome)
+                self.health.cycle_completed()
                 return outcome
             if proposal.symbol not in opportunities or proposal.opportunity_id != opportunities[proposal.symbol]:
                 raise JafarPaperOpenError("proposition hors shortlist ou opportunité incohérente")
+            if any(position.symbol == proposal.symbol for position in self.engine.open_positions()):
+                outcome = self._no_trade(
+                    scan.rejected, symbols, proposal, f"position PAPER déjà ouverte sur {proposal.symbol}"
+                )
+                self._finish(outcome)
+                self.health.cycle_completed()
+                return outcome
             spec, tick = self.broker.symbol_spec(proposal.symbol), self.broker.tick(proposal.symbol)
             if spec is None or tick is None:
                 raise JafarPaperOpenError("spec ou tick indisponible au contrôle de risque")
@@ -901,6 +918,7 @@ class JafarPaperRuntime:
                 outcome = self._no_trade(scan.rejected, symbols, proposal,
                                          "; ".join(decision.reason_lines()))
                 self._finish(outcome)
+                self.health.cycle_completed()
                 return outcome
             position = self.engine.open_position(proposal, decision.volume,
                                                  proposal.parameters.stop_loss or 0.0,
@@ -912,6 +930,7 @@ class JafarPaperRuntime:
                                            "proposal_id": proposal.proposal_id,
                                            "quantity": position.quantity})
             self._finish(outcome)
+            self.health.cycle_completed()
             return outcome
         finally:
             self.journal.current_cycle = None
@@ -930,3 +949,67 @@ class JafarPaperRuntime:
         self.journal.log(self.engine.run_id, EventType.CYCLE_END,
                          {"decision": outcome.decision, "reason": outcome.reason,
                           "run_state": outcome.run_state, "shortlist": outcome.shortlist})
+
+    def request_stop(self, reason: str = "arrêt demandé") -> None:
+        self._stop_requested = True
+        if self.health.health.status not in (RuntimeStatus.STOPPING, RuntimeStatus.STOPPED):
+            self.health.stopping(reason)
+
+    def run_loop(
+        self,
+        interval_s: float,
+        *,
+        max_cycles: int | None = None,
+        on_cycle: Callable[[CycleOutcome], None] | None = None,
+        sleep: Callable[[float], None] = time.sleep,
+        handle_signals: bool = True,
+    ) -> None:
+        if interval_s < 0 or (max_cycles is not None and max_cycles < 1):
+            raise ValueError("interval/max_cycles invalide")
+        self._stop_requested = False
+        original_int: Any = None
+        original_term: Any = None
+        if handle_signals:
+            original_int = signal.getsignal(signal.SIGINT)
+            original_term = signal.getsignal(signal.SIGTERM)
+
+            def _shutdown(signum: int, frame: object) -> None:
+                self.request_stop(f"signal {signum}")
+
+            signal.signal(signal.SIGINT, _shutdown)
+            signal.signal(signal.SIGTERM, _shutdown)
+        attempts = 0
+        try:
+            while (max_cycles is None or attempts < max_cycles) and not self._stop_requested:
+                attempts += 1
+                try:
+                    outcome = self.run_cycle()
+                except StaleMarketDataError as exc:
+                    outcome = CycleOutcome(cycle=self._cycle, run_state=self.run_state().value,
+                                           decision="HALTED", reason=str(exc))
+                except RuntimeError as exc:
+                    state = self.health.provider_failure(exc)
+                    outcome = CycleOutcome(cycle=self._cycle, run_state=self.run_state().value,
+                                           decision="HALTED", reason=str(exc))
+                    if state.status is RuntimeStatus.FAILED:
+                        if on_cycle:
+                            on_cycle(outcome)
+                        break
+                if on_cycle:
+                    on_cycle(outcome)
+                if self._stop_requested:
+                    break
+                if max_cycles is None or attempts < max_cycles:
+                    delay = interval_s if outcome.decision != "HALTED" else max(
+                        interval_s, self.health.backoff_seconds()
+                    )
+                    sleep(delay)
+        finally:
+            if handle_signals:
+                assert original_int is not None and original_term is not None
+                signal.signal(signal.SIGINT, original_int)
+                signal.signal(signal.SIGTERM, original_term)
+            if self.health.health.status is not RuntimeStatus.FAILED:
+                if self.health.health.status is not RuntimeStatus.STOPPING:
+                    self.health.stopping("max_cycles atteint" if max_cycles is not None else "boucle arrêtée")
+                self.health.stopped()

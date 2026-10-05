@@ -121,6 +121,7 @@ class MarketScanner:
         analysed = 0
         archived = 0
         clock_suspect = 0
+        last_market_update_at: datetime | None = None
 
         for member in uni.members:
             sym = member.symbol
@@ -137,6 +138,8 @@ class MarketScanner:
                 if tick is None:
                     rejected[sym] = ["aucun tick"]
                     continue
+                if last_market_update_at is None or tick.time > last_market_update_at:
+                    last_market_update_at = tick.time
                 if tick.bid <= 0 or tick.ask <= tick.bid:
                     rejected[sym] = [f"tick de mauvaise qualité (bid {tick.bid}, ask {tick.ask})"]
                     continue
@@ -238,6 +241,7 @@ class MarketScanner:
             notes=notes,
             cycle_id=cycle_id,
             archived_bars=archived,
+            last_market_update_at=last_market_update_at,
         )
 
     @staticmethod

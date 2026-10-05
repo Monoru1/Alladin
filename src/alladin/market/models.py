@@ -41,6 +41,7 @@ class ScanReport(BaseModel):
     notes: list[str] = []
     cycle_id: str | None = None
     archived_bars: int = 0
+    last_market_update_at: datetime | None = None
 
     def summary(self) -> dict[str, object]:
         return {
@@ -69,4 +70,7 @@ class ScanReport(BaseModel):
             "regime_counts": self.regime_counts,
             "archived_bars": self.archived_bars,
             "notes": self.notes,
+            "last_market_update_at": (
+                self.last_market_update_at.isoformat() if self.last_market_update_at else None
+            ),
         }

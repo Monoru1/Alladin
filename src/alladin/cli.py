@@ -903,8 +903,8 @@ def jafar_run(
         requested_mode = JafarMode(mode.upper())
     except ValueError as exc:
         raise die("mode Jafar invalide: OBSERVE | PAPER | TESTNET | LIVE_GATED | LIVE", 2) from exc
-    if interval < 0 or cycles < 1:
-        raise die("interval >= 0 et cycles >= 1 requis", 2)
+    if interval < 0 or cycles < 0:
+        raise die("interval >= 0 et cycles >= 0 requis (0 = continu)", 2)
     comps = _jafar_components(broker_kind, run_id=run)
     if comps.jafar_mode is not requested_mode:
         raise die(
@@ -942,6 +942,7 @@ def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float)
     from alladin.market.archive import MarketDataArchive
     from alladin.market.scanner import MarketScanner
     from alladin.market.universe import MarketUniverse
+    from alladin.orchestration.health import RuntimeHealthTracker
     from alladin.orchestration.jafar import JafarPaperBrain
 
     broker = comps.broker
@@ -968,6 +969,7 @@ def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float)
             broker,
             MarketUniverse(broker, comps.profile.universe),
             comps.profile.universe,
+            max_tick_age_s=comps.settings.runtime_stale_after_s,
             archive=MarketDataArchive(comps.repo.engine, workspace=comps.run.workspace),
         ),
         brain=JafarPaperBrain(),
@@ -976,20 +978,34 @@ def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float)
         journal=comps.journal,
         outcomes=comps.outcomes,
         run_state=lambda: comps.run.watchdog.run_state,
+        health=RuntimeHealthTracker(
+            comps.journal,
+            comps.run.run_id,
+            comps.run.workspace,
+            "PAPER",
+            stale_after_s=comps.settings.runtime_stale_after_s,
+            max_failures=comps.settings.runtime_max_failures,
+            backoff_base_s=comps.settings.runtime_backoff_base_s,
+            backoff_cap_s=comps.settings.runtime_backoff_cap_s,
+            clock=comps.broker.now,
+        ),
     )
-    for cycle_n in range(cycles):
-        result = runtime.run_cycle()
+
+    cycle_n = 0
+
+    def report(result: Any) -> None:
+        nonlocal cycle_n
+        cycle_n += 1
         snap = paper_engine.portfolio_snapshot()
         out(
-            f"{comps.run.run_id} | PAPER | cycle={cycle_n+1}/{cycles} "
+            f"{comps.run.run_id} | PAPER | cycle={cycle_n}/{cycles or '∞'} "
             f"decision={result.decision} "
             f"capital={snap.total_value:.2f} cash={snap.cash:.2f} "
             f"open={snap.open_positions} closed={snap.closed_trades} "
             f"pnl={snap.realized_pnl:+.2f}"
         )
 
-        if cycle_n < cycles - 1 and interval > 0:
-            _time.sleep(interval)
+    runtime.run_loop(interval, max_cycles=cycles or None, on_cycle=report, sleep=_time.sleep)
 
 
 @jafar_app.command("serve")
