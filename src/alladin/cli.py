@@ -1296,6 +1296,307 @@ def jafar_endurance(
         raise typer.Exit(1)
 
 
+@jafar_app.command("report")
+def jafar_report(
+    broker_kind: BrokerOpt = "crypto-public",
+    run: str | None = typer.Option(None, "--run", help="run_id (défaut : dernier run actif)"),
+) -> None:
+    """Rapport READ-ONLY d'un run Jafar PAPER (durée, cycles, health, positions, PnL)."""
+    import json as _json
+    from datetime import UTC, datetime
+
+    from alladin.journal.models import EventType
+    from alladin.orchestration.health import RuntimeHealthTracker, RuntimeStatus
+    from alladin.orchestration.jafar import JafarModeStore
+
+    comps = _jafar_components(broker_kind, run_id=run)
+    repo = comps.repo
+    rec = comps.run
+
+    # Mode persisté
+    mode_store = JafarModeStore(comps.journal, rec.run_id)
+    try:
+        jafar_mode = mode_store.load().value
+    except Exception:
+        jafar_mode = "UNKNOWN"
+
+    # Durée
+    started_at = rec.started_at if hasattr(rec, "started_at") else None
+    now_dt = datetime.now(UTC)
+
+    # Cycles
+    cycle_events = repo.events(rec.run_id, ["cycle.end"], limit=10_000, desc=False)
+    n_cycles = len(cycle_events)
+    first_cycle_at = cycle_events[0].ts.isoformat() if cycle_events else None
+    last_cycle_at = cycle_events[-1].ts.isoformat() if cycle_events else None
+
+    # Heartbeats
+    health_events = repo.events(rec.run_id, [EventType.RUNTIME_HEALTH.value], limit=10_000, desc=False)
+    first_hb = health_events[0].ts.isoformat() if health_events else None
+    last_hb = health_events[-1].ts.isoformat() if health_events else None
+    health_now = RuntimeHealthTracker.load_latest(comps.journal, rec.run_id)
+    current_status = health_now.status.value if health_now else "N/A"
+    last_market_update = health_now.last_market_update_at.isoformat() if health_now and health_now.last_market_update_at else None
+
+    # Transitions health
+    transitions: list[dict[str, object]] = []
+    prev_status = None
+    for evt in health_events:
+        s = evt.payload.get("status")
+        if s != prev_status:
+            transitions.append({"ts": evt.ts.isoformat(), "status": s})
+            prev_status = s
+
+    # Provider failures
+    provider_failures = sum(
+        1 for e in health_events
+        if e.payload.get("provider_status") in ("DOWN", "STALE")
+    )
+    stale_incidents = sum(1 for e in health_events if e.payload.get("status") == RuntimeStatus.STALE.value)
+    max_consecutive_failures: int = max(
+        (int(e.payload.get("consecutive_failures", 0)) for e in health_events), default=0
+    )
+
+    # Opportunities / NO_TRADE / proposals
+    opp_events = repo.events(rec.run_id, ["opportunity.created"], limit=10_000)
+    rej_events = repo.events(rec.run_id, ["opportunity.rejected"], limit=10_000)
+    cycle_decisions = [e.payload.get("decision") for e in cycle_events]
+    no_trade_count = cycle_decisions.count("NO_TRADE")
+    trade_count = cycle_decisions.count("TRADE")
+
+    # Risk events
+    risk_approved = sum(1 for e in repo.events(rec.run_id, ["risk.approved"], limit=10_000))
+    risk_rejected = sum(1 for e in repo.events(rec.run_id, ["risk.rejected"], limit=10_000))
+
+    # Restart events
+    restart_events = repo.events(rec.run_id, ["run.restore", "run.restart"], limit=10_000)
+
+    # Positions PAPER
+    from alladin.jafar.paper import JafarPaperEngine
+    provider = getattr(comps.broker, "provider", None)
+    if provider is not None:
+        paper_engine = JafarPaperEngine(
+            provider=provider,
+            run_id=rec.run_id,
+            workspace=rec.workspace,
+            initial_capital=comps.profile.initial_balance,
+            repo=repo,
+            lifecycle=comps.order_lifecycle,
+            journal=comps.journal,
+        )
+        paper_engine.restore()
+        snap = paper_engine.portfolio_snapshot()
+        open_pos = snap.open_positions
+        closed_trades = snap.closed_trades
+        realized_pnl = snap.realized_pnl
+        unrealized_pnl = snap.unrealized_pnl
+        total_fees = snap.total_fees
+        max_drawdown = snap.drawdown_pct
+        total_value = snap.total_value
+    else:
+        open_pos = "N/A"  # type: ignore[assignment]
+        closed_trades = "N/A"  # type: ignore[assignment]
+        realized_pnl = "N/A"  # type: ignore[assignment]
+        unrealized_pnl = "N/A"  # type: ignore[assignment]
+        total_fees = "N/A"  # type: ignore[assignment]
+        max_drawdown = "N/A"  # type: ignore[assignment]
+        total_value = "N/A"  # type: ignore[assignment]
+
+    # Outcomes
+    try:
+        from alladin.research.outcomes import OutcomeRepository, outcome_summary
+        rows = OutcomeRepository(repo, read_only=True).list(rec.run_id, limit=10_000)
+        outcomes_summary = outcome_summary(rows) if rows else {}
+    except Exception:
+        outcomes_summary = {}
+
+    # Journal integrity
+    chain_ok, chain_detail = repo.verify_chain(rec.run_id)
+
+    # Duplicate anomalies
+    proposal_ids = [e.payload.get("proposal_id") for e in repo.events(rec.run_id, ["paper.trade.open"], limit=10_000)]
+    seen: set[object] = set()
+    duplicates = [p for p in proposal_ids if p in seen or seen.add(p)]  # type: ignore[func-returns-value]
+
+    report_data = {
+        "run_id": rec.run_id,
+        "mode": jafar_mode,
+        "workspace": rec.workspace.value if hasattr(rec.workspace, "value") else str(rec.workspace),
+        "started_at": str(started_at) if started_at else "N/A",
+        "report_at": now_dt.isoformat(),
+        "cycles": n_cycles,
+        "first_cycle_at": first_cycle_at,
+        "last_cycle_at": last_cycle_at,
+        "first_heartbeat_at": first_hb,
+        "last_heartbeat_at": last_hb,
+        "last_market_update_at": last_market_update,
+        "current_health_status": current_status,
+        "health_transitions": transitions,
+        "provider_failures": provider_failures,
+        "stale_incidents": stale_incidents,
+        "max_consecutive_failures": max_consecutive_failures,
+        "opportunities_qualified": len(opp_events),
+        "opportunities_rejected": len(rej_events),
+        "no_trade_count": no_trade_count,
+        "trade_count": trade_count,
+        "risk_approved": risk_approved,
+        "risk_rejected": risk_rejected,
+        "restart_recovery_events": len(restart_events),
+        "open_positions": open_pos,
+        "closed_trades": closed_trades,
+        "realized_pnl": realized_pnl,
+        "unrealized_pnl": unrealized_pnl,
+        "total_fees": total_fees,
+        "max_drawdown": max_drawdown,
+        "total_portfolio_value": total_value,
+        "outcomes": outcomes_summary,
+        "journal_integrity": {"ok": chain_ok, "detail": chain_detail},
+        "duplicate_anomalies": duplicates,
+    }
+    out(_json.dumps(report_data, indent=2, default=str))
+    repo.close()
+
+
+@jafar_app.command("validate-paper")
+def jafar_validate_paper(
+    broker_kind: BrokerOpt = "crypto-public",
+    run: str | None = typer.Option(None, "--run", help="run_id (défaut : dernier run)"),
+    min_duration_h: float = typer.Option(0.0, "--min-duration-h", help="Durée minimale requise en heures (0=pas de check)"),
+) -> None:
+    """Validation READ-ONLY d'un run PAPER.
+
+    Exit codes :
+      0 = PASS
+      1 = WARN (anomalies non bloquantes)
+      2 = FAIL (invariant cassé)
+    """
+    import json as _json
+
+    from alladin.orchestration.health import RuntimeStatus
+    from alladin.orchestration.jafar import JafarModeStore
+
+    comps = _jafar_components(broker_kind, run_id=run)
+    repo = comps.repo
+    rec = comps.run
+
+    checks: list[dict[str, object]] = []
+    exit_code = 0
+
+    def add(name: str, result: str, level: str = "PASS", detail: str = "") -> None:
+        nonlocal exit_code
+        checks.append({"check": name, "result": result, "level": level, "detail": detail})
+        if level == "FAIL" and exit_code < 2:
+            exit_code = 2
+        elif level == "WARN" and exit_code < 1:
+            exit_code = 1
+
+    # Mode PAPER
+    try:
+        mode = JafarModeStore(comps.journal, rec.run_id).load().value
+    except Exception as e:
+        mode = "UNKNOWN"
+        add("mode_paper", mode, "FAIL", str(e))
+    else:
+        if mode == "PAPER":
+            add("mode_paper", mode, "PASS")
+        else:
+            add("mode_paper", mode, "FAIL", f"mode={mode}, attendu PAPER")
+
+    # Journal integrity
+    ok, detail = repo.verify_chain(rec.run_id)
+    add("journal_integrity", "OK" if ok else "FAIL", "PASS" if ok else "FAIL", detail or "")
+
+    # Aucun duplicate
+    proposal_ids = [e.payload.get("proposal_id") for e in repo.events(rec.run_id, ["paper.trade.open"], limit=10_000)]
+    seen: set[object] = set()
+    dups = [p for p in proposal_ids if p in seen or seen.add(p)]  # type: ignore[func-returns-value]
+    add("no_duplicates", f"{len(dups)} dups", "PASS" if not dups else "FAIL", str(dups) if dups else "")
+
+    # Aucun write production
+    write_events = repo.events(rec.run_id, ["binance.order.send", "order.send"], limit=100)
+    add("no_production_write", f"{len(write_events)} events", "PASS" if not write_events else "FAIL")
+
+    # Health non FAILED
+    from alladin.orchestration.health import RuntimeHealthTracker
+    h = RuntimeHealthTracker.load_latest(comps.journal, rec.run_id)
+    if h is None:
+        add("health_available", "N/A", "WARN", "aucun snapshot health")
+    elif h.status is RuntimeStatus.FAILED:
+        add("health_not_failed", h.status.value, "FAIL", h.last_error or "")
+    else:
+        add("health_not_failed", h.status.value, "PASS")
+
+    # Cash >= 0
+    provider = getattr(comps.broker, "provider", None)
+    if provider is not None:
+        from alladin.jafar.paper import JafarPaperEngine
+        eng = JafarPaperEngine(
+            provider=provider, run_id=rec.run_id,
+            workspace=rec.workspace, initial_capital=comps.profile.initial_balance,
+            repo=repo, lifecycle=comps.order_lifecycle, journal=comps.journal,
+        )
+        eng.restore()
+        snap = eng.portfolio_snapshot()
+        add("cash_non_negative", f"{snap.cash:.2f}", "PASS" if snap.cash >= 0 else "FAIL")
+        expected_total = snap.cash + snap.unrealized_pnl
+        coherent = abs(snap.total_value - expected_total) <= 1e-6
+        add(
+            "portfolio_coherent",
+            f"total={snap.total_value:.2f}",
+            "PASS" if coherent and snap.total_value >= 0 else "FAIL",
+            f"cash+unrealized={expected_total:.2f}",
+        )
+    else:
+        add("cash_non_negative", "N/A", "WARN", "broker sans provider")
+        add("portfolio_coherent", "N/A", "WARN", "broker sans provider")
+
+    # Heartbeat progression
+    hb_events = repo.events(rec.run_id, ["runtime.health"], limit=10_000, desc=False)
+    if len(hb_events) >= 2:
+        add("heartbeat_progressed", f"{len(hb_events)} snapshots", "PASS")
+    elif len(hb_events) == 1:
+        add("heartbeat_progressed", "1 snapshot seulement", "WARN")
+    else:
+        add("heartbeat_progressed", "aucun", "WARN", "runtime n'a peut-être pas tourné")
+
+    # Market progression
+    market_updates = [
+        e for e in hb_events
+        if e.payload.get("last_market_update_at") is not None
+    ]
+    add("market_progressed", f"{len(market_updates)} updates",
+        "PASS" if market_updates else "WARN", "pas de market update enregistré")
+
+    # Durée minimale si demandée
+    if min_duration_h > 0 and hb_events:
+        first_ts = hb_events[0].ts
+        last_ts = hb_events[-1].ts
+        duration_h = (last_ts - first_ts).total_seconds() / 3600
+        if duration_h >= min_duration_h:
+            add("min_duration", f"{duration_h:.2f}h >= {min_duration_h}h", "PASS")
+        else:
+            add("min_duration", f"{duration_h:.2f}h < {min_duration_h}h requis", "FAIL")
+
+    duration_h = 0.0
+    if hb_events:
+        duration_h = (hb_events[-1].ts - hb_events[0].ts).total_seconds() / 3600
+    qualification = {
+        "level": "24H" if duration_h >= 24 else "2H" if duration_h >= 2 else "SHORT_SMOKE",
+        "2H_VALIDATED": duration_h >= 2,
+        "24H_VALIDATED": duration_h >= 24,
+        "duration_h": duration_h,
+    }
+    result_label = ["PASS", "WARN", "FAIL"][exit_code]
+    out(_json.dumps({
+        "run_id": rec.run_id,
+        "result": result_label,
+        "qualification": qualification,
+        "checks": checks,
+    }, indent=2))
+    repo.close()
+    raise typer.Exit(exit_code)
+
+
 def main() -> None:
     app()
 

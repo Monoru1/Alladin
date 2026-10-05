@@ -214,6 +214,7 @@ def build_services(
     if existing and not create_run:
         rec = repo.get_run(existing)
         if rec is None:
+            repo.close()
             raise AlladinError(f"run introuvable : {existing}")
         profile = load_profile(rec.profile_id, settings.profiles_dir)
         run = manager.load_run(existing, profile)

@@ -1,6 +1,6 @@
 # ALLADIN — Plan d'implémentation
 
-**Mis à jour :** 2026-10-05 · **Base :** `22a608a` (`main`)
+**Mis à jour :** 2026-10-05 · **Base :** lot Mission Control/soak courant (`main`)
 **Autorité :** le code et ses tests établissent l'existant ; les décisions `ADOPTED` de `docs/DECISIONS/` établissent la direction. Une cible documentaire n'est pas une capacité livrée.
 
 ---
@@ -18,7 +18,7 @@
 
 ## 2. État actuel — HEAD `22a608a`
 
-**Tests software :** 869 passed, 3 skipped (intégrations MT5 opt-in `--run-mt5`)
+**Tests software :** voir `docs/CLAUDE_HANDOFF.md` pour la validation exacte du lot
 **Ruff :** PASS · **mypy :** PASS sur les fichiers/checkpoints récents
 **Acceptance workstation :** PASS (ruff + mypy + software)
 
@@ -43,7 +43,7 @@
 | Splits chronologiques, scorecards, ResearchRepository, lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py` | — |
 | Outcome/Reward : snapshots immuables, politique hashée, reward versionné, statut INCOMPLETE, contrefactuels NO_TRADE/HOLD | `research/outcome.py`, `research/reward.py` | Aucun entraînement ; brain actif inchangé |
 | Archive barres + ReplayContext as-of | `market/archive.py`, `replay.py` | Barres sans close-time explicite ni provenance tick |
-| Cockpit Mission Control lecture seule + Runtime Health UI | `api/app.py`, `api/static/index.html` | Jafar PAPER affiche encore MODE N/A et banner OBSERVE-only : cohérence à corriger |
+| Cockpit Mission Control lecture seule + Runtime Health UI | `api/app.py`, `api/static/index.html` | Mode/banner PAPER et sélection du run actif corrigés ; soak réel restant |
 | MockBroker, MockAgent, fake MT5 | `brokers/mock.py`, `agents/mock.py`, `tests/fake_mt5.py` | — |
 
 ---
@@ -91,14 +91,15 @@
 | J-PAPER | Boucle Jafar PAPER scanner → Brain → Risk → lifecycle → position | **IMPLEMENTED + TESTED** |
 | J-HEALTH | Health runtime, heartbeat, stale detection, backoff/recovery, graceful shutdown | **IMPLEMENTED + TESTED** |
 | J-ENDURANCE | Harness 100/1000 cycles, fault injection, restart/duplicate/SL-TP stress | **IMPLEMENTED + TESTED** |
+| J-SOAK-TOOLS | Rapport read-only, validator invariants et qualification SHORT_SMOKE/2H/24H | **IMPLEMENTED + TESTED** |
 
 **Validation actuelle :** 907 passed, 3 skipped.
 
 ### Ce qui reste ouvert après Lot J
 
 - Recette MT5 DEMO live (Windows) : ouverture réelle validée ; fermeture/modification/partial close + restart restent à valider.
-- PAPER/endurance est validé logiciellement mais pas encore sur une vraie fenêtre 24/7.
-- Mission Control affiche le runtime health, mais la cohérence du mode Jafar PAPER reste à corriger (`MODE N/A`, banner OBSERVE-only).
+- PAPER/endurance est validé logiciellement ; SHORT SMOKE réel validé, 2–4 h et 24 h non validés.
+- Mission Control affiche le bon mode/banner et préfère le run actif pertinent.
 - Packaging Linux/systemd est implémenté/testé structurellement ; déploiement serveur reste à faire.
 - SNN K1/K2 et frontière FAST/SLOW existent ; résultats expérimentaux non établis.
 
@@ -188,7 +189,7 @@ exécutés sont inspectés avant le runtime. Toute absence ou erreur demeure
 | P1 | PAPER : simulation des modifications/fermetures partielles | **PLANNED** |
 | P1 | Archive : close-time explicite, provenance, bid/ask tick | **PLANNED** |
 | P1 | Mission Control : runtime health/freshness/failures | **IMPLEMENTED + TESTED** |
-| P0 | Mission Control Jafar PAPER : source run_mode/banner cohérente | **NEXT** |
+| P0 | Mission Control Jafar PAPER : source run_mode/banner cohérente | **IMPLEMENTED + TESTED** |
 | P1 | Service autonome : packaging Linux/systemd, secrets, logs, auto-restart | **IMPLEMENTED + TESTED structurally** ; terrain non déployé |
 | P2 | Strategy Harvester : collecteur, porte provenance/licence | **PLANNED** |
 | P2 | Command Center global (DECISION-016) | **PLANNED** |

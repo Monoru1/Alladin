@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from alladin.api.app import create_app
 from alladin.brokers.crypto import CryptoMockProvider
 from alladin.brokers.crypto_observe import CryptoObserveBroker
+from alladin.core.enums import RunState
 from alladin.core.workspace import WorkspaceId
 from alladin.journal.models import EventType
 from alladin.orchestration.bootstrap import Components, build_services
@@ -253,6 +254,84 @@ def test_health_selects_latest_run_not_first(settings: object) -> None:
         assert data["run_id"] == run2_id, f"Doit sélectionner run2 ({run2_id}), obtenu {data['run_id']}"
         assert data["run_mode"] == "PAPER"
     finally:
-        import contextlib
-        with contextlib.suppress(OSError):
-            os.unlink(db_path)
+        comps1.repo.close()
+        comps2.repo.close()
+        os.unlink(db_path)
+
+
+def test_health_prefers_running_paper_over_newer_stopped_observe(settings: object) -> None:
+    """Un run actif reste prioritaire sur un record terminal plus récent."""
+    import os
+    import tempfile
+
+    from alladin.core.enums import JafarMode
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+    comps1 = comps2 = None
+    try:
+        db_url = f"sqlite:///{db_path}"
+        broker = CryptoObserveBroker(CryptoMockProvider(start=NOW))
+        comps1 = build_services(settings, broker, create_run=True, workspace=WorkspaceId.JAFAR, db_url=db_url)
+        assert comps1 is not None
+        comps1.manager.start(comps1.run, broker.account_info())
+        JafarModeStore(comps1.journal, comps1.run.run_id).transition(JafarMode.PAPER, reason="test")
+
+        comps2 = build_services(settings, broker, create_run=True, workspace=WorkspaceId.JAFAR, db_url=db_url)
+        assert comps2 is not None
+        comps2.repo.update_run(
+            comps2.run.run_id,
+            RunState.FAILED.value,
+            comps2.run.watchdog.phase_number,
+            comps2.run.watchdog.state.model_dump(mode="json"),
+            NOW,
+        )
+
+        data = TestClient(create_app(comps1.settings, comps1.repo, broker)).get("/health").json()
+        assert data["run_id"] == comps1.run.run_id
+        assert data["run_mode"] == "PAPER"
+    finally:
+        if comps1 is not None:
+            comps1.repo.close()
+        if comps2 is not None:
+            comps2.repo.close()
+        os.unlink(db_path)
+
+
+def test_health_prefers_running_observe_over_older_stopped_paper(settings: object) -> None:
+    """Un OBSERVE actif plus récent est choisi face à un PAPER historique terminal."""
+    import os
+    import tempfile
+
+    from alladin.core.enums import JafarMode
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+    comps1 = comps2 = None
+    try:
+        db_url = f"sqlite:///{db_path}"
+        broker = CryptoObserveBroker(CryptoMockProvider(start=NOW))
+        comps1 = build_services(settings, broker, create_run=True, workspace=WorkspaceId.JAFAR, db_url=db_url)
+        assert comps1 is not None
+        JafarModeStore(comps1.journal, comps1.run.run_id).transition(JafarMode.PAPER, reason="test")
+        comps1.repo.update_run(
+            comps1.run.run_id,
+            RunState.FAILED.value,
+            comps1.run.watchdog.phase_number,
+            comps1.run.watchdog.state.model_dump(mode="json"),
+            NOW,
+        )
+
+        comps2 = build_services(settings, broker, create_run=True, workspace=WorkspaceId.JAFAR, db_url=db_url)
+        assert comps2 is not None
+        comps2.manager.start(comps2.run, broker.account_info())
+
+        data = TestClient(create_app(comps2.settings, comps2.repo, broker)).get("/health").json()
+        assert data["run_id"] == comps2.run.run_id
+        assert data["run_mode"] == "OBSERVE"
+    finally:
+        if comps1 is not None:
+            comps1.repo.close()
+        if comps2 is not None:
+            comps2.repo.close()
+        os.unlink(db_path)

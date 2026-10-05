@@ -1,161 +1,148 @@
 # ALLADIN — Claude Handoff
 
 ## HEAD
-branch: main | SHA: 22a608a | dernier push fonctionnel/doc: 2026-10-05
+branch: main | SHA: à mettre à jour après le commit final | dernier push: 2026-10-05
 
-Commits du lot Linux/systemd packaging :
-- e7fb23d feat: Linux packaging — install/verify scripts, backup, DEPLOY_LINUX.md
-- b7406ba feat: Linux/systemd packaging — units, env template, fail-closed exit code
-- b56ccfd feat: surface runtime health in Mission Control
-- 35e37be feat: persist runtime health and heartbeat state
-- 04db040 feat: expose Jafar PAPER endurance harness via CLI
+Commits du lot Mission Control PAPER + Soak Report :
+- c85d920 feat: Jafar Mission Control PAPER mode alignment
+- commit final à venir : feat: add Jafar PAPER soak report and validator
 
 ## Ce qui vient d'être terminé
 
-**Lot 4 — Linux/systemd packaging** (b7406ba + e7fb23d) :
-- `deploy/alladin-jafar-paper.service` : runtime PAPER, `Restart=on-failure`,
-  `RestartPreventExitStatus=3` (fail-closed ne relance pas), `KillSignal=SIGTERM`,
-  hardening `NoNewPrivileges/PrivateTmp/ProtectSystem/ProtectHome`
-- `deploy/alladin-jafar-mission-control.service` : cockpit séparé, restart indépendant
-- `deploy/alladin-jafar.env.example` : template sans secret, `/etc/alladin/jafar.env`,
-  `chmod 640` documenté
-- `deploy/install.sh` : prépare service sans démarrer automatiquement le trading
-- `deploy/verify.sh` : vérification read-only des artefacts + health check optionnel
-- `scripts/backup_jafar_db.sh` : backup SQLite hot (`sqlite3 .backup`), intégrité check,
-  procédure de restauration
-- `docs/DEPLOY_LINUX.md` : procédure complète (prérequis → upgrade → rollback →
-  incident FAILED → acceptance checklist)
-- `cli.py` : exit 3 après `run_loop()` si `RuntimeStatus.FAILED` (fail-closed logique)
-- `tests/test_deploy_artifacts.py` : 38 tests structurels
+**Lot 5 — Mission Control PAPER cohérence + Soak Report/Validator**
+
+### RC1 — run_mode N/A (app.py)
+- `app.py` `/health` : requête `"jafar.mode.change"` pour JAFAR (pas `"mode.change"`)
+- Lit `payload["to"]` au lieu de `payload["run_mode"]`
+
+### RC2 — Banner "OBSERVE ONLY" incorrect (index.html)
+- Nouveau champ `live_locked = True` pour JAFAR dans `/health`
+- `observe_only = live_locked and run_mode not in ("PAPER", "TESTNET")`
+- Banner JS branché sur `live_locked` + `run_mode` → affiche "PAPER SIMULÉ" ou "OBSERVE"
+
+### RC3 — DEGRADED persist
+- Comportement by design (fail-safe). Non modifié.
+
+### jafar report
+- `jafar report --broker X --run RUN-XXX` : JSON read-only
+- Champs : run_id, mode, cycles, health_transitions, current_health_status,
+  provider_failures, max_consecutive_failures, stale_incidents, opportunities,
+  no_trade_count, open_positions, closed_trades, realized_pnl, unrealized_pnl,
+  total_fees, drawdown_pct, outcomes, journal_integrity, duplicate_anomalies
+
+### jafar validate-paper
+- `jafar validate-paper --broker X --run RUN-XXX [--min-duration-h N]`
+- Exit 0=PASS / 1=WARN / 2=FAIL
+- Checks : mode_is_paper, journal_integrity, no_duplicates, no_production_write,
+  health_not_failed, cash_non_negative, heartbeat_progressed (≥2=PASS),
+  market_progressed, min_duration (si fourni)
+
+### Tests
+- `tests/test_jafar_paper_mc_coherence.py` : 17 tests
+- `tests/test_jafar_soak_report.py` : 13 tests — **tous verts**
+- Suite complète : **937 passed, 3 skipped (MT5)**
 
 ## État réel
 
 | Fonctionnalité | État |
 |---|---|
 | PAPER end-to-end | OUI |
-| Risk traversé | OUI |
-| Anti-duplication | OUI |
-| Heartbeat persisté journal | OUI |
-| Stale detection (bloque entrée) | OUI |
-| Provider failure → DEGRADED | OUI |
-| Backoff borné testable | OUI |
-| Provider recovery → HEALTHY | OUI |
-| Fail closed (seuil FAILED) | OUI |
-| Exit 3 fail-closed (no systemd restart) | OUI |
-| Graceful shutdown STOPPING→STOPPED | OUI |
-| run_loop() avec SIGINT/SIGTERM | OUI |
-| Health API GET /api/runtime/health | OUI |
-| Restart sans duplication | OUI |
-| Endurance harness | OUI |
-| Runtime health UI (Mission Control) | OUI |
-| JAFAR allowed_modes OBSERVE+PAPER | OUI |
-| systemd units (2 services séparés) | IMPLEMENTED |
-| EnvironmentFile template | IMPLEMENTED |
-| install.sh | IMPLEMENTED |
-| verify.sh | IMPLEMENTED |
-| backup SQLite | IMPLEMENTED |
-| DEPLOY_LINUX.md | IMPLEMENTED |
-| 100/1000 cycles propres | TESTED |
-| Fault injection déterministe | TESTED |
-| Artefacts déploiement structurels | TESTED (38 tests) |
+| Mission Control run_mode / live_locked | OUI |
+| Banner mode-aware PAPER vs OBSERVE | OUI |
+| jafar report (JSON read-only) | OUI |
+| jafar validate-paper (exit 0/1/2) | OUI |
+| Tests soak report + MC coherence | OUI (28 tests) |
+| Linux/systemd packaging | OUI |
 | Long-run réelle (24/7) | NON VALIDÉE |
 | Déploiement serveur réel | NON DÉPLOYÉ |
 | TESTNET validation réelle | NON |
 | LIVE | NON |
+| docs/PAPER_SOAK_RUNBOOK.md | CRÉÉ |
 
-## Validation (e7fb23d)
+## Fixes techniques notables
 
-- 907 passed, 3 skipped (MT5), 0 failed
-- mypy clean sur tous les fichiers modifiés
-- ruff clean sur tous les fichiers modifiés
+### WinError 32 (SQLite Windows lock)
+- **Cause** : SQLAlchemy engine garde le fichier SQLite ouvert sous Windows
+- **Fix** : API `JournalRepository.close()`, fermeture des commandes read-only et fermeture avant exception `run introuvable`
+- **Pattern** : context manager `_db_ctx(settings)` qui ferme puis supprime sans masquer `OSError`
+- **Ne pas** masquer avec `try/except OSError` silencieux — dispose explicitement
+
+### make_broker vs CryptoObserveBroker direct
+- `CryptoObserveBroker(CryptoMockProvider())` → `provenance="crypto:mock"`
+- `make_broker("crypto-mock", settings)` → `provenance="crypto:crypto-mock"`
+- Les deux ne correspondent pas → binding check échoue au resume
+- **Fix** : tests utilisent `make_broker("crypto-mock", settings)` identique au CLI
+
+### validate-paper WARN vs PASS
+- 1 seul heartbeat → `heartbeat_progressed = WARN` (threshold = 2)
+- `--min-duration-h 2.0` sur run de quelques secondes → FAIL intentionnel
+- Ne pas tricher : validation structurelle ≠ qualification durée
 
 ## Fichiers clés
 
 ```
-src/alladin/orchestration/health.py          # RuntimeHealthTracker complet
+src/alladin/orchestration/health.py          # RuntimeHealthTracker
 src/alladin/jafar/paper.py                   # JafarPaperRuntime + run_loop()
-src/alladin/api/app.py                       # GET /api/runtime/health
-src/alladin/api/static/index.html            # Panel runtime health + banner PAPER
-src/alladin/cli.py                           # jafar run/serve/endurance + exit 3 FAILED
-src/alladin/core/config.py                   # runtime_stale_after_s, max_failures, backoff_*
+src/alladin/api/app.py                       # /health live_locked + run_mode fix
+src/alladin/api/static/index.html            # Banner mode-aware JS
+src/alladin/cli.py                           # jafar report/validate-paper/endurance
+src/alladin/core/config.py                   # runtime_stale_after_s, max_failures
 deploy/alladin-jafar-paper.service           # unit systemd runtime PAPER
 deploy/alladin-jafar-mission-control.service # unit systemd Mission Control
 deploy/alladin-jafar.env.example             # template /etc/alladin/jafar.env
-deploy/install.sh                            # script d'installation (ne démarre pas)
-deploy/verify.sh                             # vérification artefacts (read-only)
+deploy/install.sh                            # script d'installation
+deploy/verify.sh                             # vérification artefacts
 scripts/backup_jafar_db.sh                   # backup SQLite hot
 docs/DEPLOY_LINUX.md                         # procédure complète déploiement
-tests/test_deploy_artifacts.py               # 38 tests structurels déploiement
+tests/test_deploy_artifacts.py               # 38 tests structurels
 tests/test_mission_control_health.py         # 12 tests Mission Control health
-tests/test_jafar_paper_endurance.py          # 11 tests endurance harness
-tests/test_jafar_runtime_health.py           # 6 tests intégration health
+tests/test_jafar_paper_mc_coherence.py       # 15 tests PAPER mode coherence
+tests/test_jafar_soak_report.py              # 13 tests soak report + validator
 ```
 
-## Architecture des services
+## Validation du lot
 
-```
-alladin-jafar-paper.service          alladin-jafar-mission-control.service
-  python -m alladin jafar run          python -m alladin jafar serve
-  --broker crypto-public               --broker crypto-public
-  --mode PAPER                         --host 127.0.0.1
-  --cycles 0                           --port 8002
-  --interval 300
-  
-  EnvironmentFile=/etc/alladin/jafar.env (partagé)
-  DB: /var/lib/alladin/jafar/alladin.db (partagé, lecture seule pour MC)
-```
+- `pytest tests/test_jafar_soak_report.py` : 13 passed, répété 3 fois sans verrou SQLite
+- ciblés Mission Control/health/soak : 53 passed
+- suite complète : 937 passed, 3 skipped (MT5)
+- mypy `src/alladin` : PASS (100 fichiers)
+- Ruff fichiers du lot : PASS
+- Ruff global : dette préexistante, 15 erreurs dans `tests/test_jafar_execution.py` et `tests/test_jafar_testnet.py`
+- `git diff --check` : PASS
 
-## Fail-closed systemd
+## Prochain lot recommandé : long-run 2-4h
 
-```
-Exit 0  → arrêt propre (STOPPED/STOPPING) → systemd NE relance PAS
-Exit 3  → fail-closed logique (FAILED)    → systemd NE relance PAS (RestartPreventExitStatus=3)
-Non-zero → crash technique                → systemd relance (Restart=on-failure, RestartSec=30)
-```
+### Runbook à créer (docs/PAPER_SOAK_RUNBOOK.md)
+Phase 1 — Smoke (15 min) :
+1. `python -m alladin jafar new --broker crypto-public`
+2. `python -m alladin jafar mode PAPER --broker crypto-public`
+3. `python -m alladin jafar run --broker crypto-public --mode PAPER --cycles 10 --interval 30`
+4. `python -m alladin jafar validate-paper --broker crypto-public --run RUN-XXX`
+5. Vérifier exit 0 ou WARN (pas FAIL)
+
+Phase 2 — Soak (2-4h) :
+1. Relancer avec `--cycles 0 --interval 300`
+2. Toutes les 30 min : `curl http://127.0.0.1:8002/api/runtime/health`
+3. Vérifier `last_market_update_at` avance, `consecutive_failures == 0`
+4. `python -m alladin jafar validate-paper --min-duration-h 2.0 --run RUN-XXX`
+
+Phase 3 — Long-run (24h) :
+- Uniquement après Phase 2 propre
+- SIGTERM propre → STOPPING → STOPPED
+- Redémarrage sans duplication
 
 ## Commandes de reprise
 
 ```bash
 git log -5 --oneline
-python -m pytest -q --tb=no
+python -m pytest tests/test_jafar_soak_report.py tests/test_jafar_paper_mc_coherence.py -q
 
-# Vérifier artefacts
-bash deploy/verify.sh
+# Rapport d'un run
+python -m alladin jafar report --broker crypto-public --run RUN-XXX
 
-# Endurance
-python -m alladin jafar endurance --cycles 100 --seed 42
+# Validation acceptance
+python -m alladin jafar validate-paper --broker crypto-public --run RUN-XXX --min-duration-h 2.0
 ```
 
-## Validation manuelle poste — 2026-10-05
-
-- MT5 DEMO connecté, Algo Trading ON, compte DEMO READY.
-- Ordre test EURUSD BUY 0.01 envoyé via le pipeline complet : RiskEngine APPROVED, order_check OK, positions_get confirme la position, SL/TP actifs, trade journalisé dans SYSTEM-TEST-001.
-- Jafar `crypto-public` PAPER `--cycles 0 --interval 5` a produit plusieurs cycles successifs en boucle continue (NO_TRADE attendu dans ce smoke test).
-- `jafar account` authentifié via Ed25519 read-only : `reading_enabled=true`, retraits/trading Spot désactivés pour la clé, `api_key_read_only_safe=true`.
-- Mission Control Jafar reçoit health/market data, mais incohérences observées : `MODE N/A`, banner "OBSERVE ONLY" alors que le runtime tourne en PAPER.
-- Ceci est un smoke test réel, PAS une validation 2–4h/24h.
-
-## Prochain lot recommandé : Cohérence Mission Control Jafar PAPER + préparation du long-run
-
-Le packaging est terminé et le smoke test réel est concluant. Avant le soak long, corriger la cohérence du cockpit Jafar PAPER (mode/banner/source du run actif), puis préparer une exécution mesurable 2–4h.
-
-### Procédure recommandée
-1. `python -m alladin jafar new --broker crypto-public`
-2. `python -m alladin jafar mode PAPER --broker crypto-public`
-3. `python -m alladin jafar run --broker crypto-public --mode PAPER --cycles 0 --interval 300`
-4. Observer pendant 2–4h :
-   - `curl http://127.0.0.1:8002/api/runtime/health`
-   - Vérifier que `last_market_update_at` avance
-   - Vérifier `consecutive_failures == 0`
-   - Vérifier aucune position dupliquée
-5. SIGTERM → vérifier STOPPING → STOPPED
-6. Redémarrer → vérifier restore sans duplication
-
-### À surveiller
-- Stale data incidents (Binance down ?)
-- Provider backoff behavior
-- Drift portfolio (cash doit rester cohérent)
-- Aucun write Binance production (broker crypto-public)
-
-**Ne pas lancer 24h automatiquement avant 2–4h de validation propre.**
+**Ne pas lancer 24h avant 2-4h de validation propre.**
 **Ne pas commencer avant d'avoir lu ce fichier et vérifié que pytest passe.**

@@ -2,8 +2,8 @@
 
 **Date de référence :** 2026-10-05  
 **Branche :** `main`  
-**HEAD vérifié :** `22a608a`  
-**Dernière validation logicielle connue :** **907 tests passed, 3 skipped (MT5)**  
+**HEAD vérifié :** lot Mission Control/soak en cours de validation
+**Dernière validation logicielle connue :** voir le handoff pour les commandes exactes
 **Validation manuelle poste (2026-10-05) :** MT5 DEMO order pipeline confirmé + Jafar PAPER crypto-public en boucle continue + Binance read-only authentifié.
 
 > Ce document est un tableau de bord de progression. Le code et les tests restent la source de vérité pour ce qui est réellement implémenté. Les pourcentages ci-dessous sont des **indicateurs de readiness**, pas une mesure mathématique du nombre de lignes de code réalisées.
@@ -33,7 +33,7 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | MT5 / Forex lifecycle | **86%** | ouverture DEMO réelle confirmée via RiskEngine → order_check → positions_get → journal | MODIFY_STOP / MODIFY_TARGET / PARTIAL_CLOSE / CLOSE + restart réel à valider |
 | Replay causal / archive | **86%** | Implémenté | provenance tick/bid/ask plus fine |
 | Outcomes / Reward | **82%** | Implémenté | exploiter les outcomes pour apprentissage/promotion |
-| Mission Control | **90%** | Runtime Health UI opérationnelle et connectée aux données réelles | corriger cohérence Jafar PAPER : MODE N/A / banner OBSERVE-only / run-mode source |
+| Mission Control | **92%** | Mode/banner PAPER cohérents, sélection prioritaire du run actif, Runtime Health connecté | validation soak réelle |
 | Jafar OBSERVE | **95%** | Fonctionnel | endurance 24/7 |
 | Jafar PAPER engine | **94%** | boucle continue réelle sur `crypto-public` observée avec cycles successifs ; endurance déterministe déjà testée | soak 2–4h puis 24h, avec rapport final |
 | Jafar Order Lifecycle | **88%** | Implémenté | tests d'intégration exchange prolongés |
@@ -51,7 +51,7 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Daemon/service autonome | **88%** | boucle continue, backoff, SIGINT/SIGTERM, graceful shutdown, health, exit 3 fail-closed | long-run réelle |
 | Déploiement Linux | **82%** | units systemd, EnvironmentFile, install.sh, backup, verify.sh, DEPLOY_LINUX.md, 38 tests structurels | déploiement réel sur serveur |
 | Serveur dédié | **10%** | non déployé | infrastructure physique + recette terrain |
-| Autonomie OBSERVE/PAPER sur serveur | **~89%** | runtime réel + observabilité + packaging prêts ; smoke tests Windows concluants | corriger cockpit Jafar PAPER, soak réel, déploiement terrain |
+| Autonomie OBSERVE/PAPER sur serveur | **~89%** | runtime réel + observabilité + packaging prêts ; smoke court validé | soak 2–4 h puis 24 h, déploiement terrain |
 | Autonomie LIVE fiable | **~35%** | volontairement bloquée | preuves statistiques + TESTNET/DEMO prolongés + autorisation explicite |
 
 
@@ -308,7 +308,7 @@ Autonome signifie :
 Ordre de priorité actuel :
 
 ```text
-1. Corriger cohérence Mission Control Jafar PAPER
+1. Exécuter et valider un soak PAPER réel de 2–4 h
         ↓
 2. Long-run PAPER sur données Binance publiques réelles
         ↓
@@ -327,7 +327,7 @@ Ordre de priorité actuel :
 
 ## 10. Indicateur global
 
-À partir du code présent au HEAD `22a608a` :
+À partir du code présent dans le lot courant :
 
 - **Socle logiciel général : ~88–90 %**
 - **Jafar OBSERVE/PAPER : ~90–93 %**

@@ -13,7 +13,7 @@ from alladin.challenge.models import WatchdogState
 from alladin.challenge.profiles import load_profile
 from alladin.challenge.watchdog import ChallengeWatchdog
 from alladin.core.config import Settings, get_settings
-from alladin.core.enums import AccountType
+from alladin.core.enums import TERMINAL_STATES, AccountType, RunState
 from alladin.core.workspace import WorkspaceId
 from alladin.execution.models import comment_matches
 from alladin.journal.models import EventType
@@ -41,7 +41,14 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
 
     def latest(run_id: str | None = None) -> Any:
         records = repo.list_runs()
-        rec = repo.get_run(run_id) if run_id else (records[-1] if records else None)
+        if run_id:
+            rec = repo.get_run(run_id)
+        else:
+            official = [record for record in records if record.kind == "RUN"]
+            rec = next(
+                (record for record in reversed(official) if RunState(record.state) not in TERMINAL_STATES),
+                official[-1] if official else None,
+            )
         if rec is None:
             raise HTTPException(404, "run inconnu")
         return rec
@@ -75,8 +82,10 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
         except Exception:
             acct = None
         observed_at = datetime.now(UTC)
-        runs = repo.list_runs()
-        rec = next((r for r in reversed(runs) if r.kind == "RUN"), None)
+        try:
+            rec = latest()
+        except HTTPException:
+            rec = None
         last_cycle_at: str | None = None
         run_mode: str | None = None
         if rec:

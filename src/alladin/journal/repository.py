@@ -199,6 +199,10 @@ class JournalRepository:
     def from_url(cls, url: str, workspace: WorkspaceId = WorkspaceId.ALLADIN) -> JournalRepository:
         return cls(make_engine(url), workspace)
 
+    def close(self) -> None:
+        """Libère explicitement les connexions détenues par le pool SQLAlchemy."""
+        self.engine.dispose()
+
     def assert_run_scope(self, run_id: str) -> None:
         with self.engine.connect() as c:
             owner = c.execute(runs.select().where(runs.c.run_id == run_id)).mappings().first()
