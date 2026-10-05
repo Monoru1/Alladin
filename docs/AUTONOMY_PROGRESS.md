@@ -2,8 +2,8 @@
 
 **Date de référence :** 2026-10-05  
 **Branche :** `main`  
-**HEAD vérifié :** `581a8d7`  
-**Dernière validation logicielle connue :** **869 tests passed, 3 skipped (MT5)**
+**HEAD vérifié :** `e7fb23d`  
+**Dernière validation logicielle connue :** **907 tests passed, 3 skipped (MT5)**
 
 > Ce document est un tableau de bord de progression. Le code et les tests restent la source de vérité pour ce qui est réellement implémenté. Les pourcentages ci-dessous sont des **indicateurs de readiness**, pas une mesure mathématique du nombre de lignes de code réalisées.
 
@@ -47,10 +47,10 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Crash recovery global | **86%** | restart, restore, anti-duplication et fault injection testés | validation longue avec pannes réelles + supervision OS |
 | Kill switches / fail-closed | **84%** | FAILED/STALE/STOPPING bloquent les nouvelles entrées ; tests endurance | validation terrain et supervision externe |
 | Observabilité 24/7 | **84%** | heartbeat, health persistant, stale/provider state, API et UI Mission Control | alerting externe + validation long-run |
-| Daemon/service autonome | **72%** | boucle continue, backoff, SIGINT/SIGTERM, graceful shutdown, health | systemd/superviseur OS + long-run réelle |
-| Déploiement Linux | **25%** | architecture compatible | packaging, systemd/Docker, secrets, backups |
-| Serveur dédié | **10%** | non déployé | infrastructure + recette de déploiement |
-| Autonomie OBSERVE/PAPER sur serveur | **~83%** | runtime + observabilité UI prêts ; non déployé/non validé 24/7 réel | packaging Linux, long-run réelle, déploiement |
+| Daemon/service autonome | **88%** | boucle continue, backoff, SIGINT/SIGTERM, graceful shutdown, health, exit 3 fail-closed | long-run réelle |
+| Déploiement Linux | **82%** | units systemd, EnvironmentFile, install.sh, backup, verify.sh, DEPLOY_LINUX.md, 38 tests structurels | déploiement réel sur serveur |
+| Serveur dédié | **10%** | non déployé | infrastructure physique + recette terrain |
+| Autonomie OBSERVE/PAPER sur serveur | **~88%** | runtime + observabilité UI + packaging Linux prêts ; non déployé/non validé 24/7 réel | long-run réelle, déploiement terrain |
 | Autonomie LIVE fiable | **~35%** | volontairement bloquée | preuves statistiques + TESTNET/DEMO prolongés + autorisation explicite |
 
 
@@ -77,7 +77,7 @@ xychart-beta
     title "Alladin — intelligence et infrastructure"
     x-axis ["SNN K1", "Shadow K2", "Recovery", "Observ.", "Daemon", "Linux", "Serveur"]
     y-axis "Readiness (%)" 0 --> 100
-    bar [82, 65, 86, 84, 72, 25, 10]
+    bar [82, 65, 86, 84, 88, 82, 10]
 ```
 
 ### 3.3 Chemin critique vers le serveur
