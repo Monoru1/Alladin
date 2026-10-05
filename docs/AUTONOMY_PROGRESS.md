@@ -2,8 +2,8 @@
 
 **Date de référence :** 2026-10-05  
 **Branche :** `main`  
-**HEAD vérifié :** `347c6f1` — `feat: Jafar PAPER engine, Testnet adapter, execution chain, reconciliation, CLI`  
-**Dernière validation connue :** **833 tests passed, 3 skipped**
+**HEAD de départ vérifié :** `afbdf96`
+**Dernière validation longue connue avant ce lot :** **833 tests passed, 3 skipped**
 
 > Ce document est un tableau de bord de progression. Le code et les tests restent la source de vérité pour ce qui est réellement implémenté. Les pourcentages ci-dessous sont des **indicateurs de readiness**, pas une mesure mathématique du nombre de lignes de code réalisées.
 
@@ -34,7 +34,7 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Outcomes / Reward | **82%** | Implémenté | exploiter les outcomes pour apprentissage/promotion |
 | Mission Control | **82%** | Fonctionnel | historique, santé runtime, alertes |
 | Jafar OBSERVE | **95%** | Fonctionnel | endurance 24/7 |
-| Jafar PAPER engine | **82%** | Implémenté : fills simulés, portefeuille, SL/TP, restore | valider boucle complète de génération → entrée → gestion → sortie sur longue durée |
+| Jafar PAPER engine | **85%** | Boucle scanner → Brain baseline → RiskEngine → lifecycle → fill/position raccordée et testée | valider sorties/outcomes et endurance sur longue durée |
 | Jafar Order Lifecycle | **88%** | Implémenté | tests d'intégration exchange prolongés |
 | Jafar restart reconciliation | **88%** | Implémenté, fail-closed | validation avec cas exchange réels |
 | Binance Testnet adapter | **72%** | submit/query/cancel implémentés, garde URL stricte | recette réelle TESTNET + intégration runtime continue |
@@ -118,7 +118,14 @@ Le commit `347c6f1` ajoute notamment :
 - restauration des positions au redémarrage ;
 - commandes CLI `jafar positions`, `jafar open-orders`, `jafar reconcile`.
 
-La question restante n'est donc plus « construire PAPER », mais **valider que la boucle autonome produit, gère et clôture correctement des trades pendant une période longue**.
+La CLI PAPER exécute désormais scanner → `JafarPaperBrain` baseline → `ActionProposal`
+→ sizing `RiskEngine` → lifecycle → fill simulé → position persistée. Les biais SELL
+restent abstention : Binance Spot ne doit pas être traité comme un marché permettant
+d'ouvrir un short. L'idempotence d'une même proposition est testée.
+
+Cette validation est logicielle et déterministe. Il reste à prouver sur une exécution
+longue que les positions se ferment, que les outcomes sont collectés après SL/TP,
+que les pannes fournisseur sont absorbées et qu'aucune dérive/duplication n'apparaît.
 
 ### Binance TESTNET
 

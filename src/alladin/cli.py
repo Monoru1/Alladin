@@ -938,7 +938,11 @@ def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float)
     """Boucle PAPER Jafar : donnees reelles Binance, execution 100% simulee."""
     import time as _time
 
-    from alladin.jafar.paper import JafarPaperEngine
+    from alladin.jafar.paper import JafarPaperEngine, JafarPaperRuntime
+    from alladin.market.archive import MarketDataArchive
+    from alladin.market.scanner import MarketScanner
+    from alladin.market.universe import MarketUniverse
+    from alladin.orchestration.jafar import JafarPaperBrain
 
     broker = comps.broker
     provider = getattr(broker, "provider", None)
@@ -951,21 +955,34 @@ def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float)
         workspace=comps.run.workspace,
         initial_capital=comps.profile.initial_balance,
         repo=comps.repo,
+        lifecycle=comps.order_lifecycle,
         journal=comps.journal,
     )
     restored = paper_engine.restore()
     if restored:
         out(f"{comps.run.run_id} | PAPER | {restored} position(s) restauree(s)")
 
+    runtime = JafarPaperRuntime(
+        broker=broker,
+        scanner=MarketScanner(
+            broker,
+            MarketUniverse(broker, comps.profile.universe),
+            comps.profile.universe,
+            archive=MarketDataArchive(comps.repo.engine, workspace=comps.run.workspace),
+        ),
+        brain=JafarPaperBrain(),
+        risk=comps.risk,
+        engine=paper_engine,
+        journal=comps.journal,
+        outcomes=comps.outcomes,
+        run_state=lambda: comps.run.watchdog.run_state,
+    )
     for cycle_n in range(cycles):
-        closed = paper_engine.tick_all()
-        for pos in closed:
-            pnl = round(pos.realized_pnl or 0.0, 2)
-            out(f"{comps.run.run_id} | PAPER | {pos.symbol} {pos.status} PnL={pnl:+.2f} USDT")
-
+        result = runtime.run_cycle()
         snap = paper_engine.portfolio_snapshot()
         out(
             f"{comps.run.run_id} | PAPER | cycle={cycle_n+1}/{cycles} "
+            f"decision={result.decision} "
             f"capital={snap.total_value:.2f} cash={snap.cash:.2f} "
             f"open={snap.open_positions} closed={snap.closed_trades} "
             f"pnl={snap.realized_pnl:+.2f}"

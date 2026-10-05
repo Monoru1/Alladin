@@ -11,7 +11,7 @@ from alladin.brain import Action, ActionProposal
 from alladin.challenge.models import RiskRules
 from alladin.core.approval import issue_open_token
 from alladin.core.enums import AccountType, EntryType, RunMode, RunState, Side, SymbolTradeMode
-from alladin.core.models import Position, TradeIntent
+from alladin.core.models import InstrumentSpec, Position, Tick, TradeIntent
 from alladin.risk import sizing
 from alladin.risk.exposure import compute_exposure, currency_legs
 from alladin.risk.models import RejectCode, RiskContext, RiskDecision, RiskReason
@@ -22,6 +22,92 @@ _EPS = 1e-9
 
 
 class RiskEngine:
+    def evaluate_paper_entry(
+        self,
+        proposal: ActionProposal,
+        *,
+        equity: float,
+        spec: InstrumentSpec,
+        tick: Tick,
+        open_positions: int,
+    ) -> RiskDecision:
+        """Dimensionne une entrée PAPER sans inventer un faux compte broker.
+
+        Cette porte conserve les règles déterministes applicables au marché et au
+        sizing. Les contraintes portefeuille/cash sont ensuite vérifiées par le
+        moteur PAPER, qui possède l'état simulé faisant autorité.
+        """
+        reasons: list[RiskReason] = []
+
+        def reject(code: RejectCode, message: str) -> None:
+            reasons.append(RiskReason(code=code, message=message))
+
+        p = proposal.parameters
+        if proposal.action not in (Action.LONG, Action.SHORT):
+            reject(RejectCode.MODE_SAFETY, "entrée PAPER LONG/SHORT requise")
+        if proposal.symbol != spec.symbol or proposal.symbol != tick.symbol:
+            reject(RejectCode.INSTRUMENT_MISMATCH, "instrument incohérent entre proposition, spec et tick")
+        if p.entry_type not in self.supported_entry_types:
+            reject(RejectCode.ENTRY_TYPE_UNSUPPORTED, f"type d'entrée {p.entry_type} non supporté")
+        if p.stop_loss is None:
+            reject(RejectCode.NO_STOP_LOSS, "stop loss obligatoire : NO SL = REJECTED")
+        if open_positions >= self.rules.max_open_positions:
+            reject(RejectCode.MAX_POSITIONS, "nombre maximal de positions ouvertes atteint")
+        if not spec.is_tradable:
+            reject(RejectCode.NOT_TRADABLE, f"instrument {spec.symbol} non négociable")
+
+        entry = tick.ask if proposal.action is Action.LONG else tick.bid
+        sl = p.stop_loss
+        tp = p.take_profit
+        if sl is not None:
+            sl_ok = sl < entry if proposal.action is Action.LONG else sl > entry
+            if not sl_ok:
+                reject(RejectCode.BAD_GEOMETRY, "stop loss du mauvais côté de l'entrée")
+            distance = abs(entry - sl)
+            if distance <= 0:
+                reject(RejectCode.BAD_GEOMETRY, "distance au stop nulle")
+            elif tick.spread > self.rules.max_spread_to_sl_ratio * distance:
+                reject(RejectCode.SPREAD_TOO_WIDE, "spread trop large par rapport à la distance au stop")
+            if tp is not None:
+                tp_ok = tp > entry if proposal.action is Action.LONG else tp < entry
+                if not tp_ok:
+                    reject(RejectCode.BAD_GEOMETRY, "objectif du mauvais côté de l'entrée")
+                elif self.rules.min_risk_reward > 0 and abs(tp - entry) / distance < self.rules.min_risk_reward:
+                    reject(RejectCode.RISK_REWARD, f"ratio gain/risque < {self.rules.min_risk_reward}")
+
+        wc = sizing.working_capital(equity, self.rules.working_capital_pct)
+        cap = sizing.max_trade_risk(wc, self.rules.max_trade_risk_pct_of_working_capital)
+        requested_pct = p.requested_risk_pct_of_working_capital or 0.0
+        requested = wc * requested_pct / 100
+        risk_amount = min(requested, cap)
+        adjustments: list[str] = []
+        if requested > cap + _EPS:
+            if self.rules.over_cap_policy == "reject":
+                reject(RejectCode.RISK_EXCEEDS_CAP, f"risque demandé {requested:.2f} > plafond {cap:.2f}")
+            else:
+                adjustments.append(f"risque réduit de {requested:.2f} à {cap:.2f}")
+
+        sized = self.sizer.size(spec, entry, sl, risk_amount) if sl is not None else None
+        if sized is None or sized.volume <= 0:
+            reject(RejectCode.SIZING, (sized.reason or "sizing impossible") if sized else "sizing impossible sans stop")
+        return RiskDecision(
+            intent_id=proposal.proposal_id,
+            approved=not reasons,
+            reasons=reasons,
+            adjustments=adjustments,
+            working_capital=wc,
+            max_trade_risk=cap,
+            requested_risk_amount=requested,
+            risk_amount=sized.actual_risk if sized else 0.0,
+            risk_pct_of_working_capital=(sized.actual_risk / wc * 100) if sized and wc > 0 else 0.0,
+            risk_pct_of_equity=(sized.actual_risk / equity * 100) if sized and equity > 0 else 0.0,
+            volume=sized.volume if sized else 0.0,
+            entry_price=entry,
+            stop_loss=sl,
+            take_profit=tp,
+            loss_per_lot=sized.loss_per_lot if sized else 0.0,
+        )
+
     def plan_position_action(self, proposal: ActionProposal, context: PositionActionContext) -> RiskDecision:
         """Effect-free Lot F plan. The legacy runtime gate remains closed until execution is ready."""
         return evaluate_position_action(proposal, context)

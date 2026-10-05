@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import math
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
 
 from alladin.brain import Action, ActionProposal, proposal_identity
 from alladin.brokers.crypto import CryptoMockProvider
-from alladin.core.enums import Side
+from alladin.core.enums import JafarMode, Side
 from alladin.core.workspace import WorkspaceId
 from alladin.jafar.paper import (
     DEFAULT_INITIAL_CAPITAL,
@@ -24,7 +23,6 @@ from alladin.jafar.paper import (
     check_portfolio_risk,
     simulate_fill,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -260,6 +258,14 @@ class TestJafarPaperEngine:
         assert pos.fees_paid > 0
         assert len(engine.open_positions()) == 1
 
+    def test_same_proposal_cannot_open_twice(self) -> None:
+        engine = _engine()
+        proposal = _proposal("LONG")
+        first = engine.open_position(proposal, 0.01, sl=64_000.0, tp=67_000.0)
+        second = engine.open_position(proposal, 0.01, sl=64_000.0, tp=67_000.0)
+        assert second is first
+        assert len(engine.open_positions()) == 1
+
     def test_open_short_position(self) -> None:
         engine = _engine()
         proposal = _proposal("SHORT")
@@ -280,7 +286,7 @@ class TestJafarPaperEngine:
         price = 65_000.0
         engine = _engine(price)
         proposal = _proposal("LONG")
-        pos = engine.open_position(proposal, 0.01, sl=65_100.0, tp=70_000.0)
+        engine.open_position(proposal, 0.01, sl=65_100.0, tp=70_000.0)
 
         # Simuler un tick où le bid est en dessous du SL
         provider = engine.provider
@@ -311,7 +317,7 @@ class TestJafarPaperEngine:
     def test_tick_all_closes_on_tp(self) -> None:
         engine = _engine(65_000.0)
         proposal = _proposal("LONG")
-        pos = engine.open_position(proposal, 0.01, sl=64_000.0, tp=65_050.0)
+        engine.open_position(proposal, 0.01, sl=64_000.0, tp=65_050.0)
 
         provider = engine.provider
         assert isinstance(provider, CryptoMockProvider)
@@ -336,8 +342,7 @@ class TestJafarPaperEngine:
     def test_realized_pnl_positive_on_tp(self) -> None:
         engine = _engine(65_000.0)
         proposal = _proposal("LONG")
-        pos = engine.open_position(proposal, 0.01, sl=64_000.0, tp=66_000.0)
-        entry = pos.entry_price
+        engine.open_position(proposal, 0.01, sl=64_000.0, tp=66_000.0)
 
         provider = engine.provider
         assert isinstance(provider, CryptoMockProvider)
@@ -371,7 +376,6 @@ class TestJafarPaperEngine:
         """NO_TRADE doit être refusé — peut lever sur symbol manquant ou action non tradable."""
         engine = _engine()
         from alladin.brain import ProposalParameters
-        from alladin.core.enums import EntryType, MarketRegime
 
         pid = proposal_identity("RUN-1", "CYC-1", None, "jafar:test", "1")
         no_trade = ActionProposal(
@@ -411,8 +415,6 @@ class TestJafarPaperEngine:
 
     def test_no_order_sent_to_binance(self) -> None:
         """Vérifier que PAPER n'appelle jamais d'endpoint Binance d'ordre."""
-        import alladin.jafar.paper as paper_mod
-
         # Monkey-patch urllib.request.urlopen pour détecter tout appel réseau
         import urllib.request
 
@@ -470,6 +472,50 @@ class TestJafarPaperEngine:
         restored = engine.open_positions()[0]
         assert restored.symbol == "BTCUSDT"
         assert restored.quantity == 0.01
+
+
+def test_paper_runtime_traverses_brain_risk_lifecycle_and_execution(settings) -> None:
+    from alladin.brokers.crypto_observe import CryptoObserveBroker
+    from alladin.core.enums import AssetCategory, MarketRegime
+    from alladin.execution.order_lifecycle import CanonicalOrderStatus
+    from alladin.jafar.paper import JafarPaperRuntime
+    from alladin.market.models import ScanCandidate, ScanReport
+    from alladin.orchestration.bootstrap import build_services
+    from alladin.orchestration.jafar import JafarModeStore, JafarPaperBrain
+
+    provider = _provider()
+    broker = CryptoObserveBroker(provider)
+    comps = build_services(settings, broker, create_run=True, workspace=WorkspaceId.JAFAR)
+    assert comps is not None and comps.order_lifecycle is not None
+    JafarModeStore(comps.journal, comps.run.run_id).transition(
+        JafarMode.PAPER,
+        reason="test",
+    )
+    comps.manager.start(comps.run, broker.account_info())
+    tick = broker.tick("BTCUSDT")
+    spec = broker.symbol_spec("BTCUSDT")
+    assert tick is not None and spec is not None
+    scanner = MagicMock()
+    scanner.scan.return_value = ScanReport(
+        scanned_at=_now(), universe_size=1, analysed=1,
+        candidates=[ScanCandidate(symbol="BTCUSDT", category=AssetCategory.CRYPTO_SPOT,
+                                  regime=MarketRegime.TREND, regime_confidence=0.8, score=0.9,
+                                  bias=Side.BUY, metrics={"atr": 1_000.0}, tick=tick, spec=spec)],
+    )
+    engine = JafarPaperEngine(provider=provider, run_id=comps.run.run_id,
+                              workspace=WorkspaceId.JAFAR, initial_capital=100_000,
+                              repo=comps.repo, lifecycle=comps.order_lifecycle,
+                              journal=comps.journal)
+    runtime = JafarPaperRuntime(broker=broker, scanner=scanner, brain=JafarPaperBrain(),
+                                risk=comps.risk, engine=engine, journal=comps.journal,
+                                outcomes=comps.outcomes,
+                                run_state=lambda: comps.run.watchdog.run_state)
+    result = runtime.run_cycle()
+    assert result.decision == "TRADE"
+    assert len(engine.open_positions()) == 1
+    assert comps.repo.events(comps.run.run_id, ["risk.decision"])[0].payload["approved"] is True
+    claim = comps.order_lifecycle.get(engine.open_positions()[0].client_order_id)
+    assert claim is not None and claim.status is CanonicalOrderStatus.FILLED
 
 
 # ---------------------------------------------------------------------------

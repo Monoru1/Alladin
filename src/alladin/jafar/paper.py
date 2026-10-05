@@ -23,13 +23,16 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
-from alladin.brain import ActionProposal
+from alladin.brain import Action, ActionProposal, Brain, BrainContext
 from alladin.brokers.crypto import CryptoDataProvider
-from alladin.core.enums import Side
+from alladin.brokers.crypto_observe import CryptoObserveBroker
+from alladin.core.enums import RunState, Side
 from alladin.core.workspace import WorkspaceId
 from alladin.execution.order_lifecycle import (
     CanonicalOrderStatus,
@@ -37,6 +40,11 @@ from alladin.execution.order_lifecycle import (
     client_order_id,
 )
 from alladin.journal.models import EventType
+from alladin.market.opportunity import opportunity_identity
+from alladin.market.scanner import MarketScanner
+from alladin.orchestration.engine import CycleOutcome
+from alladin.research.outcomes import OutcomeEngine
+from alladin.risk.engine import RiskEngine
 
 if TYPE_CHECKING:
     from alladin.journal.repository import JournalRepository
@@ -159,7 +167,7 @@ class JafarPaperPosition:
             "volume": self.quantity,
             "original_volume": self.quantity,
             "realized_pnl": self.realized_pnl or 0.0,
-            "initial_risk": 0.0,
+            "initial_risk": float(self.intent_extra.get("initial_risk", 0.0)),
             "account_currency": "USDT",
             "price_value_per_lot": 1.0,
             "mae_amount": self.mae_amount,
@@ -178,7 +186,6 @@ class JafarPaperPosition:
             "mae_pips": self.mae_amount,
             "intent_json": json.dumps(extra, default=str),
             "workspace": self.workspace,
-            "proposal_id": self.proposal_id,
         }
 
     @classmethod
@@ -202,7 +209,7 @@ class JafarPaperPosition:
             slippage_paid=float(extra.get("slippage_paid", 0.0)),
             quote_cost=float(extra.get("quote_cost", float(d["volume"]) * float(d["entry_price"]))),
             opened_at=opened,
-            proposal_id=d.get("proposal_id", ""),
+            proposal_id=str(extra.get("proposal_id") or d.get("proposal_id", "")),
             client_order_id=extra.get("client_order_id", ""),
             unrealized_pnl=0.0,
             mfe_amount=float(d.get("mfe_amount") or 0.0),
@@ -214,6 +221,7 @@ class JafarPaperPosition:
             closed_at=closed,
             realized_pnl=float(d["realized_pnl"]) if d.get("realized_pnl") is not None else None,
             status=d.get("status", "OPEN"),
+            intent_extra=extra,
         )
         return pos
 
@@ -528,6 +536,12 @@ class JafarPaperEngine:
             raise JafarPaperOpenError(f"action non tradable : {proposal.action}")
         if quantity <= 0 or not math.isfinite(quantity):
             raise JafarPaperOpenError("quantity invalide")
+        existing = next(
+            (p for p in (*self._open.values(), *self._closed) if p.proposal_id == proposal.proposal_id),
+            None,
+        )
+        if existing is not None:
+            return existing
 
         tick = self.provider.ticker(symbol)
         if tick is None or tick.bid <= 0 or tick.ask <= 0 or tick.ask <= tick.bid:
@@ -587,8 +601,7 @@ class JafarPaperEngine:
             self._lifecycle.transition(claim.client_order_id, CanonicalOrderStatus.SUBMITTING, now=now)
 
         # Build position
-        import uuid
-        pos_id = f"JPP-{uuid.uuid4().hex[:12]}"
+        pos_id = f"JPP-{hashlib.sha256(proposal.proposal_id.encode()).hexdigest()[:12]}"
         pos = JafarPaperPosition(
             position_id=pos_id,
             run_id=self.run_id,
@@ -606,8 +619,14 @@ class JafarPaperEngine:
             proposal_id=proposal.proposal_id,
             client_order_id=fill.client_order_id,
             intent_extra={
+                "proposal_id": proposal.proposal_id,
                 "opportunity_id": proposal.opportunity_id,
                 "cycle_id": proposal.cycle_id,
+                "strategy_id": proposal.parameters.strategy_id,
+                "strategy_version": proposal.parameters.strategy_version,
+                "stop_loss": sl,
+                "take_profit": tp,
+                "initial_risk": abs(fill.fill_price - sl) * fill.quantity,
             },
         )
 
@@ -648,6 +667,7 @@ class JafarPaperEngine:
             )
 
         return pos
+
 
     # ------------------------------------------------------------------ tick_all
 
@@ -813,3 +833,100 @@ class JafarPaperEngine:
             mfe_amount=pos.mfe_amount,
             excursion_samples=pos.excursion_samples,
         )
+
+
+class JafarPaperRuntime:
+    """Un cycle causal Jafar PAPER : marché → Brain → Risk → simulation."""
+
+    def __init__(
+        self, *, broker: CryptoObserveBroker, scanner: MarketScanner, brain: Brain,
+        risk: RiskEngine, engine: JafarPaperEngine, journal: JournalService,
+        outcomes: OutcomeEngine, run_state: Callable[[], RunState],
+    ) -> None:
+        self.broker, self.scanner, self.brain = broker, scanner, brain
+        self.risk, self.engine, self.journal = risk, engine, journal
+        self.outcomes, self.run_state, self._cycle = outcomes, run_state, 0
+
+    def run_cycle(self) -> CycleOutcome:
+        self._cycle += 1
+        cycle_id = f"CYC-{self.broker.now():%Y%m%d-%H%M%S}-{uuid4().hex[:4]}"
+        self.journal.current_cycle = cycle_id
+        try:
+            self.journal.log(self.engine.run_id, EventType.CYCLE_START, {"cycle": self._cycle, "mode": "PAPER"})
+            if self.engine.tick_all():
+                self.outcomes.collect_run(self.engine.run_id, include_existing=False)
+            state = self.run_state()
+            if state not in (RunState.RUNNING, RunState.TARGET_REACHED):
+                outcome = CycleOutcome(cycle=self._cycle, cycle_id=cycle_id, run_state=state.value,
+                                       decision="HALTED", reason=f"run {state.value}")
+                self._finish(outcome)
+                return outcome
+            snap = self.engine.portfolio_snapshot()
+            scan = self.scanner.scan(cycle_id=cycle_id, max_trade_risk=None)
+            self.journal.log(self.engine.run_id, EventType.SCAN, scan.summary())
+            opportunities = {c.symbol: opportunity_identity(self.engine.run_id, cycle_id, c.symbol)
+                             for c in scan.candidates}
+            for candidate in scan.candidates:
+                self.journal.log(self.engine.run_id, EventType.OPPORTUNITY_CREATED,
+                                 {"opportunity_id": opportunities[candidate.symbol],
+                                  "symbol": candidate.symbol, "status": "QUALIFIED",
+                                  "direction": candidate.bias.value if candidate.bias else None,
+                                  "setup_score": candidate.score})
+            shortlist = [{"symbol": c.symbol, "bid": c.tick.bid, "ask": c.tick.ask,
+                          "atr": c.metrics.get("atr"), "bias": c.bias.value if c.bias else None,
+                          "score": c.score, "regime": c.regime.value}
+                         for c in scan.candidates if c.tick is not None]
+            context = BrainContext(run_id=self.engine.run_id, cycle_id=cycle_id,
+                                   timestamp=self.broker.now(), opportunities=opportunities,
+                                   market={"shortlist": shortlist, "portfolio": {
+                                       **snap.__dict__, "observed_at": snap.observed_at.isoformat()}})
+            proposal = self.brain.decide(context)
+            self.journal.log(self.engine.run_id, EventType.ACTION_PROPOSAL, proposal.model_dump(mode="json"))
+            symbols = [str(row["symbol"]) for row in shortlist]
+            if proposal.action is Action.NO_TRADE:
+                outcome = self._no_trade(scan.rejected, symbols, proposal)
+                self._finish(outcome)
+                return outcome
+            if proposal.symbol not in opportunities or proposal.opportunity_id != opportunities[proposal.symbol]:
+                raise JafarPaperOpenError("proposition hors shortlist ou opportunité incohérente")
+            spec, tick = self.broker.symbol_spec(proposal.symbol), self.broker.tick(proposal.symbol)
+            if spec is None or tick is None:
+                raise JafarPaperOpenError("spec ou tick indisponible au contrôle de risque")
+            decision = self.risk.evaluate_paper_entry(proposal, equity=snap.total_value, spec=spec,
+                                                      tick=tick,
+                                                      open_positions=len(self.engine.open_positions()))
+            self.journal.log(self.engine.run_id, EventType.RISK_DECISION,
+                             decision.model_dump(mode="json", exclude={"token"}))
+            if not decision.approved:
+                outcome = self._no_trade(scan.rejected, symbols, proposal,
+                                         "; ".join(decision.reason_lines()))
+                self._finish(outcome)
+                return outcome
+            position = self.engine.open_position(proposal, decision.volume,
+                                                 proposal.parameters.stop_loss or 0.0,
+                                                 proposal.parameters.take_profit)
+            outcome = CycleOutcome(cycle=self._cycle, cycle_id=cycle_id, run_state=state.value,
+                                   decision="TRADE", reason=f"PAPER_EXECUTED: {position.position_id}",
+                                   shortlist=symbols,
+                                   result={"position_id": position.position_id,
+                                           "proposal_id": proposal.proposal_id,
+                                           "quantity": position.quantity})
+            self._finish(outcome)
+            return outcome
+        finally:
+            self.journal.current_cycle = None
+
+    def _no_trade(self, rejected: dict[str, list[str]], symbols: list[str], proposal: ActionProposal,
+                  reason: str | None = None) -> CycleOutcome:
+        why = reason or (proposal.reasons[0] if proposal.reasons else "NO_TRADE")
+        self.journal.no_trade(self.engine.run_id, studied=sorted(set(rejected) | set(symbols)),
+                              candidates=symbols, strategies_evaluated={}, rejections=rejected,
+                              agent=self.brain.source_id, reason=why,
+                              proposal_id=proposal.proposal_id)
+        return CycleOutcome(cycle=self._cycle, run_state=self.run_state().value,
+                            decision="NO_TRADE", reason=why, shortlist=symbols)
+
+    def _finish(self, outcome: CycleOutcome) -> None:
+        self.journal.log(self.engine.run_id, EventType.CYCLE_END,
+                         {"decision": outcome.decision, "reason": outcome.reason,
+                          "run_state": outcome.run_state, "shortlist": outcome.shortlist})

@@ -936,3 +936,18 @@ ordre retrouvé est réconcilié ; une absence, une erreur réseau ou une diverg
 laisse l'état ambigu et bloque la reprise. Aucun retry de soumission n'existe.
 
 Principe Jafar confirmé : **upside non plafonné artificiellement ; downside strictement borné**. La permission de retrait reste hors du rôle de la clé de trading ; une éventuelle trésorerie automatisée devra utiliser une séparation de privilèges dédiée.
+
+## Checkpoint Jafar PAPER end-to-end — 2026-10-05
+
+Contrairement aux paragraphes historiques OBSERVE-only ci-dessus, `jafar run
+--mode PAPER` ne se limite plus à gérer des positions déjà créées. Chaque cycle
+utilise le scanner partagé, un `JafarPaperBrain` déterministe, une
+`ActionProposal`, le sizing du `RiskEngine`, le lifecycle persistant et le
+portefeuille PAPER. `NO_TRADE`, proposition, décision risque, ouverture,
+fermeture et cycle sont auditables. Une même proposition ne peut ouvrir qu'une
+position, y compris après restore. PAPER n'appelle aucun endpoint d'ordre.
+
+Cette étape est **IMPLEMENTED + TESTED**, pas validée en endurance ni déployée.
+Le prochain lot prioritaire est la santé runtime : heartbeat persistant, état
+provider, détection des données périmées, backoff/recovery et arrêt propre, puis
+une recette PAPER de plusieurs centaines/milliers de cycles avec restart.

@@ -37,7 +37,7 @@
 | Univers Jafar dynamique USDT depuis `exchangeInfo` | `brokers/crypto.py`, `brokers/crypto_observe.py` | Éligibilité liquidité/data quality encore à enrichir |
 | Lifecycle ordre exchange persistant/idempotent et réconciliation | `execution/order_lifecycle.py` | Aucun envoi Binance raccordé |
 | Valorisation portefeuille Spot et limites concentration/drawdown | `risk/portfolio.py` | Cost basis/corrélations doivent être alimentés par données réelles |
-| Modes Jafar OBSERVE/PAPER/TESTNET/LIVE_GATED/LIVE et gates fail-closed | `core/enums.py`, `orchestration/jafar.py` | Runtime/CLI encore OBSERVE uniquement |
+| Modes Jafar OBSERVE/PAPER/TESTNET/LIVE_GATED/LIVE et gates fail-closed | `core/enums.py`, `orchestration/jafar.py` | OBSERVE et PAPER raccordés ; TESTNET/LIVE non autonomes |
 | Trades publics, carnet et statistiques 24 h Binance canoniques | `brokers/crypto.py` | Pas encore archivés ni utilisés par l'éligibilité |
 | Backtest chronologique (fill next-open, spread, gap SL, règle intrabar) | `research/backtest.py` | Distinct du vrai RiskEngine ; `passed` ≠ preuve OOS |
 | Splits chronologiques, scorecards, ResearchRepository, lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py` | — |
@@ -88,6 +88,7 @@
 | H | Catégories crypto, capabilities honnêtes, sessions | **IMPLEMENTED** |
 | I | Runtime Jafar OBSERVE isolé, CLI et cockpit scoped | **IMPLEMENTED** |
 | J | Outcome/Reward : snapshots, politique hashée, reward versionné | **IMPLEMENTED** |
+| J-PAPER | Boucle Jafar PAPER scanner → Brain → Risk → lifecycle → position | **IMPLEMENTED + TESTED**, endurance non validée |
 
 **Total à fin Lot J :** 629 passed, 3 skipped.
 
@@ -179,6 +180,7 @@ exécutés sont inspectés avant le runtime. Toute absence ou erreur demeure
 |---|---|---|
 | P0 | Recette MT5 DEMO live : fermeture/modification/partial close réelles | **PENDING** Windows requis |
 | P0 | Décision 013 : politique sorties protectrices OBSERVE/PAPER | **PROPOSED** non tranchée |
+| P1 | PAPER : endurance, pannes provider, sorties/outcomes prolongés | **PLANNED** |
 | P1 | PAPER : simulation des modifications/fermetures partielles | **PLANNED** |
 | P1 | Archive : close-time explicite, provenance, bid/ask tick | **PLANNED** |
 | P1 | Mission Control : historique paginé, fiche décision stable, chart | **PLANNED** |

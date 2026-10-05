@@ -2,8 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from alladin.brain import Action, ActionProposal, BrainContext, proposal_identity
-from alladin.core.enums import JafarMode
+from alladin.brain import Action, ActionProposal, BrainContext, ProposalParameters, proposal_identity
+from alladin.core.enums import JafarMode, MarketRegime, Side
 from alladin.core.errors import AlladinError
 from alladin.journal.models import EventType
 from alladin.journal.service import JournalService
@@ -129,4 +129,60 @@ class JafarObserveBrain:
             timestamp=context.timestamp,
             action=Action.NO_TRADE,
             reasons=("Jafar skeleton: OBSERVE only, no strategy enabled",),
+        )
+
+
+class JafarPaperBrain:
+    """Baseline déterministe minimale pour éprouver la boucle PAPER complète."""
+
+    source_id = "jafar:paper:scanner-baseline"
+    source_version = "1"
+
+    def decide(self, context: BrainContext) -> ActionProposal:
+        rows = context.market.get("shortlist", [])
+        candidate = rows[0] if rows else None
+        if not isinstance(candidate, dict) or candidate.get("bias") != Side.BUY.value:
+            return ActionProposal(
+                proposal_id=proposal_identity(
+                    context.run_id, context.cycle_id, None, self.source_id, self.source_version
+                ),
+                source_id=self.source_id,
+                source_version=self.source_version,
+                run_id=context.run_id,
+                cycle_id=context.cycle_id,
+                action=Action.NO_TRADE,
+                timestamp=context.timestamp,
+                reasons=("aucun biais exploitable dans la shortlist",),
+            )
+        symbol = str(candidate["symbol"])
+        opportunity_id = context.opportunities[symbol]
+        entry = float(candidate["ask"] if candidate["bias"] == Side.BUY.value else candidate["bid"])
+        atr = float(candidate.get("atr") or 0.0)
+        if atr <= 0:
+            raise ValueError("ATR absent pour le sizing PAPER")
+        direction = 1
+        return ActionProposal(
+            proposal_id=proposal_identity(
+                context.run_id, context.cycle_id, opportunity_id, self.source_id, self.source_version
+            ),
+            source_id=self.source_id,
+            source_version=self.source_version,
+            run_id=context.run_id,
+            cycle_id=context.cycle_id,
+            opportunity_id=opportunity_id,
+            symbol=symbol,
+            action=Action.LONG,
+            confidence=float(candidate.get("score") or 0.0),
+            reasons=("baseline scanner PAPER déterministe",),
+            timestamp=context.timestamp,
+            parameters=ProposalParameters(
+                strategy_id="JAFAR-PAPER-BASELINE",
+                strategy_version="1",
+                market_regime=MarketRegime(str(candidate["regime"])),
+                entry=entry,
+                stop_loss=entry - direction * 1.5 * atr,
+                take_profit=entry + direction * 3.0 * atr,
+                requested_risk_pct_of_working_capital=1.0,
+                sources=("market-scanner",),
+            ),
         )
