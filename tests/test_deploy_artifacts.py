@@ -205,3 +205,67 @@ def test_cli_exits_3_on_failed_status() -> None:
     content = cli_path.read_text(encoding="utf-8")
     assert "RuntimeStatus.FAILED" in content
     assert "Exit(code=3)" in content or "typer.Exit(code=3)" in content
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scripts de déploiement
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_install_sh_exists() -> None:
+    assert INSTALL_SH.exists()
+
+
+def test_install_sh_no_auto_start_trading() -> None:
+    """Le script d'install ne doit pas appeler systemctl start directement (uniquement le documenter)."""
+    content = _read(INSTALL_SH)
+    # Les lignes exécutant systemctl start ne doivent pas être des commandes directes
+    # (elles peuvent apparaître dans des echo d'instruction)
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("systemctl start alladin-jafar-paper"):
+            raise AssertionError(f"start trading sans confirmation: {stripped!r}")
+
+
+def test_install_sh_no_hardcoded_secrets() -> None:
+    content = _read(INSTALL_SH)
+    assert "BINANCE_API_KEY=" not in content
+    assert "-----BEGIN" not in content
+
+
+def test_backup_script_exists() -> None:
+    backup = Path(__file__).parent.parent / "scripts" / "backup_jafar_db.sh"
+    assert backup.exists()
+
+
+def test_backup_script_uses_sqlite3() -> None:
+    backup = Path(__file__).parent.parent / "scripts" / "backup_jafar_db.sh"
+    content = _read(backup)
+    assert "sqlite3" in content
+    assert ".backup" in content
+
+
+def test_verify_sh_exists() -> None:
+    verify = DEPLOY / "verify.sh"
+    assert verify.exists()
+
+
+def test_verify_sh_checks_paper_mode() -> None:
+    verify = DEPLOY / "verify.sh"
+    content = _read(verify)
+    assert "PAPER" in content
+    assert "LIVE" in content
+
+
+def test_deploy_linux_doc_exists() -> None:
+    doc = Path(__file__).parent.parent / "docs" / "DEPLOY_LINUX.md"
+    assert doc.exists()
+
+
+def test_deploy_linux_doc_has_acceptance_checklist() -> None:
+    doc = Path(__file__).parent.parent / "docs" / "DEPLOY_LINUX.md"
+    content = _read(doc)
+    assert "PAPER uniquement" in content
+    assert "LIVE" in content
+    assert "SIGTERM" in content
+    assert "backup" in content.lower()
+    assert "FAILED" in content
