@@ -1,7 +1,7 @@
 # ALLADIN — Claude Handoff
 
 ## HEAD
-branch: main | SHA: b56ccfd | dernier push fonctionnel/doc: 2026-10-05
+branch: main | SHA: 581a8d7 | dernier push fonctionnel/doc: 2026-10-05
 
 Commits du lot Mission Control Health UI :
 - b56ccfd feat: surface runtime health in Mission Control
@@ -48,7 +48,7 @@ Commits du lot Mission Control Health UI :
 | TESTNET validation réelle | NON |
 | LIVE | NON |
 
-## Validation (b56ccfd)
+## Validation (581a8d7)
 
 - 869 passed, 3 skipped (MT5), 0 failed
 - mypy clean sur tous les fichiers modifiés
