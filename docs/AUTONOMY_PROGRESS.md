@@ -2,8 +2,9 @@
 
 **Date de référence :** 2026-10-05  
 **Branche :** `main`  
-**HEAD vérifié :** `e7fb23d`  
-**Dernière validation logicielle connue :** **907 tests passed, 3 skipped (MT5)**
+**HEAD vérifié :** `22a608a`  
+**Dernière validation logicielle connue :** **907 tests passed, 3 skipped (MT5)**  
+**Validation manuelle poste (2026-10-05) :** MT5 DEMO order pipeline confirmé + Jafar PAPER crypto-public en boucle continue + Binance read-only authentifié.
 
 > Ce document est un tableau de bord de progression. Le code et les tests restent la source de vérité pour ce qui est réellement implémenté. Les pourcentages ci-dessous sont des **indicateurs de readiness**, pas une mesure mathématique du nombre de lignes de code réalisées.
 
@@ -29,12 +30,12 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Journal / event sourcing | **92%** | Implémenté | enrichissement et observabilité |
 | Risk Engine / garde-fous | **88%** | Implémenté et testé | recette endurance + cas réels |
 | Opportunity / orchestration | **82%** | Implémenté | qualité de sélection et validation terrain |
-| MT5 / Forex lifecycle | **82%** | 5 actions + idempotence implémentées | recette DEMO Windows réelle |
+| MT5 / Forex lifecycle | **86%** | ouverture DEMO réelle confirmée via RiskEngine → order_check → positions_get → journal | MODIFY_STOP / MODIFY_TARGET / PARTIAL_CLOSE / CLOSE + restart réel à valider |
 | Replay causal / archive | **86%** | Implémenté | provenance tick/bid/ask plus fine |
 | Outcomes / Reward | **82%** | Implémenté | exploiter les outcomes pour apprentissage/promotion |
-| Mission Control | **92%** | Runtime Health UI opérationnelle : status, provider, heartbeat/cycle/market, failures, errors | alerting externe et validation en long-run |
+| Mission Control | **90%** | Runtime Health UI opérationnelle et connectée aux données réelles | corriger cohérence Jafar PAPER : MODE N/A / banner OBSERVE-only / run-mode source |
 | Jafar OBSERVE | **95%** | Fonctionnel | endurance 24/7 |
-| Jafar PAPER engine | **92%** | Boucle end-to-end + outcomes + restore + endurance déterministe testés | vraie session longue sur données publiques réelles |
+| Jafar PAPER engine | **94%** | boucle continue réelle sur `crypto-public` observée avec cycles successifs ; endurance déterministe déjà testée | soak 2–4h puis 24h, avec rapport final |
 | Jafar Order Lifecycle | **88%** | Implémenté | tests d'intégration exchange prolongés |
 | Jafar restart reconciliation | **88%** | Implémenté, fail-closed | validation avec cas exchange réels |
 | Binance Testnet adapter | **72%** | submit/query/cancel implémentés, garde URL stricte | recette réelle TESTNET + intégration runtime continue |
@@ -50,7 +51,7 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 | Daemon/service autonome | **88%** | boucle continue, backoff, SIGINT/SIGTERM, graceful shutdown, health, exit 3 fail-closed | long-run réelle |
 | Déploiement Linux | **82%** | units systemd, EnvironmentFile, install.sh, backup, verify.sh, DEPLOY_LINUX.md, 38 tests structurels | déploiement réel sur serveur |
 | Serveur dédié | **10%** | non déployé | infrastructure physique + recette terrain |
-| Autonomie OBSERVE/PAPER sur serveur | **~88%** | runtime + observabilité UI + packaging Linux prêts ; non déployé/non validé 24/7 réel | long-run réelle, déploiement terrain |
+| Autonomie OBSERVE/PAPER sur serveur | **~89%** | runtime réel + observabilité + packaging prêts ; smoke tests Windows concluants | corriger cockpit Jafar PAPER, soak réel, déploiement terrain |
 | Autonomie LIVE fiable | **~35%** | volontairement bloquée | preuves statistiques + TESTNET/DEMO prolongés + autorisation explicite |
 
 
@@ -94,7 +95,7 @@ flowchart LR
     H --> I["LIVE_GATED<br/>si preuves suffisantes"]
 ```
 
-> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~83 %.**  
+> **Readiness globale vers l'objectif serveur OBSERVE/PAPER : ~89 %.**  
 > Le graphe représente l'état du code au HEAD de référence et ne remplace pas les validations d'endurance ou les recettes broker réelles.
 
 ---
@@ -264,7 +265,7 @@ Le serveur doit donc être vu comme **le laboratoire permanent d'Alladin**, pas 
 
 La mention **AUTONOMOUS PAPER READY** ne doit être utilisée que si toutes les conditions suivantes sont vérifiées :
 
-- [ ] runtime stable pendant une fenêtre prolongée sans intervention ;
+- [ ] runtime stable pendant une fenêtre prolongée sans intervention (smoke multi-cycles réel OK, soak restant) ;
 - [x] restart logique sans duplication dans les tests/harness ;
 - [ ] reconciliation cohérente après restart ;
 - [x] PAPER ouvre et ferme des positions simulées dans les tests/harness ;
@@ -307,7 +308,7 @@ Autonome signifie :
 Ordre de priorité actuel :
 
 ```text
-1. Packaging Linux / systemd / secrets / logs
+1. Corriger cohérence Mission Control Jafar PAPER
         ↓
 2. Long-run PAPER sur données Binance publiques réelles
         ↓
@@ -326,7 +327,7 @@ Ordre de priorité actuel :
 
 ## 10. Indicateur global
 
-À partir du code présent au HEAD `581a8d7` :
+À partir du code présent au HEAD `22a608a` :
 
 - **Socle logiciel général : ~88–90 %**
 - **Jafar OBSERVE/PAPER : ~90–93 %**
@@ -334,7 +335,7 @@ Ordre de priorité actuel :
 - **SNN-X opérationnel expérimental : ~55–65 %**
 - **Infrastructure 24/7 : ~80–84 %**
 - **Déploiement serveur : ~25 %**
-- **Objectif "Alladin autonome OBSERVE/PAPER sur serveur" : ~83 %**
+- **Objectif "Alladin autonome OBSERVE/PAPER sur serveur" : ~89 %**
 - **Objectif "LIVE suffisamment prouvé pour être envisagé" : ~35 %**
 
 Le principal risque n'est plus de manquer de fonctionnalités. Le principal risque est désormais de **confondre fonctionnalité implémentée avec fonctionnalité validée en conditions longues et réelles**.
