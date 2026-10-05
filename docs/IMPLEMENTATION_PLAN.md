@@ -1,6 +1,6 @@
 # ALLADIN — Plan d'implémentation
 
-**Mis à jour :** 2026-10-05 · **Base :** `581a8d7` (`main`)
+**Mis à jour :** 2026-10-05 · **Base :** `22a608a` (`main`)
 **Autorité :** le code et ses tests établissent l'existant ; les décisions `ADOPTED` de `docs/DECISIONS/` établissent la direction. Une cible documentaire n'est pas une capacité livrée.
 
 ---
@@ -16,7 +16,7 @@
 
 ---
 
-## 2. État actuel — HEAD `581a8d7`
+## 2. État actuel — HEAD `22a608a`
 
 **Tests software :** 869 passed, 3 skipped (intégrations MT5 opt-in `--run-mt5`)
 **Ruff :** PASS · **mypy :** PASS sur les fichiers/checkpoints récents
@@ -26,13 +26,13 @@
 
 | Capacité | Emplacement | Limite connue |
 |---|---|---|
-| Garde-fous sécurité : compte DEMO, SL obligatoire, token, précontrôle, kill switch | `brokers/base.py`, `brokers/mt5.py`, `execution/service.py`, `risk/engine.py` | Recette MT5 réelle non effectuée depuis Windows |
+| Garde-fous sécurité : compte DEMO, SL obligatoire, token, précontrôle, kill switch | `brokers/base.py`, `brokers/mt5.py`, `execution/service.py`, `risk/engine.py` | Ouverture DEMO réelle validée ; lifecycle complet restant |
 | Profil challenge (règles officielles/expérimentales séparées) | `challenge/models.py`, `challenge/watchdog.py`, `config/challenge_profiles/` | Plafonds expérimentaux conservateurs |
 | Gestion autonome 5 actions (CLOSE, PARTIAL_CLOSE, MODIFY_STOP, MODIFY_TARGET, HOLD) | `risk/engine.py`, `execution/service.py`, `orchestration/engine.py` | Recette MT5 DEMO live non effectuée |
 | Confirmation, claim durable, idempotence après reprise | `execution/service.py`, `journal/` | — |
 | Isolation workspace Alladin/Jafar : journal, positions, recherche, archive | `core/workspace.py`, migrations | — |
 | Catégories crypto, capabilities honnêtes, sessions configurables | `brokers/crypto.py`, `market/sessions.py`, `core/enums.py` | Aucun adapter d'exécution crypto |
-| Runtime Jafar OBSERVE/PAPER : scan → Brain → Risk → lifecycle → simulation, health et reprise | `jafar/`, `orchestration/health.py`, `api/` | Long-run réelle 24/7 non validée |
+| Runtime Jafar OBSERVE/PAPER : scan → Brain → Risk → lifecycle → simulation, health et reprise | `jafar/`, `orchestration/health.py`, `api/` | Boucle réelle crypto-public validée en smoke test ; soak 2–4h/24h restant |
 | Binance Spot public + compte USER_DATA read-only Ed25519 + restrictions de clé | `brokers/binance.py`, `brokers/crypto.py` | Aucun endpoint d'ordre ; clé API absente du processus de validation locale |
 | Univers Jafar dynamique USDT depuis `exchangeInfo` | `brokers/crypto.py`, `brokers/crypto_observe.py` | Éligibilité liquidité/data quality encore à enrichir |
 | Lifecycle ordre exchange persistant/idempotent et réconciliation | `execution/order_lifecycle.py` | Aucun envoi Binance raccordé |
@@ -43,7 +43,7 @@
 | Splits chronologiques, scorecards, ResearchRepository, lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py` | — |
 | Outcome/Reward : snapshots immuables, politique hashée, reward versionné, statut INCOMPLETE, contrefactuels NO_TRADE/HOLD | `research/outcome.py`, `research/reward.py` | Aucun entraînement ; brain actif inchangé |
 | Archive barres + ReplayContext as-of | `market/archive.py`, `replay.py` | Barres sans close-time explicite ni provenance tick |
-| Cockpit Mission Control lecture seule + Runtime Health UI | `api/app.py`, `api/static/index.html` | Alerting externe/long-run non validés |
+| Cockpit Mission Control lecture seule + Runtime Health UI | `api/app.py`, `api/static/index.html` | Jafar PAPER affiche encore MODE N/A et banner OBSERVE-only : cohérence à corriger |
 | MockBroker, MockAgent, fake MT5 | `brokers/mock.py`, `agents/mock.py`, `tests/fake_mt5.py` | — |
 
 ---
@@ -92,14 +92,14 @@
 | J-HEALTH | Health runtime, heartbeat, stale detection, backoff/recovery, graceful shutdown | **IMPLEMENTED + TESTED** |
 | J-ENDURANCE | Harness 100/1000 cycles, fault injection, restart/duplicate/SL-TP stress | **IMPLEMENTED + TESTED** |
 
-**Validation actuelle :** 857 passed, 3 skipped.
+**Validation actuelle :** 907 passed, 3 skipped.
 
 ### Ce qui reste ouvert après Lot J
 
-- Recette MT5 DEMO live (Windows) : fermeture/modification/partial close réelles.
+- Recette MT5 DEMO live (Windows) : ouverture réelle validée ; fermeture/modification/partial close + restart restent à valider.
 - PAPER/endurance est validé logiciellement mais pas encore sur une vraie fenêtre 24/7.
-- Mission Control n'affiche pas encore le bloc runtime health malgré l'API disponible.
-- Packaging Linux/systemd et déploiement serveur restent à faire.
+- Mission Control affiche le runtime health, mais la cohérence du mode Jafar PAPER reste à corriger (`MODE N/A`, banner OBSERVE-only).
+- Packaging Linux/systemd est implémenté/testé structurellement ; déploiement serveur reste à faire.
 - SNN K1/K2 et frontière FAST/SLOW existent ; résultats expérimentaux non établis.
 
 ---
@@ -182,13 +182,14 @@ exécutés sont inspectés avant le runtime. Toute absence ou erreur demeure
 
 | Priorité | Sujet | Statut |
 |---|---|---|
-| P0 | Recette MT5 DEMO live : fermeture/modification/partial close réelles | **PENDING** Windows requis |
+| P0 | Recette MT5 DEMO live : ouverture | **VALIDATED MANUALLY** ; management/close/restart restants |
 | P0 | Décision 013 : politique sorties protectrices OBSERVE/PAPER | **PROPOSED** non tranchée |
 | P1 | PAPER : endurance accélérée + pannes/restart/SL-TP | **IMPLEMENTED + TESTED** ; long-run réelle restant à valider |
 | P1 | PAPER : simulation des modifications/fermetures partielles | **PLANNED** |
 | P1 | Archive : close-time explicite, provenance, bid/ask tick | **PLANNED** |
 | P1 | Mission Control : runtime health/freshness/failures | **IMPLEMENTED + TESTED** |
-| P0 | Service autonome : packaging Linux/systemd, secrets, logs, auto-restart | **NEXT** ; heartbeat/runtime health déjà implémentés |
+| P0 | Mission Control Jafar PAPER : source run_mode/banner cohérente | **NEXT** |
+| P1 | Service autonome : packaging Linux/systemd, secrets, logs, auto-restart | **IMPLEMENTED + TESTED structurally** ; terrain non déployé |
 | P2 | Strategy Harvester : collecteur, porte provenance/licence | **PLANNED** |
 | P2 | Command Center global (DECISION-016) | **PLANNED** |
 
