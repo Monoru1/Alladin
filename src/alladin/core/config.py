@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     jafar_binance_private_key_path: Path | None = Field(default=None, alias="JAFAR_BINANCE_PRIVATE_KEY_PATH")
     binance_recv_window_ms: int = Field(default=5000, ge=1, le=60_000, alias="BINANCE_RECV_WINDOW_MS")
 
+    runtime_stale_after_s: float = Field(default=120.0, gt=0, alias="RUNTIME_STALE_AFTER_S")
+    runtime_max_failures: int = Field(default=5, ge=1, alias="RUNTIME_MAX_FAILURES")
+    runtime_backoff_base_s: float = Field(default=1.0, gt=0, alias="RUNTIME_BACKOFF_BASE_S")
+    runtime_backoff_cap_s: float = Field(default=60.0, gt=0, alias="RUNTIME_BACKOFF_CAP_S")
+
     magic_base: int = 26_000_000  # magic = magic_base + numéro de run
 
     @field_validator(

@@ -50,6 +50,7 @@ class EventType(StrEnum):
     OUTCOME = "learning.outcome"
     SHADOW_PROPOSAL = "shadow.proposal"
     SHADOW_FAILURE = "shadow.failure"
+    RUNTIME_HEALTH = "runtime.health"
 
 
 class JournalEvent(BaseModel):
