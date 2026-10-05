@@ -1,6 +1,6 @@
 # ALLADIN — Plan d'implémentation
 
-**Mis à jour :** 2026-10-05 · **Base :** `a661b7f` (`main`)
+**Mis à jour :** 2026-10-05 · **Base :** `581a8d7` (`main`)
 **Autorité :** le code et ses tests établissent l'existant ; les décisions `ADOPTED` de `docs/DECISIONS/` établissent la direction. Une cible documentaire n'est pas une capacité livrée.
 
 ---
@@ -16,9 +16,9 @@
 
 ---
 
-## 2. État actuel — HEAD `a661b7f`
+## 2. État actuel — HEAD `581a8d7`
 
-**Tests software :** 857 passed, 3 skipped (intégrations MT5 opt-in `--run-mt5`)
+**Tests software :** 869 passed, 3 skipped (intégrations MT5 opt-in `--run-mt5`)
 **Ruff :** PASS · **mypy :** PASS sur les fichiers/checkpoints récents
 **Acceptance workstation :** PASS (ruff + mypy + software)
 
@@ -43,7 +43,7 @@
 | Splits chronologiques, scorecards, ResearchRepository, lifecycle de version | `research/splits.py`, `scorecard.py`, `repository.py` | — |
 | Outcome/Reward : snapshots immuables, politique hashée, reward versionné, statut INCOMPLETE, contrefactuels NO_TRADE/HOLD | `research/outcome.py`, `research/reward.py` | Aucun entraînement ; brain actif inchangé |
 | Archive barres + ReplayContext as-of | `market/archive.py`, `replay.py` | Barres sans close-time explicite ni provenance tick |
-| Cockpit Mission Control lecture seule | `api/app.py`, `api/static/index.html` | Journal UI limité aux 40 derniers événements |
+| Cockpit Mission Control lecture seule + Runtime Health UI | `api/app.py`, `api/static/index.html` | Alerting externe/long-run non validés |
 | MockBroker, MockAgent, fake MT5 | `brokers/mock.py`, `agents/mock.py`, `tests/fake_mt5.py` | — |
 
 ---
@@ -187,8 +187,8 @@ exécutés sont inspectés avant le runtime. Toute absence ou erreur demeure
 | P1 | PAPER : endurance accélérée + pannes/restart/SL-TP | **IMPLEMENTED + TESTED** ; long-run réelle restant à valider |
 | P1 | PAPER : simulation des modifications/fermetures partielles | **PLANNED** |
 | P1 | Archive : close-time explicite, provenance, bid/ask tick | **PLANNED** |
-| P1 | Mission Control : afficher runtime health/freshness/failures | **NEXT** ; API déjà disponible |
-| P1 | Service autonome : packaging Linux/systemd, secrets, logs, auto-restart | **PLANNED** ; heartbeat/runtime health déjà implémentés |
+| P1 | Mission Control : runtime health/freshness/failures | **IMPLEMENTED + TESTED** |
+| P0 | Service autonome : packaging Linux/systemd, secrets, logs, auto-restart | **NEXT** ; heartbeat/runtime health déjà implémentés |
 | P2 | Strategy Harvester : collecteur, porte provenance/licence | **PLANNED** |
 | P2 | Command Center global (DECISION-016) | **PLANNED** |
 
