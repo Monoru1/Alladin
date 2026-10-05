@@ -1006,6 +1006,9 @@ def _jafar_run_paper(comps: Any, broker_kind: str, cycles: int, interval: float)
         )
 
     runtime.run_loop(interval, max_cycles=cycles or None, on_cycle=report, sleep=_time.sleep)
+    from alladin.orchestration.health import RuntimeStatus
+    if runtime.health.health.status is RuntimeStatus.FAILED:
+        raise typer.Exit(code=3)
 
 
 @jafar_app.command("serve")

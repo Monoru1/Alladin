@@ -1,0 +1,42 @@
+[Unit]
+Description=Alladin — Jafar PAPER runtime (crypto public, jamais d'ordre production)
+Documentation=https://github.com/Monoru1/Alladin
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alladin
+Group=alladin
+WorkingDirectory=/opt/alladin
+EnvironmentFile=/etc/alladin/jafar.env
+ExecStart=/opt/alladin/.venv/bin/python -m alladin jafar run \
+    --broker crypto-public \
+    --mode PAPER \
+    --cycles 0 \
+    --interval 300
+
+# Arrêt propre via SIGTERM → STOPPING → STOPPED (graceful shutdown)
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+# Restart uniquement sur crash technique (exit != 0, != 3)
+# Exit 3 = fail-closed logique : ne pas relancer automatiquement
+Restart=on-failure
+RestartSec=30
+RestartPreventExitStatus=3
+
+# Journalisation
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=alladin-jafar-paper
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/alladin /etc/alladin
+
+[Install]
+WantedBy=multi-user.target
