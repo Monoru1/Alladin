@@ -1,7 +1,7 @@
 # ALLADIN — Claude Handoff
 
 ## HEAD
-branch: main | SHA: 04db040 | dernier push: 2026-10-05
+branch: main | SHA: a661b7f | dernier push fonctionnel/doc: 2026-10-05
 
 Commits du lot Health + Endurance :
 - 35e37be feat: persist runtime health and heartbeat state
@@ -65,7 +65,7 @@ Commits du lot Health + Endurance :
 - Anti-duplication par proposal_id + position symbol déjà ouverte
 - `jafar endurance` : pas de réseau, pas de secrets, aucun write externe
 
-## Validation (04db040)
+## Validation (checkpoint fonctionnel 04db040, handoff a661b7f)
 
 - 857 passed, 3 skipped (MT5), 0 failed
 - mypy clean sur tous les fichiers modifiés
@@ -102,6 +102,8 @@ python -m alladin jafar endurance --cycles 1000 --seed 42 \
 ```
 
 ## Prochain lot recommandé : Mission Control runtime health UI
+
+> `docs/AUTONOMY_PROGRESS.md` et `docs/IMPLEMENTATION_PLAN.md` ont été resynchronisés après les lots health/endurance. Utiliser ces versions à jour, pas les anciens passages OBSERVE-only de l'historique.
 
 L'API GET /api/runtime/health est stable. Le frontend Mission Control
 existe déjà. Le prochain lot utile est d'afficher le runtime health
