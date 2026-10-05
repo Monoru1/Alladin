@@ -56,19 +56,31 @@ Une fois cette cible atteinte, le serveur peut devenir le laboratoire permanent 
 
 ---
 
-## 3. Graphe de progression
+## 3. Graphes de progression
 
-Vue synthétique des principaux blocs qui conditionnent l'autonomie sur serveur :
+Pour éviter les libellés illisibles, la progression est séparée en deux vues.
+
+### 3.1 Socle trading et exécution
 
 ```mermaid
 xychart-beta
-    title "Alladin — readiness vers l'autonomie serveur"
-    x-axis ["Core", "Risk", "MT5", "Jafar OBS", "Jafar PAPER", "Testnet", "SNN K1", "Shadow K2", "Recovery", "Observabilité", "Daemon", "Linux", "Serveur"]
+    title "Alladin — trading et execution"
+    x-axis ["Core", "Risk", "MT5", "Jafar OBS", "Jafar PAPER", "Testnet"]
     y-axis "Readiness (%)" 0 --> 100
-    bar [92, 88, 82, 95, 82, 72, 82, 65, 68, 50, 48, 25, 10]
+    bar [92, 88, 82, 95, 82, 72]
 ```
 
-### Chemin critique vers le serveur
+### 3.2 Intelligence, résilience et infrastructure
+
+```mermaid
+xychart-beta
+    title "Alladin — intelligence et infrastructure"
+    x-axis ["SNN K1", "Shadow K2", "Recovery", "Observ.", "Daemon", "Linux", "Serveur"]
+    y-axis "Readiness (%)" 0 --> 100
+    bar [82, 65, 68, 50, 48, 25, 10]
+```
+
+### 3.3 Chemin critique vers le serveur
 
 ```mermaid
 flowchart LR
