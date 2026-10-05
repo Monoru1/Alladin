@@ -1245,6 +1245,54 @@ def outcomes_show(run_id: str, workspace: WorkspaceId = WorkspaceId.ALLADIN, lim
     )
 
 
+
+@jafar_app.command("endurance")
+def jafar_endurance(
+    cycles: int = typer.Option(100, help="Nombre de cycles à exécuter"),
+    seed: int = typer.Option(42, help="Graine déterministe"),
+    stale_after_s: float = typer.Option(60.0, help="Seuil stale data (secondes)"),
+    max_failures: int = typer.Option(3, help="Seuil fail-closed"),
+    provider_error_at: str = typer.Option("", help="Cycles provider error (ex: 10,11)"),
+    stale_at: str = typer.Option("", help="Cycles stale data (ex: 20)"),
+    restart_at: str = typer.Option("", help="Cycles restart (ex: 50)"),
+    graceful_stop_at: int = typer.Option(0, help="Cycle graceful stop (0=désactivé)"),
+) -> None:
+    """Endurance harness PAPER — N cycles simulés, pannes injectables, aucun write Binance."""
+    import json as _json
+
+    from tests.test_jafar_paper_endurance import EnduranceHarness, FaultEvent, FaultPlan
+
+    events: list[FaultEvent] = []
+    for c in (int(x) for x in provider_error_at.split(",") if x.strip()):
+        events.append(FaultEvent(c, "provider_error", "CLI injection"))
+    for c in (int(x) for x in stale_at.split(",") if x.strip()):
+        events.append(FaultEvent(c, "stale_data"))
+    for c in (int(x) for x in restart_at.split(",") if x.strip()):
+        events.append(FaultEvent(c, "restart"))
+    if graceful_stop_at > 0:
+        events.append(FaultEvent(graceful_stop_at, "graceful_stop"))
+
+    fp = FaultPlan(events=events)
+    settings_obj = get_settings().for_workspace(WorkspaceId.JAFAR)
+    harness = EnduranceHarness(settings_obj, seed=seed, stale_after_s=stale_after_s, max_failures=max_failures)
+    report = harness.run(cycles, fp)
+    out(_json.dumps({
+        "seed": report.seed, "requested_cycles": report.requested_cycles,
+        "completed_cycles": report.completed_cycles, "runtime_status": report.runtime_status,
+        "provider_failures": report.provider_failures, "recoveries": report.recoveries,
+        "stale_events": report.stale_events, "restarts": report.restarts,
+        "proposals": report.proposals, "no_trades": report.no_trades,
+        "opened_positions": report.opened_positions, "closed_positions": report.closed_positions,
+        "duplicate_blocks": report.duplicate_blocks, "outcomes_created": report.outcomes_created,
+        "final_cash": round(report.final_cash, 4), "final_total_value": round(report.final_total_value, 4),
+        "realized_pnl": round(report.realized_pnl, 4), "unrealized_pnl": round(report.unrealized_pnl, 4),
+        "max_drawdown": round(report.max_drawdown, 4), "invariant_failures": report.invariant_failures,
+        "elapsed_s": round(report.elapsed_s, 3), "cycles_per_sec": round(report.cycles_per_sec, 1),
+    }, ensure_ascii=False, indent=2))
+    if report.invariant_failures:
+        raise typer.Exit(1)
+
+
 def main() -> None:
     app()
 
