@@ -1,7 +1,7 @@
 # ALLADIN — Claude Handoff
 
 ## HEAD
-branch: main | SHA: e7fb23d | dernier push fonctionnel/doc: 2026-10-05
+branch: main | SHA: 22a608a | dernier push fonctionnel/doc: 2026-10-05
 
 Commits du lot Linux/systemd packaging :
 - e7fb23d feat: Linux packaging — install/verify scripts, backup, DEPLOY_LINUX.md
@@ -126,10 +126,18 @@ bash deploy/verify.sh
 python -m alladin jafar endurance --cycles 100 --seed 42
 ```
 
-## Prochain lot recommandé : Long-run PAPER réel
+## Validation manuelle poste — 2026-10-05
 
-Le packaging est terminé. Le prochain jalon est de valider Alladin/Jafar
-en conditions réelles sur cette machine ou un VPS, sur plusieurs heures.
+- MT5 DEMO connecté, Algo Trading ON, compte DEMO READY.
+- Ordre test EURUSD BUY 0.01 envoyé via le pipeline complet : RiskEngine APPROVED, order_check OK, positions_get confirme la position, SL/TP actifs, trade journalisé dans SYSTEM-TEST-001.
+- Jafar `crypto-public` PAPER `--cycles 0 --interval 5` a produit plusieurs cycles successifs en boucle continue (NO_TRADE attendu dans ce smoke test).
+- `jafar account` authentifié via Ed25519 read-only : `reading_enabled=true`, retraits/trading Spot désactivés pour la clé, `api_key_read_only_safe=true`.
+- Mission Control Jafar reçoit health/market data, mais incohérences observées : `MODE N/A`, banner "OBSERVE ONLY" alors que le runtime tourne en PAPER.
+- Ceci est un smoke test réel, PAS une validation 2–4h/24h.
+
+## Prochain lot recommandé : Cohérence Mission Control Jafar PAPER + préparation du long-run
+
+Le packaging est terminé et le smoke test réel est concluant. Avant le soak long, corriger la cohérence du cockpit Jafar PAPER (mode/banner/source du run actif), puis préparer une exécution mesurable 2–4h.
 
 ### Procédure recommandée
 1. `python -m alladin jafar new --broker crypto-public`
