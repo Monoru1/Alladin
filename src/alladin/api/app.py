@@ -52,14 +52,14 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
         if workspace is WorkspaceId.JAFAR:
             html = html.replace("ALLADIN", "JAFAR")
             theme = "<style>:root{--accent:#ef5350;--accent-dim:#ef535018;--cyan:#ff8a80;--cyan-dim:#ff8a8018}</style>"
-            banner = '<div role="status" style="padding:12px;color:#ff8a80;text-align:center">JAFAR · OBSERVE uniquement · budget de référence virtuel · aucune stratégie active</div>'
+            banner = '<div role="status" style="padding:12px;color:#ff8a80;text-align:center">JAFAR · OBSERVE / PAPER · pas d&rsquo;ordre Binance production · LIVE verrouillé</div>'
             html = html.replace("</head>", theme + "</head>").replace("<body>", "<body>" + banner)
         return html
 
     @app.get("/api/workspace")
     def workspace_info() -> dict[str, Any]:
         caps = broker.capabilities() if broker else None
-        return {"workspace": workspace.value, "allowed_modes": ["OBSERVE"] if workspace is WorkspaceId.JAFAR
+        return {"workspace": workspace.value, "allowed_modes": ["OBSERVE", "PAPER"] if workspace is WorkspaceId.JAFAR
                 else ["OBSERVE", "PAPER", "DEMO"],
                 "account_semantics": "virtual_reference_budget" if workspace is WorkspaceId.JAFAR else "broker_account",
                 "capabilities": {"is_24_7": caps.is_24_7, "can_open_position": caps.can_open_position,

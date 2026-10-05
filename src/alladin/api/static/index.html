@@ -768,6 +768,21 @@ details.trace-raw pre {
   <div id="blocked-banner" class="blocked-banner">EXECUTION BLOCKED &mdash; compte non DEMO</div>
   <div class="grid">
 
+    <!-- Runtime Health -->
+    <article class="panel s12" id="runtime-health-panel" style="display:none">
+      <h2><span class="dot" id="dot-runtime"></span> Runtime Health</h2>
+      <div class="metrics">
+        <div class="metric"><div class="label">Status</div><div class="value" id="rh-status">N/A</div></div>
+        <div class="metric"><div class="label">Provider</div><div class="value" id="rh-provider">N/A</div></div>
+        <div class="metric"><div class="label">Last heartbeat</div><div class="value" id="rh-heartbeat">&mdash;</div></div>
+        <div class="metric"><div class="label">Last cycle</div><div class="value" id="rh-cycle">&mdash;</div></div>
+        <div class="metric"><div class="label">Last market</div><div class="value" id="rh-market">&mdash;</div></div>
+        <div class="metric"><div class="label">Failures</div><div class="value" id="rh-failures">0</div></div>
+      </div>
+      <div id="rh-error-row" style="display:none;margin-top:var(--sp-xs);font-size:var(--text-sm)"><span style="color:var(--text-muted)">Last error:</span> <span id="rh-error" style="color:var(--negative)"></span></div>
+      <div id="rh-reason-row" style="display:none;margin-top:var(--sp-xs);font-size:var(--text-sm)"><span style="color:var(--text-muted)">Reason:</span> <span id="rh-reason" style="color:var(--warning)"></span></div>
+    </article>
+
     <!-- Account / Equity -->
     <article class="panel s8">
       <h2><span class="dot" id="dot-account"></span> Account / Equity</h2>
@@ -1018,7 +1033,7 @@ function evtClass(t) {
 
 function humanMsg(t, p) {
   if (t === "market.scan") return (p.analysed ?? "N/A") + " analysed / " + (p.candidates?.length ?? 0) + " candidates | regimes: " + JSON.stringify(p.regime_counts || {});
-  if (t === "cycle.start") return "cycle " + (p.cycle||"?") + " | mode " + (p.execute ? "DEMO":"OBSERVE") + " | agent " + (p.agent||"?");
+  if (t === "cycle.start") return "cycle " + (p.cycle||"?") + " | mode " + (p.mode || (p.execute ? "DEMO":"OBSERVE")) + " | agent " + (p.agent||"?");
   if (t === "cycle.end") return (p.decision||"?") + " | " + (p.reason||"") + " | [" + (p.shortlist||[]).join(", ") + "]";
   if (t === "risk.decision") return (p.approved ? "APPROVED":"REJECTED") + " | vol " + (p.volume??"N/A") + " | risk " + (p.risk_amount != null ? money(p.risk_amount) : "N/A");
   if (t === "decision.no_trade") return p.reason || "no trade";
@@ -1222,6 +1237,28 @@ async function refreshMedium() {
     setChip("h-mode-badge", "MODE", mode, modeTone);
     setChip("h-cycle", "CYCLE", health.last_cycle_at ? new Date(health.last_cycle_at).toLocaleTimeString() : "N/A");
     setChip("h-updated", "FRESHNESS", health.last_cycle_at ? (health.stale ? "STALE" : "CURRENT") : "NO DATA", health.stale ? "warn" : "ok");
+
+    // Runtime Health panel
+    const rt = health.runtime;
+    const rhPanel = $id("runtime-health-panel");
+    if (rt && rhPanel) {
+      rhPanel.style.display = "";
+      const statusTone = {HEALTHY:"pos",DEGRADED:"warn",STALE:"warn",STOPPING:"warn",STOPPED:"muted",FAILED:"neg"}[rt.status] || "muted";
+      const dotTone = {HEALTHY:"live",DEGRADED:"warn",STALE:"warn",STOPPING:"warn",STOPPED:"",FAILED:"err"}[rt.status] || "";
+      setDot("dot-runtime", dotTone);
+      const rhStatus = $id("rh-status"); if (rhStatus) { rhStatus.textContent = rt.status || "N/A"; rhStatus.className = "value " + statusTone; }
+      set("rh-provider", rt.provider_status || "N/A");
+      set("rh-heartbeat", rt.last_heartbeat_at ? new Date(rt.last_heartbeat_at).toLocaleTimeString() : "—");
+      set("rh-cycle", rt.last_cycle_at ? new Date(rt.last_cycle_at).toLocaleTimeString() : "—");
+      set("rh-market", rt.last_market_update_at ? new Date(rt.last_market_update_at).toLocaleTimeString() : "—");
+      set("rh-failures", rt.consecutive_failures ?? 0);
+      const errRow = $id("rh-error-row");
+      if (errRow) errRow.style.display = rt.last_error ? "" : "none";
+      if (rt.last_error) set("rh-error", rt.last_error);
+      const reasonRow = $id("rh-reason-row");
+      if (reasonRow) reasonRow.style.display = (rt.degraded_reason || rt.stop_reason) ? "" : "none";
+      if (rt.degraded_reason || rt.stop_reason) set("rh-reason", rt.degraded_reason || rt.stop_reason);
+    } else if (rhPanel) { rhPanel.style.display = "none"; }
   } catch (err) { console.error("medium", err); }
   finally { _refreshing.medium = false; }
 }

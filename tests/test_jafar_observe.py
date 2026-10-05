@@ -93,11 +93,14 @@ def test_scoped_cockpit_is_red_readonly_and_identifies_virtual_budget(jafar):
     client = TestClient(create_app(jafar.settings, jafar.repo, jafar.broker))
     html = client.get("/").text
     assert "JAFAR Mission Control" in html and "--accent:#ef5350" in html
-    assert "budget de référence virtuel" in html
+    ws = client.get("/api/workspace").json()
+    assert ws["account_semantics"] == "virtual_reference_budget"
     assert client.get("/api/strategies").json() == []
     health = client.get("/health").json()
     assert health["workspace"] == "JAFAR" and health["observe_only"] and not health["demo"]
-    assert client.get("/api/workspace").json()["allowed_modes"] == ["OBSERVE"]
+    assert "OBSERVE" in ws["allowed_modes"]
+    assert "PAPER" in ws["allowed_modes"]
+    assert "LIVE" not in ws["allowed_modes"]
     assert client.get("/api/overview", params={"run_id": "RUN-001"}).status_code == 404
     assert client.get("/api/overview").json()["execution_blocked"]
     assert client.post("/api/overview").status_code == 405
@@ -263,6 +266,6 @@ def test_cli_refuses_runtime_mode_mismatch_and_persists_transition(settings, mon
     assert changed.exit_code == 0 and "PAPER" in changed.output
     mismatch = runner.invoke(cli.app, ["jafar", "run", "--mode", "OBSERVE"])
     assert mismatch.exit_code == 2 and "mode persiste PAPER" in mismatch.output
-    # PAPER est maintenant supporte -- la boucle s ex�cute (1 cycle)
+    # PAPER est maintenant supporte -- la boucle s exécute (1 cycle)
     paper_run = runner.invoke(cli.app, ["jafar", "run", "--mode", "PAPER", "--cycles", "1"])
     assert paper_run.exit_code == 0 and "PAPER" in paper_run.output
