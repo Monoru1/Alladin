@@ -1,6 +1,6 @@
 # ALLADIN — Plan d'implémentation
 
-**Mis à jour :** 2026-10-04 · **Base :** `85c29e4` (`main`)
+**Mis à jour :** 2026-10-05 · **Base :** `a661b7f` (`main`)
 **Autorité :** le code et ses tests établissent l'existant ; les décisions `ADOPTED` de `docs/DECISIONS/` établissent la direction. Une cible documentaire n'est pas une capacité livrée.
 
 ---
@@ -16,10 +16,10 @@
 
 ---
 
-## 2. État actuel — HEAD `94cea9d`
+## 2. État actuel — HEAD `a661b7f`
 
-**Tests software :** 629 passed, 3 skipped (intégrations MT5 opt-in `--run-mt5`)
-**Ruff :** PASS · **mypy :** PASS (85 fichiers source)
+**Tests software :** 857 passed, 3 skipped (intégrations MT5 opt-in `--run-mt5`)
+**Ruff :** PASS · **mypy :** PASS sur les fichiers/checkpoints récents
 **Acceptance workstation :** PASS (ruff + mypy + software)
 
 ### Ce qui fonctionne (IMPLEMENTED + TESTED)
@@ -32,7 +32,7 @@
 | Confirmation, claim durable, idempotence après reprise | `execution/service.py`, `journal/` | — |
 | Isolation workspace Alladin/Jafar : journal, positions, recherche, archive | `core/workspace.py`, migrations | — |
 | Catégories crypto, capabilities honnêtes, sessions configurables | `brokers/crypto.py`, `market/sessions.py`, `core/enums.py` | Aucun adapter d'exécution crypto |
-| Runtime Jafar OBSERVE : scan spot, archive/replay, brain NO_TRADE, cockpit scoped | `jafar/`, `api/` | Fail-closed PAPER/DEMO/entry/management |
+| Runtime Jafar OBSERVE/PAPER : scan → Brain → Risk → lifecycle → simulation, health et reprise | `jafar/`, `orchestration/health.py`, `api/` | Long-run réelle 24/7 non validée |
 | Binance Spot public + compte USER_DATA read-only Ed25519 + restrictions de clé | `brokers/binance.py`, `brokers/crypto.py` | Aucun endpoint d'ordre ; clé API absente du processus de validation locale |
 | Univers Jafar dynamique USDT depuis `exchangeInfo` | `brokers/crypto.py`, `brokers/crypto_observe.py` | Éligibilité liquidité/data quality encore à enrichir |
 | Lifecycle ordre exchange persistant/idempotent et réconciliation | `execution/order_lifecycle.py` | Aucun envoi Binance raccordé |
@@ -64,13 +64,13 @@
 | 021 | Univers broker dynamique | **IMPLEMENTED** Lot H |
 | 022 | Gouvernance Strategy Harvester | Architecture cible ; Harvester non implémenté |
 | 023 | Outcomes audités et reward expérimental versionné | **IMPLEMENTED** Lot J |
-| 024 | SNN-X extensions parallèles et non destructives | **EXPERIMENTAL** aucun code |
-| 025 | SNN-X boucles FAST/LIVE et SLOW/LEARNING | **EXPERIMENTAL** aucun code |
-| 026 | SNN-X observation continue | **EXPERIMENTAL** aucun code |
+| 024 | SNN-X extensions parallèles et non destructives | **IMPLEMENTED foundation / EXPERIMENTAL results** |
+| 025 | SNN-X boucles FAST/LIVE et SLOW/LEARNING | **FOUNDATION IMPLEMENTED** |
+| 026 | SNN-X observation continue | **IMPLEMENTED in shadow/observe path** |
 | 027 | SNN-X objectif contraint/homéostasie | **EXPERIMENTAL** aucun code |
-| 028 | SNN-X Shadow Brain et promotion contrôlée | **EXPERIMENTAL** aucun code |
-| 029 | SNN-X Dream Engine et consolidation | **EXPERIMENTAL** aucun code |
-| 030 | Binance Spot natif Jafar, credentials Ed25519 locaux | **IMPLEMENTED** public + compte read-only ; exécution non implémentée |
+| 028 | SNN-X Shadow Brain et promotion contrôlée | **Shadow Brain IMPLEMENTED; promotion not implemented** |
+| 029 | SNN-X Dream Engine et consolidation | **SLOW boundary implemented; Dream Engine incomplete** |
+| 030 | Binance Spot natif Jafar, credentials Ed25519 locaux | **IMPLEMENTED** public/read-only + TESTNET adapter/execution chain ; LIVE remains gated |
 
 ---
 
@@ -88,15 +88,19 @@
 | H | Catégories crypto, capabilities honnêtes, sessions | **IMPLEMENTED** |
 | I | Runtime Jafar OBSERVE isolé, CLI et cockpit scoped | **IMPLEMENTED** |
 | J | Outcome/Reward : snapshots, politique hashée, reward versionné | **IMPLEMENTED** |
-| J-PAPER | Boucle Jafar PAPER scanner → Brain → Risk → lifecycle → position | **IMPLEMENTED + TESTED**, endurance non validée |
+| J-PAPER | Boucle Jafar PAPER scanner → Brain → Risk → lifecycle → position | **IMPLEMENTED + TESTED** |
+| J-HEALTH | Health runtime, heartbeat, stale detection, backoff/recovery, graceful shutdown | **IMPLEMENTED + TESTED** |
+| J-ENDURANCE | Harness 100/1000 cycles, fault injection, restart/duplicate/SL-TP stress | **IMPLEMENTED + TESTED** |
 
-**Total à fin Lot J :** 629 passed, 3 skipped.
+**Validation actuelle :** 857 passed, 3 skipped.
 
 ### Ce qui reste ouvert après Lot J
 
 - Recette MT5 DEMO live (Windows) : fermeture/modification/partial close réelles.
-- PAPER ne simule pas encore les modifications/fermetures partielles.
-- SNN : zéro ligne de code dans `src/`.
+- PAPER/endurance est validé logiciellement mais pas encore sur une vraie fenêtre 24/7.
+- Mission Control n'affiche pas encore le bloc runtime health malgré l'API disponible.
+- Packaging Linux/systemd et déploiement serveur restent à faire.
+- SNN K1/K2 et frontière FAST/SLOW existent ; résultats expérimentaux non établis.
 
 ---
 
@@ -180,11 +184,11 @@ exécutés sont inspectés avant le runtime. Toute absence ou erreur demeure
 |---|---|---|
 | P0 | Recette MT5 DEMO live : fermeture/modification/partial close réelles | **PENDING** Windows requis |
 | P0 | Décision 013 : politique sorties protectrices OBSERVE/PAPER | **PROPOSED** non tranchée |
-| P1 | PAPER : endurance, pannes provider, sorties/outcomes prolongés | **PLANNED** |
+| P1 | PAPER : endurance accélérée + pannes/restart/SL-TP | **IMPLEMENTED + TESTED** ; long-run réelle restant à valider |
 | P1 | PAPER : simulation des modifications/fermetures partielles | **PLANNED** |
 | P1 | Archive : close-time explicite, provenance, bid/ask tick | **PLANNED** |
-| P1 | Mission Control : historique paginé, fiche décision stable, chart | **PLANNED** |
-| P2 | Service autonome : superviseur Windows, heartbeat, checkpoint | **PLANNED** |
+| P1 | Mission Control : afficher runtime health/freshness/failures | **NEXT** ; API déjà disponible |
+| P1 | Service autonome : packaging Linux/systemd, secrets, logs, auto-restart | **PLANNED** ; heartbeat/runtime health déjà implémentés |
 | P2 | Strategy Harvester : collecteur, porte provenance/licence | **PLANNED** |
 | P2 | Command Center global (DECISION-016) | **PLANNED** |
 
