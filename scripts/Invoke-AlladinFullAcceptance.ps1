@@ -21,7 +21,7 @@ try {
   $rid = [uri]::EscapeDataString($RunId)
   $overview = Invoke-RestMethod "$base/api/overview?run_id=$rid" -TimeoutSec 12
   $positions = @(Invoke-RestMethod "$base/api/positions?run_id=$rid" -TimeoutSec 12)
-  $trades = Invoke-RestMethod "$base/api/trades?run_id=$rid" -TimeoutSec 12
+  $trades = Invoke-RestMethod "$base/api/history?run_id=$rid" -TimeoutSec 12
   $events = @(Invoke-RestMethod "$base/api/journal?run_id=$rid&limit=100" -TimeoutSec 12)
   if ($overview.run.run_id -ne $RunId -or $trades.run_id -ne $RunId) { throw "Run mismatch" }
   Write-Host "Run: $RunId | Broker positions: $($positions.Count) | Journal trades: $(@($trades.trades).Count) | Events: $($events.Count)"
