@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import math
+from datetime import datetime
 
 from alladin.brokers.base import BrokerAdapter
 from alladin.challenge.models import UniverseRules
