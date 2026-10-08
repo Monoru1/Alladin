@@ -1,5 +1,12 @@
 # ALLADIN — Instructions pour Codex et agents de développement
 
+## Reprise après validation offline du 2026-10-08
+
+Lire le dernier lot dans les trois handoffs et `docs/POLICY_VALIDATION.md`. Les PolicyGate/event/firm/capital/calendar et sondes de qualité sont implémentés et testés **hors runtime** ; les paragraphes plus anciens « tests non exécutés » décrivent leur création, pas leur état actuel. Commande ciblée : `python -m pytest -o addopts='' -q tests/test_economic_calendar.py tests/test_policy*.py tests/test_propfirm_policy_foundations.py`. Rapport : `python scripts/report_policy_quality.py`. Fixtures SYNTHETIC-ONLY : jamais des contrats/admissions réels. Aucun branchement broker, aucune revue des sorties protectrices ni qualification 24/7 déduite d'un PASS logiciel. Maintenir RiskEngine et protections des modes.
+
+---
+
+
 ## Lot PolicyGate sans MT5 (2026-10-08)
 
 Lire `docs/HANDOFF.md`. Le module `src/alladin/challenge/policy_gate.py` et ses tests `tests/test_policy_gate.py` sont maintenant sur main : évaluation pure des ouvertures/sorties/modifications avec firm profile + calendrier, sans exécution. Ne pas prétendre qu'il est activé dans `ExecutionService`. Tests non exécutés dans la session de création. Préférer une batterie de tests déterministes et une revue humaine des sorties protectrices avant intégration OBSERVE/PAPER. Maintenir les protections DEMO/LIVE.

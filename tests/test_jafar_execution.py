@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,16 +14,12 @@ from alladin.core.workspace import WorkspaceId
 from alladin.execution.order_lifecycle import (
     CanonicalOrderStatus,
     OrderLifecycleRepository,
-    ReconciliationReport,
 )
 from alladin.jafar.execution import (
     JafarExecutionService,
     JafarRestartReconciler,
-    JafarSubmitResult,
-    BinanceTestnetAdapter,
 )
 from alladin.jafar.testnet import TnFill, TnOrderResult
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -114,3 +114,33 @@ def test_direct_event_gate_uses_elapsed_utc_time_across_dst_fold():
         EconomicEvent("CPI", release, frozenset({"EURUSD"}), True),))
     d = EventPolicy().evaluate(symbol="EURUSD", now=later, snapshot=c, restrict_news=True)
     assert d.verdict == EventVerdict.ALLOW  # one real hour after release
+
+
+def test_dst_spring_gap_is_not_silently_normalized():
+    nonexistent = datetime(2026, 3, 8, 2, 30, tzinfo=ZoneInfo("America/New_York"))
+    with pytest.raises(ValidationError, match="DST"):
+        CalendarRevision.model_validate(row(release_at=nonexistent))
+
+
+@pytest.mark.parametrize("value", [True, "3.4"])
+def test_macro_numbers_are_not_coerced(value):
+    with pytest.raises(ValidationError):
+        CalendarRevision.model_validate(row(forecast=value))
+
+
+def test_simultaneous_events_have_complete_order_independent_audit_ids():
+    from alladin.challenge.event_policy import CalendarSnapshot, EconomicEvent
+
+    events = tuple(EconomicEvent(name, NOW, frozenset({"EURUSD"}), True) for name in ("B", "A"))
+    one = CalendarSnapshot(NOW, NOW, "fixture", events)
+    two = CalendarSnapshot(NOW, NOW, "fixture", tuple(reversed(events)))
+    for restriction in (False, True):
+        a = EventPolicy().evaluate(symbol="EURUSD", now=NOW, snapshot=one, restrict_news=restriction)
+        b = EventPolicy().evaluate(symbol="EURUSD", now=NOW, snapshot=two, restrict_news=restriction)
+        assert a == b and a.event_ids == ("A", "B")
+
+
+@pytest.mark.parametrize("symbol,rule", [("", True), (" EURUSD", True), ("EURUSD", "false"), ("EURUSD", 0)])
+def test_direct_event_gate_rejects_ambiguous_inputs(symbol, rule):
+    result = EventPolicy().evaluate(symbol=symbol, now=NOW, snapshot=batch().snapshot(), restrict_news=rule)
+    assert result.verdict == EventVerdict.BLOCK

@@ -3,30 +3,23 @@
 from __future__ import annotations
 
 import json
-import time
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from alladin.brokers.binance import HttpResponse
 from alladin.jafar.testnet import (
+    _MAINNET_URL,
+    _TESTNET_URL,
     BinanceTestnetCredentialsMissing,
     BinanceTestnetError,
     BinanceTestnetOrderClient,
-    TnCancelResult,
-    TnFill,
     TnHttpTransport,
-    TnOrderResult,
-    _MAINNET_URL,
-    _TESTNET_URL,
-    build_testnet_client,
     _parse_cancel_result,
     _parse_order_result,
+    build_testnet_client,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

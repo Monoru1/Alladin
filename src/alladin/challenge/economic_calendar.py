@@ -26,13 +26,17 @@ class CalendarRevision(BaseModel):
     currency: str
     impacted_symbols: frozenset[str] = Field(min_length=1)
     restricted: bool = Field(strict=True)
-    forecast: float | None = None
-    previous: float | None = None
-    actual: float | None = None
+    forecast: float | None = Field(default=None, strict=True)
+    previous: float | None = Field(default=None, strict=True)
+    actual: float | None = Field(default=None, strict=True)
 
     @field_validator("release_at", "known_at", "collected_at")
     @classmethod
     def utc_times(cls, value: datetime) -> datetime:
+        if isinstance(value.tzinfo, ZoneInfo):
+            roundtrip = value.astimezone(UTC).astimezone(value.tzinfo)
+            if (roundtrip.replace(tzinfo=None), roundtrip.fold) != (value.replace(tzinfo=None), value.fold):
+                raise ValueError("nonexistent or invalid local DST timestamp")
         return value.astimezone(UTC)
 
     @field_validator("event_id", "currency", "original_timezone")
@@ -76,6 +80,10 @@ class CalendarBatch(BaseModel):
     @field_validator("observed_at", "valid_until")
     @classmethod
     def utc_times(cls, value: datetime) -> datetime:
+        if isinstance(value.tzinfo, ZoneInfo):
+            roundtrip = value.astimezone(UTC).astimezone(value.tzinfo)
+            if (roundtrip.replace(tzinfo=None), roundtrip.fold) != (value.replace(tzinfo=None), value.fold):
+                raise ValueError("nonexistent or invalid local DST timestamp")
         return value.astimezone(UTC)
 
     @field_validator("source", "source_url", "licence")

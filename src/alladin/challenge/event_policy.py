@@ -88,6 +88,10 @@ class EventPolicy:
         """
         if now.utcoffset() is None:
             return EventDecision(EventVerdict.BLOCK, "CLOCK_NOT_TIMEZONE_AWARE")
+        if type(restrict_news) is not bool:
+            return EventDecision(EventVerdict.BLOCK, "NEWS_RULE_UNVERIFIED")
+        if not symbol.strip() or symbol != symbol.strip():
+            return EventDecision(EventVerdict.BLOCK, "INVALID_SYMBOL")
         now = now.astimezone(UTC)
         if snapshot is None:
             return EventDecision(EventVerdict.BLOCK, "CALENDAR_MISSING")
@@ -100,11 +104,13 @@ class EventPolicy:
             if symbol.upper() not in {s.upper() for s in event.impacted_symbols}:
                 continue
             matches.append(event)
-        for event in matches:
-            if (restrict_news and event.restricted and
-                    event.release_at - self.pre_window <= now <= event.release_at + self.post_window):
-                return EventDecision(EventVerdict.BLOCK, "FIRM_RESTRICTED_EVENT", (event.event_id,))
-        for event in matches:
-            if event.release_at - self.precaution_window <= now <= event.release_at + self.post_window:
-                return EventDecision(EventVerdict.DEFER, "MACRO_VOLATILITY_WINDOW", (event.event_id,))
+        blocked = tuple(sorted(event.event_id for event in matches
+            if restrict_news and event.restricted
+            and event.release_at - self.pre_window <= now <= event.release_at + self.post_window))
+        if blocked:
+            return EventDecision(EventVerdict.BLOCK, "FIRM_RESTRICTED_EVENT", blocked)
+        deferred = tuple(sorted(event.event_id for event in matches
+            if event.release_at - self.precaution_window <= now <= event.release_at + self.post_window))
+        if deferred:
+            return EventDecision(EventVerdict.DEFER, "MACRO_VOLATILITY_WINDOW", deferred)
         return EventDecision(EventVerdict.ALLOW, "CALENDAR_CLEAR")

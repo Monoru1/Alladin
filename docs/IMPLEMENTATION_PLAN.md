@@ -1,5 +1,12 @@
 # ALLADIN — Plan d'implémentation
 
+## État courant — 2026-10-08 : validation offline
+
+PolicyGate durci, calendrier offline causal, fixtures synthétiques, matrice de conformité et rapports audités : **IMPLEMENTED + TESTED ISOLATED**. Voir `POLICY_VALIDATION.md` et le dernier lot de `HANDOFF.md` pour les résultats exacts. Les notes de création ci-dessous sont historiques. Restent **NOT INTEGRATED / NOT QUALIFIED** : fournisseur réel/licencié, contrats officiels par compte, sortie protectrice/SL/TP broker, conformité dans ExecutionService, exposition multi-comptes, MT5 DEMO et soak. Aucun LIVE.
+
+---
+
+
 ## Complément 2026-10-08 — lot PolicyGate sans MT5
 
 - **IMPLEMENTED ISOLATED** : `src/alladin/challenge/policy_gate.py`, évaluation déterministe composée (OPEN, CLOSE, PARTIAL_CLOSE, MODIFY_STOP, MODIFY_TARGET, HOLD).

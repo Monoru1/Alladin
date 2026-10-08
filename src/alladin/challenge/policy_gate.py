@@ -68,7 +68,7 @@ def evaluate_action(
         return PolicyDecision(
             GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "CLOCK_UNTRUSTED"
         )
-    if not context.symbol.strip() or type(context.open_positions) is not int or context.open_positions < 0:
+    if not context.symbol.strip() or context.symbol != context.symbol.strip() or type(context.open_positions) is not int or context.open_positions < 0:
         return PolicyDecision(
             GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "INVALID_POSITION_CONTEXT"
         )

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope": "OFFLINE_SOFTWARE_VALIDATION",
+  "date": "2026-10-08",
+  "base_commit": "32c3df457c73cf635c62fd5725b921c735c4d1c6",
+  "tested_code_sha256": "eadfe088749cd0ed86ee204a839185fd7cf14e075a554befa7fab3def189daa5",
+  "hashed_files": 165,
+  "python": "3.12.14",
+  "packages": {
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "mypy": "2.4.0",
+    "pydantic": "2.13.5",
+    "sqlalchemy": "2.1.4",
+    "fastapi": "0.142.4",
+    "starlette": "1.7.0"
+  },
+  "targeted": {
+    "passed": 382,
+    "failed": 0
+  },
+  "full_suite": {
+    "tests": 1322,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 3,
+    "passed": 1319
+  },
+  "full_suite_seconds": 116.16,
+  "skipped_reasons": [
+    "intégration MT5 : passer --run-mt5 (terminal connecté à un compte DEMO)",
+    "intégration MT5 : passer --run-mt5 (terminal connecté à un compte DEMO)",
+    "intégration MT5 : passer --run-mt5 (terminal connecté à un compte DEMO)"
+  ],
+  "warnings": [
+    "StarletteDeprecationWarning: httpx with starlette.testclient deprecated"
+  ],
+  "checks": {
+    "ruff_src_tests_report_script": "PASS",
+    "mypy_src_and_report_script": "PASS (107 files)",
+    "git_diff_check": "PASS",
+    "fixture_report_byte_reproduction": "PASS"
+  },
+  "qualification": {
+    "mt5_tested": false,
+    "account_accessed": false,
+    "live_activated": false,
+    "runtime_policy_integrated": false,
+    "unattended_qualified": false
+  },
+  "reproduction": "See docs/POLICY_VALIDATION.md; code hash includes all source/test Python, report script and firm fixtures, excludes generated reports and documentation."
+}
