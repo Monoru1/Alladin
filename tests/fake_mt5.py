@@ -12,6 +12,7 @@ class FakeMT5:
     TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_M30 = 1, 5, 15, 30
     TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1 = 16385, 16388, 16408
     ACCOUNT_TRADE_MODE_DEMO, ACCOUNT_TRADE_MODE_CONTEST, ACCOUNT_TRADE_MODE_REAL = 0, 1, 2
+    SYMBOL_CALC_MODE_FOREX, SYMBOL_CALC_MODE_FOREX_NO_LEVERAGE = 0, 5
     ORDER_TYPE_BUY, ORDER_TYPE_SELL, ORDER_TYPE_BUY_LIMIT, ORDER_TYPE_SELL_LIMIT = 0, 1, 2, 3
     ORDER_TYPE_BUY_STOP, ORDER_TYPE_SELL_STOP = 4, 5
     TRADE_ACTION_DEAL, TRADE_ACTION_PENDING = 1, 5
@@ -85,7 +86,7 @@ class FakeMT5:
             currency_margin=name[:3], digits=digits, point=10.0**-digits, trade_tick_size=10.0**-digits,
             trade_tick_value=0.67 if jpy else 1.0, trade_tick_value_loss=0.67 if jpy else 1.0,
             trade_contract_size=100000.0, volume_min=0.01, volume_max=50.0, volume_step=0.01, spread=12,
-            trade_mode=4, visible=True, trade_stops_level=10, trade_freeze_level=0, filling_mode=self.filling_mode,
+            trade_mode=4, trade_calc_mode=self.SYMBOL_CALC_MODE_FOREX, visible=True, trade_stops_level=10, trade_freeze_level=0, filling_mode=self.filling_mode,
         )  # fmt: skip
 
     def symbols_get(self) -> tuple[SimpleNamespace, ...]:
