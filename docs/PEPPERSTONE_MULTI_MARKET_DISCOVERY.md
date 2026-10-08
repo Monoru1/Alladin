@@ -67,3 +67,10 @@ Prix non nuls et 100 barres H1 reçues pour chacun. Âge brut négatif d'environ
 - **Non encore exécuté par l'utilisateur ni testé sur son environnement** au moment du commit ; aucun résultat de scan, conformité, P&L ou qualité du feed n'est présumé.
 - DECISION-021/031 : découverte distincte de l'éligibilité et de l'exécution ; DECISION-032/033 : calendrier et firm profile non automatiquement certifiés par ce scan ; DECISION-034 : aucune performance inférée ; DECISION-035 : qualité et durée mesurées, sans qualification unattended.
 - Limitation connue du scanner existant : des ticks >10 min dans le futur sont notés comme suspects mais non rejetés. Corriger en fail-closed et tester avant toute promotion vers PAPER/DEMO ; le script exige déjà une horloge auto-vérifiée.
+
+## Recettes utilisateur et durcissement scanner — 2026-10-08
+- Recette 3 symboles : EURUSD/NAS100/XAUUSD, 3 analysés, 3 candidats, 0 rejet, 4.61 s, scores 0.7319/0.6421/0.5591, régime RANGE.
+- Recette 8 symboles : 8 admissibles, 7 analysés, 7 candidats, 9.141 s ; EURUSD rejeté parce que bid=ask=1.12073. Rejet de données sain, pas une erreur du moteur. Tous les autres instruments ont fourni des candidats, sans garantie de rentabilité.
+- Correctif scanner : ticks futurs >5 s, non finis, bid<=0, ask<=bid et ticks périmés rejetés avant historique/analyse ; tests déterministes ajoutés. Résultats tests post-correctif à exécuter, **aucun PASS inventé**.
+- Rapport de recette enrichi : comptes candidats/rejets, régimes ; `execution=NOT_INVOKED`, `policy_and_portfolio_approval=NOT_EVALUATED`, scores non probabilistes. Les rapports précédents portent l'ancien champ `order_count=0` : ils ne constituent pas une preuve d'audit des ordres au niveau broker.
+- À poursuivre selon décisions 021/031–035 : isoler la paire Forex absente de l'inventaire, qualité barres sur les quatre timeframes, risques de corrélation, frais/slippage, calendriers et conformité par compte, replay causal, supervision/restart, puis PAPER et DEMO seulement après validation. Jafar/SNN-X isolés ; aucune promotion automatique.
