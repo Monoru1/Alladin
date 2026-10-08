@@ -22,7 +22,7 @@ def _host(url: str) -> str:
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or
             parsed.password or parsed.fragment or parsed.port not in (None, 443)):
         raise ValueError("canonical HTTPS URL without credentials/fragment required")
-    return parsed.hostname.lower().rstrip(".")
+    hostname = parsed.hostname.lower()\n    if hostname.endswith(".") or not hostname.isascii() or any(\n        not label or len(label) > 63 or label.startswith("-") or label.endswith("-") or\n        not all(char.isalnum() or char == "-" for char in label)\n        for label in hostname.split(".")\n    ):\n        raise ValueError("noncanonical source hostname")\n    return hostname
 
 
 @dataclass(frozen=True)
