@@ -1,5 +1,16 @@
 # ALLADIN — Agent Handoff & Operating Manual
 
+## Lot sans MT5 — 2026-10-08 : PolicyGate composé (Claude / Codex)
+
+**Nouveau code sur main :** `src/alladin/challenge/policy_gate.py`, `tests/test_policy_gate.py`. Module PUR et autonome, aucun broker ni `order_send`. Il combine `FirmProfile` et `EventPolicy` pour les propositions OPEN/CLOSE/PARTIAL_CLOSE/MODIFY_STOP/MODIFY_TARGET/HOLD et rend ALLOW/DEFER/BLOCK/REVIEW. Couvre calendrier manquant, restrictions d'annonces des fermetures, règles non vérifiées et limites par firme. HOLD ne transmet aucun ordre.
+
+**Statut strict :** ajouté au dépôt, tests NON EXÉCUTÉS dans cette session distante ; PAS branché à `ExecutionService` ni au runtime. Les sorties protectrices et les SL/TP déjà enregistrés chez MT5 requièrent une revue de conception spécifique (les restrictions contractuelles peuvent s'appliquer aux déclenchements). Le nouveau module ne décide pas seul de désactiver une protection.
+
+**Prochaines actions sans MT5 :** lancer pytest, ruff, mypy ; affiner invariants temporels, simuler DST/gaps/feeds périmés, construire fixtures firmes datées et replay as-of. Ensuite seulement préparer une intégration à exécution désactivée dans OBSERVE/PAPER. Ne toucher ni LIVE, ni Jafar, ni SNN-X sans nécessité démontrée.
+
+---
+
+
 **Dernière mise à jour : 2026-10-08**
 **Audience : Claude Code, Codex, ChatGPT et tout agent travaillant sur le repository**
 **Rôle : point d'entrée obligatoire avant toute modification structurelle**
