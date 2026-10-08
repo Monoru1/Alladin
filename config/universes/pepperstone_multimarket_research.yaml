@@ -7,7 +7,7 @@
 # insufficient bars, unacceptable spreads and risk-sizing failures.
 id: pepperstone_multimarket_research
 description: "Forex complet + metaux + indices cash Pepperstone en recherche opt-in"
-allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY, FOREX_EXOTIC, METAL]
+allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY, FOREX_EXOTIC, METAL, INDEX]
 include_symbols: [NAS100, US500, US30]
 exclude_symbols: []
 max_spread_atr_ratio: 0.15
