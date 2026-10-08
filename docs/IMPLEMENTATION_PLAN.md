@@ -5,6 +5,24 @@
 
 ---
 
+## Lot politique multi-firmes / macro — 2026-10-08
+
+| Livrable | Statut | Preuve / prochaine validation |
+|---|---|---|
+| EventPolicy : snapshots de calendrier, as-of et verdict BLOCK/DEFER/ALLOW | **IMPLEMENTED (module isolé)** | `src/alladin/challenge/event_policy.py` ; tests unitaires ajoutés, non exécutés ici |
+| FirmProfile + contrôles d'entrée | **IMPLEMENTED (module isolé)** | `src/alladin/challenge/firm_policy.py` ; pas de profil live homologué |
+| Ledger : cash réellement encaissé vs compte simulé | **IMPLEMENTED (module isolé)** | `src/alladin/challenge/capital_metrics.py` |
+| Tests de ces fondations | **ADDED / NOT RUN IN THIS SESSION** | `tests/test_propfirm_policy_foundations.py` |
+| Fournisseur macro, collecte/version/synchronisation et classification de symboles | **PLANNED** | données historiques causales + intégrité + licences |
+| ComplianceGate intégré au runtime (entrée et sorties) | **PLANNED** | MT5 DEMO, multi-compte, news, SL/TP et restart |
+| Configuration de firmes validées contractuellement | **PLANNED** | sources officielles et dates d'effet, revue humaine |
+| Qualité & performance, scorecards + Mission Control | **PLANNED** | simulation OOS, coûts, reward/cash net, incidents |
+| Fonctionnement autonome réellement qualifié 24/7 | **NOT VALIDATED** | soak et fault injection sur hôte disponible |
+
+**Règle de vérité :** ces modules ne reçoivent aucun ordre broker ; ils ne sont pas encore branchés à `ExecutionService`. FTMO Standard funded peut interdire ouvertures **et fermetures y compris SL/TP** autour de certaines annonces (±2 minutes) ; les profils doivent être vérifiés et les sorties existantes traitées distinctement. Voir `AGENTS.md`, `docs/CODEX_HANDOFF.md`, `docs/CLAUDE_HANDOFF.md` et décisions 032-035.
+
+---
+
 ## 1. Statuts utilisés dans ce document
 
 | Statut | Signification |
