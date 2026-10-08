@@ -1,3 +1,15 @@
+## Jalon Pepperstone multi-marchés — 2026-10-08 (validation utilisateur)
+
+Sur Windows, l'utilisateur a exécuté la suite complète avec MT5 connecté à MetaQuotes-Demo : **1546 passed, 0 failed, 1 warning en 151.19 s**, dont **3 tests mt5_integration réussis** en lecture seule. Il s'agit de la base `a8c0a50`, avant les commits multi-marchés ; aucune nouvelle suite n'a encore été exécutée sur les commits ultérieurs.
+
+Deuxième compte MT5 DEMO créé et connecté : `PepperstoneUK-Demo`, EUR, 50 000 EUR virtuels, levier 1:30 ; accès mobile MT5 confirmé par l'utilisateur. Ne pas enregistrer les identifiants. Découverte Python : **1725 symboles**, **94 Forex**, **91 Forex en trade_mode FULL** ; NAS100, US500, US30, XAUUSD, XAGUSD en FULL. Les cinq instruments ont cependant renvoyé **bid=ask=0** après sélection : aucune cotation exploitable, donc aucun signal ni exécution autorisés sur cette preuve.
+
+Décision 031 maintenue. `docs/PEPPERSTONE_MULTI_MARKET_DISCOVERY.md` consigne l'inventaire. `config/universes/pepperstone_multimarket_research.yaml` est un **profil de recherche opt-in**, conservant toutes les catégories Forex et métaux de LAB et ajoutant explicitement les trois CFD indices cash sans ouvrir toute la catégorie OTHER. Aucun changement du profil par défaut `ftmo_2step_demo`, du runtime, des stratégies ou des permissions d'ordre. Les forwards/perpetuals ne sont pas inclus. Le profil challenge par défaut porte 100 000 EUR fictifs, différents du compte Pepperstone 50 000 EUR ; ne pas les confondre.
+
+**À faire** : tests ciblés de chargement et découverte de cet univers ; valider classification INDEX dédiée fondée sur métadonnées broker ; contrôle tick/horaires/frais/contrat/risque et isolation des comptes ; ajouter une configuration DEMO Pepperstone spécifique avant toute recette. Pas de promesse de disponibilité 24/7, de performance, de conformité FTMO ou de trading autorisé. Préserver RiskEngine/PolicyGate/Jafar/SNN-X.
+
+---
+
 # Alladin — Codex handoff — 2026-10-08
 
 ## Lot 8 — 2026-10-08 : campagnes trailing et transitions de phase
