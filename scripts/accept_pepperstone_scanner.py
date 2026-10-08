@@ -86,13 +86,19 @@ def main() -> None:
             "requested": list(symbols),
             "eligible": discovered.by_category,
             "analysed": report.analysed,
+            "requested_count": len(symbols),
+            "candidate_count": len(candidates),
+            "rejected_requested_count": sum(sym in report.rejected for sym in symbols),
+            "regime_counts": report.regime_counts,
             "candidates": candidates,
             "rejections": {k: v for k, v in report.rejected.items() if k in symbols},
             "rejection_reasons": dict(Counter(reason for sym, reasons in report.rejected.items()
                                               if sym in symbols for reason in reasons)),
             "notes": report.notes,
             "duration_seconds": elapsed,
-            "order_count": 0,
+            "execution": "NOT_INVOKED",
+            "policy_and_portfolio_approval": "NOT_EVALUATED",
+            "scores_are_probabilities": False,
         }
         print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
         if args.output is not None:
