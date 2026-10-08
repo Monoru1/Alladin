@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "lot": 7,
+  "lot": 8,
   "scope": "SOFTWARE_ONLY_OBSERVE_PAPER_AND_SYNTHETIC_CAMPAIGNS",
-  "base_commit": "b994334e194c19682db6943382ad9fe5c395ab08",
-  "tested_source_manifest_sha256": "3bf667169f9f72fd7f07f75decbc8cc68c35751d8bc329046507f4b24ca309b1",
+  "base_commit": "8354460a74af1e9a913df9c64c72b5788965cb9b",
+  "tested_source_manifest_sha256": "bc224682b1332cdcf5346f9f7fb747830bc930e65d83751a13722a974915a2cf",
   "source_manifest": [
     {
       "path": "config/challenge_profiles/ftmo_2step_demo.yaml",
@@ -39,7 +39,7 @@
     },
     {
       "path": "scripts/report_challenge_campaign.py",
-      "sha256": "1d56f8cbb17027d2fcdd123f90d7bc4b3b75c1f185e707be2b0f5c6f8ffe9d9f"
+      "sha256": "a6391f680dc4491ca927757c9f00e2fd917b12403bcd1207a3bc3e9649791769"
     },
     {
       "path": "scripts/report_policy_quality.py",
@@ -147,7 +147,7 @@
     },
     {
       "path": "src/alladin/challenge/factory.py",
-      "sha256": "1dfc9571f20a88af2cca1b2a71fb81b736b66d4f9c3fe8ced49e4e6d66889d31"
+      "sha256": "880ab979341d80b67f452ba5218ede9129cd70f529bfaa4f5297f1bb3853487f"
     },
     {
       "path": "src/alladin/challenge/firm_policy.py",
@@ -367,7 +367,7 @@
     },
     {
       "path": "src/alladin/orchestration/policy_provider.py",
-      "sha256": "d8d2bb9b9a7790febb0ba22f7968f654797443fcc276f10ffe1b791d2f07f2bb"
+      "sha256": "b9ad35024f42ab8a0aeb555c9185798f86ea9a733ce8230ea04677b508a409f8"
     },
     {
       "path": "src/alladin/orchestration/state.py",
@@ -522,6 +522,10 @@
       "sha256": "8efe439d60bdf4d192e1a395b101acc6d1f9141fb5a8b70bccc6628c8e3d8f71"
     },
     {
+      "path": "tests/fixtures/policy/challenge_trailing_campaign.json",
+      "sha256": "ddde3d98a2d89100de23167e75b7087393fc2103ef76d0e71fed595dea71cc0b"
+    },
+    {
       "path": "tests/fixtures/policy/firm_profiles.json",
       "sha256": "be19c2a530bbbddb8d0a4fbbb6dd07dde4d6e6b23fd23dc6b336b1d0fa63d337"
     },
@@ -564,6 +568,10 @@
     {
       "path": "tests/test_challenge_factory.py",
       "sha256": "6da819b5eca253ce25834f4005849aeb397e8ba5276527b34bc5a479bc2d1123"
+    },
+    {
+      "path": "tests/test_challenge_trailing.py",
+      "sha256": "7a511549fda7677163517732380362df210580070589032073ec2003a6cfa399"
     },
     {
       "path": "tests/test_cli.py",
@@ -703,7 +711,7 @@
     },
     {
       "path": "tests/test_policy_provider.py",
-      "sha256": "c11350755a5c4e7ca2e19871036852b2cb584db23f40af6215bdefa045c2bea7"
+      "sha256": "86a4ec3efa34068e9092e46150891334b22881c982148ac82b44deae0424dcba"
     },
     {
       "path": "tests/test_policy_quality.py",
@@ -780,14 +788,14 @@
     "fastapi": "0.142.4"
   },
   "full_suite": {
-    "command": "python -m pytest -o addopts='' -q --junitxml=/tmp/alladin-lot7.xml",
-    "passed": 1484,
+    "command": "python -m pytest -o addopts='' -q --junitxml=/tmp/alladin-lot8.xml",
+    "passed": 1501,
     "skipped": 3,
     "failed": 0,
     "errors": 0,
     "warnings": 1,
-    "seconds": 220.55,
-    "junit_sha256": "2dc9eaf852cbcf13a720512ffbde66aa56c8cd77bca470ae9c9d44ef9cc2566b"
+    "seconds": 228.69,
+    "junit_sha256": "707bdb3d39bb1f96565d04469bf10842b7598fd3cdd995253798e23026f4b34c"
   },
   "skips": [
     {

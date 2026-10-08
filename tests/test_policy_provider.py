@@ -123,28 +123,66 @@ def test_provider_snapshot_is_causal_when_receipt_is_archived_late(svc, tmp_path
     assert c.assess(p, RunMode.PAPER).reason == "CALENDAR_COVERAGE_INCOMPLETE"
 
 
-@pytest.mark.parametrize('kind',[Action.HOLD,Action.CLOSE,Action.PARTIAL_CLOSE,Action.MODIFY_STOP,Action.MODIFY_TARGET])
-@pytest.mark.parametrize('missing',[False,True])
-def test_archived_provider_in_paper_orchestration(settings,tmp_path,monkeypatch,kind,missing):
+@pytest.mark.parametrize(
+    "kind", [Action.HOLD, Action.CLOSE, Action.PARTIAL_CLOSE, Action.MODIFY_STOP, Action.MODIFY_TARGET]
+)
+@pytest.mark.parametrize("missing", [False, True])
+def test_archived_provider_in_paper_orchestration(settings, tmp_path, monkeypatch, kind, missing):
     from alladin.agents.mock import MockAgent
     from alladin.brokers.mock import MockBroker
     from alladin.orchestration.bootstrap import build_services
     from tests.test_position_lifecycle import action, opened
 
-    svc=build_services(settings,MockBroker(start=NOW),create_run=True,db_url='sqlite://')
-    svc.manager.start(svc.run,svc.broker.account_info())
-    archive,provider,p,c=setup(svc,tmp_path,sources=('a',) if missing else ('a','b'))
-    monkeypatch.setattr(svc.broker,'_send',lambda *a,**kw:pytest.fail('broker send forbidden'))
-    paper=opened(svc,RunMode.PAPER)
+    svc = build_services(settings, MockBroker(start=NOW), create_run=True, db_url="sqlite://")
+    svc.manager.start(svc.run, svc.broker.account_info())
+    archive, provider, p, c = setup(svc, tmp_path, sources=("a",) if missing else ("a", "b"))
+    monkeypatch.setattr(svc.broker, "_send", lambda *a, **kw: pytest.fail("broker send forbidden"))
+    paper = opened(svc, RunMode.PAPER)
 
     class ManagementBrain:
-        source_id,source_version='test','1'
-        def decide(self,ctx):
-            return action(svc,RunMode.PAPER,kind,paper,cycle=ctx.cycle_id)
+        source_id, source_version = "test", "1"
 
-    engine=svc.engine(MockAgent(),brain=ManagementBrain(),run_mode=RunMode.PAPER,policy_controller=c)
-    engine.paper_engine=paper
-    result=engine.run_cycle()
-    assert result.decision==('NO_TRADE' if missing and kind is not Action.HOLD else kind.value),result
-    events=svc.repo.events(svc.run.run_id,types=['policy.decision'])
-    assert len(events)==1 and events[0].payload['dossier_id']=='fixture-1'
+        def decide(self, ctx):
+            return action(svc, RunMode.PAPER, kind, paper, cycle=ctx.cycle_id)
+
+    engine = svc.engine(MockAgent(), brain=ManagementBrain(), run_mode=RunMode.PAPER, policy_controller=c)
+    engine.paper_engine = paper
+    result = engine.run_cycle()
+    assert result.decision == ("NO_TRADE" if missing and kind is not Action.HOLD else kind.value), result
+    events = svc.repo.events(svc.run.run_id, types=["policy.decision"])
+    assert len(events) == 1 and events[0].payload["dossier_id"] == "fixture-1"
+
+
+def test_phase_selector_does_not_reuse_previous_phase_dossier(svc, tmp_path):
+    from alladin.brain import proposal_identity
+
+    archive, provider, p, c = setup(svc, tmp_path)
+    phase = ["funded"]
+    provider.phase = lambda _: phase[0]
+    assert c.assess(p, RunMode.PAPER).verdict is GateVerdict.ALLOW
+    phase[0] = "verification"
+    other = p.model_copy(
+        update={
+            "cycle_id": "C-next",
+            "proposal_id": proposal_identity(
+                p.run_id, "C-next", p.opportunity_id, p.source_id, p.source_version
+            ),
+        }
+    )
+    assert c.assess(other, RunMode.PAPER).reason == "POLICY_CONTEXT_UNAVAILABLE"
+    d = dossier(svc, id="verification-dossier")
+    d = d.model_copy(update={"profile": replace(d.profile, phase="verification")})
+    archive.add_dossier(d)
+    last = p.model_copy(
+        update={
+            "cycle_id": "C-last",
+            "proposal_id": proposal_identity(
+                p.run_id, "C-last", p.opportunity_id, p.source_id, p.source_version
+            ),
+        }
+    )
+    assert c.assess(last, RunMode.PAPER).verdict is GateVerdict.ALLOW
+    assert (
+        svc.repo.events(svc.run.run_id, types=["policy.decision"])[-1].payload["dossier_id"]
+        == "verification-dossier"
+    )

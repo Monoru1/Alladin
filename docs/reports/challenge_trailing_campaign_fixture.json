@@ -1,0 +1,3418 @@
+{
+  "schema_version": 1,
+  "scope": "SYNTHETIC_PAIRED_SCENARIO_REPLAY",
+  "input_sha256": "a50db6c70e7756503f62c4699bcf38738ed7ab86e85a6f64270d5ea21c4d8170",
+  "inputs": {
+    "paths": [
+      {
+        "id": "transient-peak",
+        "steps": [
+          {
+            "at": "2026-10-08T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": false,
+            "gross_pnl_pct": 6.0,
+            "peak_equity_pct": 8.0,
+            "restart": false,
+            "restricted_release": false,
+            "worst_equity_pct": 0.0
+          }
+        ]
+      },
+      {
+        "id": "retreat-with-eod",
+        "steps": [
+          {
+            "at": "2026-10-08T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": true,
+            "gross_pnl_pct": 6.0,
+            "peak_equity_pct": null,
+            "restart": false,
+            "restricted_release": false,
+            "worst_equity_pct": 0.0
+          },
+          {
+            "at": "2026-10-09T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": true,
+            "restricted_release": false,
+            "worst_equity_pct": -6.0
+          }
+        ]
+      },
+      {
+        "id": "retreat-without-eod",
+        "steps": [
+          {
+            "at": "2026-10-08T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": false,
+            "gross_pnl_pct": 6.0,
+            "peak_equity_pct": null,
+            "restart": false,
+            "restricted_release": false,
+            "worst_equity_pct": 0.0
+          },
+          {
+            "at": "2026-10-09T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": true,
+            "restricted_release": false,
+            "worst_equity_pct": -6.0
+          }
+        ]
+      },
+      {
+        "id": "growth",
+        "steps": [
+          {
+            "at": "2026-10-08T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": true,
+            "gross_pnl_pct": 8.0,
+            "peak_equity_pct": null,
+            "restart": false,
+            "restricted_release": false,
+            "worst_equity_pct": 0.0
+          },
+          {
+            "at": "2026-10-09T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": true,
+            "gross_pnl_pct": 8.0,
+            "peak_equity_pct": null,
+            "restart": false,
+            "restricted_release": false,
+            "worst_equity_pct": 0.0
+          },
+          {
+            "at": "2026-10-10T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.0,
+            "end_of_day": true,
+            "gross_pnl_pct": 8.0,
+            "peak_equity_pct": null,
+            "restart": false,
+            "restricted_release": false,
+            "worst_equity_pct": 0.0
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-static-25000",
+          "initial_balance": 25000.0,
+          "name": "synthetic-static-25000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "static"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 100.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-static-25000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-trailing_balance-25000",
+          "initial_balance": 25000.0,
+          "name": "synthetic-trailing_balance-25000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "trailing_balance"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 100.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-trailing_balance-25000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-trailing_equity-25000",
+          "initial_balance": 25000.0,
+          "name": "synthetic-trailing_equity-25000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "trailing_equity"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 100.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-trailing_equity-25000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-trailing_eod-25000",
+          "initial_balance": 25000.0,
+          "name": "synthetic-trailing_eod-25000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "trailing_eod"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 100.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-trailing_eod-25000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-static-100000",
+          "initial_balance": 100000.0,
+          "name": "synthetic-static-100000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "static"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 400.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-static-100000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-trailing_balance-100000",
+          "initial_balance": 100000.0,
+          "name": "synthetic-trailing_balance-100000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "trailing_balance"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 400.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-trailing_balance-100000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-trailing_equity-100000",
+          "initial_balance": 100000.0,
+          "name": "synthetic-trailing_equity-100000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "trailing_equity"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 400.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-trailing_equity-100000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": null
+          },
+          "id": "synthetic-trailing_eod-100000",
+          "initial_balance": 100000.0,
+          "name": "synthetic-trailing_eod-100000",
+          "official_rules": {
+            "daily_loss_pct": 20.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 30.0,
+            "min_trading_days": 1,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 20.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": {
+            "account_ref": "synthetic",
+            "currency": "USD",
+            "drawdown": {
+              "lock_floor_at_initial": false,
+              "loss_pct": 5.0,
+              "mode": "trailing_eod"
+            },
+            "flatten_buffer_seconds": 300,
+            "forbid_opposite_accounts": false,
+            "forbid_weekend_hold": false,
+            "managed_accounts": [],
+            "max_aggregate_positions": null,
+            "max_aggregate_risk": null,
+            "max_group_risk": null,
+            "max_market_break_seconds": null,
+            "permitted_actions": [
+              "CLOSE",
+              "HOLD",
+              "MODIFY_STOP",
+              "MODIFY_TARGET",
+              "OPEN",
+              "PARTIAL_CLOSE"
+            ],
+            "sessions": null
+          },
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 400.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-trailing_eod-100000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      }
+    ]
+  },
+  "summaries": [
+    {
+      "variant": "synthetic-static-25000",
+      "simulated_allocation": 25000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "RUNNING": 3
+      },
+      "worst_observed_drawdown": 2000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 3,
+      "hypothetical_evaluation_fee_each": 100.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-trailing_balance-25000",
+      "simulated_allocation": 25000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "POLICY_FAILED": 2,
+        "RUNNING": 1
+      },
+      "worst_observed_drawdown": 2000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 1,
+      "hypothetical_evaluation_fee_each": 100.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-trailing_equity-25000",
+      "simulated_allocation": 25000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "POLICY_FAILED": 3
+      },
+      "worst_observed_drawdown": 2000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 0,
+      "hypothetical_evaluation_fee_each": 100.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-trailing_eod-25000",
+      "simulated_allocation": 25000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "POLICY_FAILED": 1,
+        "RUNNING": 2
+      },
+      "worst_observed_drawdown": 2000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 2,
+      "hypothetical_evaluation_fee_each": 100.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-static-100000",
+      "simulated_allocation": 100000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "RUNNING": 3
+      },
+      "worst_observed_drawdown": 8000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 3,
+      "hypothetical_evaluation_fee_each": 400.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-trailing_balance-100000",
+      "simulated_allocation": 100000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "POLICY_FAILED": 2,
+        "RUNNING": 1
+      },
+      "worst_observed_drawdown": 8000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 1,
+      "hypothetical_evaluation_fee_each": 400.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-trailing_equity-100000",
+      "simulated_allocation": 100000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "POLICY_FAILED": 3
+      },
+      "worst_observed_drawdown": 8000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 0,
+      "hypothetical_evaluation_fee_each": 400.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    },
+    {
+      "variant": "synthetic-trailing_eod-100000",
+      "simulated_allocation": 100000.0,
+      "scenario_count": 4,
+      "scenario_pass_fraction": 0.25,
+      "state_counts": {
+        "PASSED": 1,
+        "POLICY_FAILED": 1,
+        "RUNNING": 2
+      },
+      "worst_observed_drawdown": 8000.0,
+      "mean_charged_simulated_trade_costs": 0.0,
+      "mean_hypothetical_reward": null,
+      "unfinished_scenarios": 2,
+      "hypothetical_evaluation_fee_each": 400.0,
+      "hypothetical_operating_cost_each": 20.0,
+      "real_world_pass_probability": null,
+      "real_cash_generated": null
+    }
+  ],
+  "records": [
+    {
+      "variant": "synthetic-static-25000",
+      "scenario": "transient-peak",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 26500.0,
+      "max_observed_drawdown": 2000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 26500.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T13:00:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 26500.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 27000.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-25000",
+      "scenario": "retreat-with-eod",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 27250.0,
+      "final_observed_equity": 27250.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 27250.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T13:00:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 27250.0,
+        "equity": 27250.0,
+        "peak_balance": 27250.0,
+        "peak_equity": 27250.0,
+        "peak_eod_balance": 26500.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-25000",
+      "scenario": "retreat-without-eod",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 27250.0,
+      "final_observed_equity": 27250.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 27250.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T13:00:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 27250.0,
+        "equity": 27250.0,
+        "peak_balance": 27250.0,
+        "peak_equity": 27250.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-25000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 31000.0,
+      "final_observed_equity": 31000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "static",
+          "floor": 23750.0,
+          "equity": 31000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 31000.0,
+        "equity": 31000.0,
+        "peak_balance": 31000.0,
+        "peak_equity": 31000.0,
+        "peak_eod_balance": 31000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-25000",
+      "scenario": "transient-peak",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 26500.0,
+      "max_observed_drawdown": 2000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25250.0,
+          "equity": 26500.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T13:00:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 26500.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 27000.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-25000",
+      "scenario": "retreat-with-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 25000.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25250.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25250.0,
+          "equity": 25000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 25000.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 26500.0,
+        "peak_eod_balance": 26500.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-25000",
+      "scenario": "retreat-without-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 25000.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25250.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25250.0,
+          "equity": 25000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 25000.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 26500.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-25000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 31000.0,
+      "final_observed_equity": 31000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 25750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 27750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 27750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 29750.0,
+          "equity": 31000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 31000.0,
+        "equity": 31000.0,
+        "peak_balance": 31000.0,
+        "peak_equity": 31000.0,
+        "peak_eod_balance": 31000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-25000",
+      "scenario": "transient-peak",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 25000.0,
+      "final_observed_equity": 25000.0,
+      "max_observed_drawdown": 2000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25750.0,
+          "equity": 25000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T12:01:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 25000.0,
+        "equity": 25000.0,
+        "peak_balance": 25000.0,
+        "peak_equity": 27000.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-25000",
+      "scenario": "retreat-with-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 25000.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25250.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25250.0,
+          "equity": 25000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 25000.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 26500.0,
+        "peak_eod_balance": 26500.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-25000",
+      "scenario": "retreat-without-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 25000.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25250.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25250.0,
+          "equity": 25000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 25000.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 26500.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-25000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 31000.0,
+      "final_observed_equity": 31000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 25750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 27750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 27750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 29750.0,
+          "equity": 31000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 31000.0,
+        "equity": 31000.0,
+        "peak_balance": 31000.0,
+        "peak_equity": 31000.0,
+        "peak_eod_balance": 31000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-25000",
+      "scenario": "transient-peak",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 26500.0,
+      "max_observed_drawdown": 2000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 26500.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T13:00:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 26500.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 27000.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-25000",
+      "scenario": "retreat-with-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 26500.0,
+      "final_observed_equity": 25000.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 25250.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 25250.0,
+          "equity": 25000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 26500.0,
+        "equity": 25000.0,
+        "peak_balance": 26500.0,
+        "peak_equity": 26500.0,
+        "peak_eod_balance": 26500.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-25000",
+      "scenario": "retreat-without-eod",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 27250.0,
+      "final_observed_equity": 27250.0,
+      "max_observed_drawdown": 1500.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 26500.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 27250.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T13:00:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 27250.0,
+        "equity": 27250.0,
+        "peak_balance": 27250.0,
+        "peak_equity": 27250.0,
+        "peak_eod_balance": 25000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-25000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 31000.0,
+      "final_observed_equity": 31000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 23750.0,
+          "equity": 25000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 25750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 25750.0,
+          "equity": 27000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 27750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 27750.0,
+          "equity": 29000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 29750.0,
+          "equity": 31000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 25000.0,
+        "balance": 31000.0,
+        "equity": 31000.0,
+        "peak_balance": 31000.0,
+        "peak_equity": 31000.0,
+        "peak_eod_balance": 31000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-100000",
+      "scenario": "transient-peak",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 106000.0,
+      "max_observed_drawdown": 8000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 106000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T13:00:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 106000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 108000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-100000",
+      "scenario": "retreat-with-eod",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 109000.0,
+      "final_observed_equity": 109000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 109000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T13:00:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 109000.0,
+        "equity": 109000.0,
+        "peak_balance": 109000.0,
+        "peak_equity": 109000.0,
+        "peak_eod_balance": 106000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-100000",
+      "scenario": "retreat-without-eod",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 109000.0,
+      "final_observed_equity": 109000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 109000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T13:00:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 109000.0,
+        "equity": 109000.0,
+        "peak_balance": 109000.0,
+        "peak_equity": 109000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-static-100000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 124000.0,
+      "final_observed_equity": 124000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "static",
+          "floor": 95000.0,
+          "equity": 124000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 124000.0,
+        "equity": 124000.0,
+        "peak_balance": 124000.0,
+        "peak_equity": 124000.0,
+        "peak_eod_balance": 124000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-100000",
+      "scenario": "transient-peak",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 106000.0,
+      "max_observed_drawdown": 8000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 101000.0,
+          "equity": 106000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T13:00:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 106000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 108000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-100000",
+      "scenario": "retreat-with-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 100000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 101000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 101000.0,
+          "equity": 100000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 100000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 106000.0,
+        "peak_eod_balance": 106000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-100000",
+      "scenario": "retreat-without-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 100000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 101000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 101000.0,
+          "equity": 100000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 100000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 106000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_balance-100000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 124000.0,
+      "final_observed_equity": 124000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 103000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 103000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 111000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 111000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "trailing_balance",
+          "floor": 119000.0,
+          "equity": 124000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 124000.0,
+        "equity": 124000.0,
+        "peak_balance": 124000.0,
+        "peak_equity": 124000.0,
+        "peak_eod_balance": 124000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-100000",
+      "scenario": "transient-peak",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 100000.0,
+      "final_observed_equity": 100000.0,
+      "max_observed_drawdown": 8000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 103000.0,
+          "equity": 100000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T12:01:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 100000.0,
+        "equity": 100000.0,
+        "peak_balance": 100000.0,
+        "peak_equity": 108000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-100000",
+      "scenario": "retreat-with-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 100000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 101000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 101000.0,
+          "equity": 100000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 100000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 106000.0,
+        "peak_eod_balance": 106000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-100000",
+      "scenario": "retreat-without-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 100000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 101000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 101000.0,
+          "equity": 100000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 100000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 106000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_equity-100000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 124000.0,
+      "final_observed_equity": 124000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 103000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 103000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 111000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 111000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "trailing_equity",
+          "floor": 119000.0,
+          "equity": 124000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 124000.0,
+        "equity": 124000.0,
+        "peak_balance": 124000.0,
+        "peak_equity": 124000.0,
+        "peak_eod_balance": 124000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-100000",
+      "scenario": "transient-peak",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 106000.0,
+      "max_observed_drawdown": 8000.0,
+      "max_observed_drawdown_pct_initial": 8.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 106000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-08T13:00:00Z",
+        "valid_until": "2026-10-08T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 106000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 108000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-100000",
+      "scenario": "retreat-with-eod",
+      "status": "POLICY_FAILED",
+      "passed": false,
+      "final_observed_balance": 106000.0,
+      "final_observed_equity": 100000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": false,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 101000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 101000.0,
+          "equity": 100000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T12:01:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 106000.0,
+        "equity": 100000.0,
+        "peak_balance": 106000.0,
+        "peak_equity": 106000.0,
+        "peak_eod_balance": 106000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [
+        "policy_drawdown"
+      ],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-100000",
+      "scenario": "retreat-without-eod",
+      "status": "RUNNING",
+      "passed": false,
+      "final_observed_balance": 109000.0,
+      "final_observed_equity": 109000.0,
+      "max_observed_drawdown": 6000.0,
+      "max_observed_drawdown_pct_initial": 6.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 106000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 109000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-09T13:00:00Z",
+        "valid_until": "2026-10-09T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 109000.0,
+        "equity": 109000.0,
+        "peak_balance": 109000.0,
+        "peak_equity": 109000.0,
+        "peak_eod_balance": 100000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 1,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    },
+    {
+      "variant": "synthetic-trailing_eod-100000",
+      "scenario": "growth",
+      "status": "PASSED",
+      "passed": true,
+      "final_observed_balance": 124000.0,
+      "final_observed_equity": 124000.0,
+      "max_observed_drawdown": 0.0,
+      "max_observed_drawdown_pct_initial": 0.0,
+      "charged_simulated_trade_costs": 0.0,
+      "costs_complete": true,
+      "account_drawdown_observations": [
+        {
+          "at": "2026-10-08T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 95000.0,
+          "equity": 100000.0
+        },
+        {
+          "at": "2026-10-08T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 103000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 103000.0,
+          "equity": 108000.0
+        },
+        {
+          "at": "2026-10-09T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 111000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T12:01:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 111000.0,
+          "equity": 116000.0
+        },
+        {
+          "at": "2026-10-10T13:00:00+00:00",
+          "mode": "trailing_eod",
+          "floor": 119000.0,
+          "equity": 124000.0
+        }
+      ],
+      "drawdown_state": {
+        "account_ref": "synthetic",
+        "currency": "USD",
+        "observed_at": "2026-10-10T13:00:00Z",
+        "valid_until": "2026-10-10T14:00:00Z",
+        "initial_balance": 100000.0,
+        "balance": 124000.0,
+        "equity": 124000.0,
+        "peak_balance": 124000.0,
+        "peak_equity": 124000.0,
+        "peak_eod_balance": 124000.0
+      },
+      "drawdown_state_unavailable_reason": null,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward": null,
+      "restores": 0,
+      "failures": [],
+      "decisions": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "verdict": "ALLOW",
+          "reason": "POLICY_CLEAR"
+        }
+      ]
+    }
+  ],
+  "execution_authorized": false,
+  "unattended_qualified": false,
+  "limitations": [
+    "No strategy returns, probability model, OOS edge or broker fills inferred",
+    "Paths equally weighted by explicit scenario count; no real-world probability",
+    "Static watchdog and explicitly supplied drawdown only; no overnight or aggregate exposure campaign support",
+    "One flat episode at a time; no sizing, intrabar path or portfolio simulation",
+    "Costs after a fatal intratrade trough are unknown, not assumed settled",
+    "Rewards are explicit hypothetical inputs, never payouts or capital owned"
+  ],
+  "fixture_sha256": "ddde3d98a2d89100de23167e75b7087393fc2103ef76d0e71fed595dea71cc0b"
+}

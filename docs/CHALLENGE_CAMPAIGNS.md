@@ -13,4 +13,18 @@ Les sorties incluent états, cas inachevés, échecs/raisons, drawdown observé 
 
 Le hash SHA-256 couvre tous les inputs canoniques ; un second hash identifie le fichier de fixtures. Régénérer deux fois donne le même JSON. La fraction de validation est une proportion des quatre scénarios choisis à poids égaux ; elle n'est ni un modèle de probabilité, ni un résultat OOS, ni une estimation de rendement réel. Les chemins inachevés restent RUNNING, jamais assimilés à des échecs.
 
-Limites opérationnelles explicites : règles de drawdown statique du watchdog uniquement ; les `FirmProfile.constraints` sont rejetées plutôt qu'ignorées. Trailing, overnight, limites multi-comptes et portefeuilles doivent être raccordés à un replay runtime distinct. Aucun sizing/RiskEngine, fill broker/intrabar, stratégie active, compte financier, achat, allocation réellement possédée ou promotion DEMO/LIVE n'est impliqué. Le RiskEngine opérationnel n'est pas modifié.
+Limites opérationnelles explicites : règles statiques du watchdog et quatre modes de drawdown explicitement configurés en USD ; les autres contraintes de compte restent rejetées plutôt qu'ignorées. Overnight, limites multi-comptes et portefeuilles doivent être raccordés à un replay runtime distinct. Aucun sizing/RiskEngine, fill broker/intrabar, stratégie active, compte financier, achat, allocation réellement possédée ou promotion DEMO/LIVE n'est impliqué. Le RiskEngine opérationnel n'est pas modifié.
+
+## Campagne trailing (lot 8)
+
+```bash
+python scripts/report_challenge_campaign.py --fixture tests/fixtures/policy/challenge_trailing_campaign.json --output docs/reports/challenge_trailing_campaign_fixture.json
+```
+
+32 replays : quatre formules de drawdown × deux allocations nominales synthétiques × quatre chemins. Les paramètres sont des hypothèses, pas des clauses officielles. `peak_equity_pct` est un point d'observation explicitement fourni avant le creux ; son absence ne fabrique aucun plus-haut intrabar. `end_of_day` est un signal fourni, jamais déduit d'un jour UTC. `reset_drawdown_on_phase` vaut false par défaut et doit être explicitement activé pour changer l'ancrage à une transition de phase.
+
+Les floors et états sérialisables sont conservés dans le résultat. Un seuil atteint donne POLICY_FAILED, arrête les épisodes suivants, ne compte pas comme chemin inachevé et n'accorde pas de récompense hypothétique. Le watchdog historique n'est pas modifié ; ses violations restent visibles. Une equity négative observée est enregistrée comme telle ; elle ne crée pas un AccountPolicyState non négatif fictif, et la raison NEGATIVE_EQUITY explique l'état manquant.
+
+Le changement de phase du fournisseur archivé peut être injecté par un sélecteur explicite ; sans dossier pour la nouvelle phase, le checkpoint refuse/revoit la proposition et ne réutilise pas le dossier précédent. Aucun changement automatique de programme financier ou de mode d'exécution.
+
+Les inputs et ensembles sont canoniques. Régénérer dans des processus de PYTHONHASHSEED différents donne des fichiers identiques. Les probabilités et performances réelles restent inconnues, et les allocations sont toujours simulées. Aucune enveloppe de risque ou stratégie active n'est modifiée. Les campagnes exigent une validation de phase à plat ; les politiques autorisant un passage non flat restent hors de ce modèle.

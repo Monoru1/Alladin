@@ -1,440 +1,44 @@
 {
   "schema_version": 1,
   "scope": "SYNTHETIC_PAIRED_SCENARIO_REPLAY",
-  "input_sha256": "d195097bbe3e553cf31ba1cdc46859796927a1eb9afb823e6cf3631725af8019",
+  "input_sha256": "e9309a6af307e2169dfdca98e820628b45c7893639d58532db973b14e149f38a",
   "inputs": {
-    "variants": [
-      {
-        "id": "synthetic-moderate-25000",
-        "simulation_only": true,
-        "challenge": {
-          "id": "synthetic-moderate-25000",
-          "name": "synthetic-moderate-25000",
-          "description": "SYNTHETIC ONLY; not an official firm contract",
-          "initial_balance": 25000.0,
-          "phases": [
-            {
-              "name": "synthetic-evaluation",
-              "profit_target_pct": 5.0
-            }
-          ],
-          "official_rules": {
-            "daily_loss_pct": 5.0,
-            "max_total_loss_pct": 10.0,
-            "min_trading_days": 2,
-            "daily_loss_reference": "max_balance_equity",
-            "reset_timezone": "Europe/Prague",
-            "reset_hour": 0,
-            "target_measured_on": "balance"
-          },
-          "extra_rules": {
-            "max_days_per_phase": 10,
-            "soft_daily_loss_pct": 3.0,
-            "consistency": {
-              "enabled": false,
-              "max_best_day_share_pct": 50.0
-            },
-            "require_flat_to_pass": true,
-            "close_positions_on_fail": false
-          },
-          "risk": {
-            "working_capital_pct": 10.0,
-            "max_trade_risk_pct_of_working_capital": 8.0,
-            "over_cap_policy": "reject",
-            "max_open_positions": 5,
-            "max_total_open_risk_pct_of_wc": 30.0,
-            "max_currency_net_risk_pct_of_wc": 15.0,
-            "max_correlation": 0.85,
-            "max_spread_to_sl_ratio": 0.25,
-            "max_spread_points": null,
-            "max_entry_deviation_to_sl_ratio": 0.15,
-            "min_risk_reward": 0.0,
-            "max_margin_usage_pct": 50.0,
-            "headroom_buffer_pct_of_baseline": 0.25,
-            "allow_hedging": false
-          },
-          "universe": {
-            "id": "inline",
-            "description": "",
-            "allowed_categories": [
-              "FOREX_MAJOR",
-              "FOREX_MINOR",
-              "FOREX_JPY"
-            ],
-            "include_symbols": [],
-            "exclude_symbols": [],
-            "max_spread_atr_ratio": 0.15,
-            "shortlist_size": 10,
-            "sessions": {
-              "timezone": "UTC",
-              "weekdays": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
-              ],
-              "windows": [],
-              "require_24_7": false
-            }
-          },
-          "universe_ref": null
-        },
-        "firm": {
-          "firm": "synthetic-moderate",
-          "program": "synthetic",
-          "phase": "evaluation",
-          "account_type": "fixture",
-          "version": "1",
-          "source_url": "https://example.test/synthetic-contract",
-          "verified_at": "2026-10-01T00:00:00Z",
-          "valid_until": "2026-11-01T00:00:00Z",
-          "allowed_symbols": [
-            "EURUSD"
-          ],
-          "ea_allowed": true,
-          "max_open_positions": null,
-          "restrict_news": true,
-          "constraints": null
-        },
-        "symbol": "EURUSD",
-        "hypothetical_evaluation_fee": 100.0,
-        "hypothetical_operating_cost": 20.0,
-        "hypothetical_reward_on_pass": null
-      },
-      {
-        "id": "synthetic-moderate-100000",
-        "simulation_only": true,
-        "challenge": {
-          "id": "synthetic-moderate-100000",
-          "name": "synthetic-moderate-100000",
-          "description": "SYNTHETIC ONLY; not an official firm contract",
-          "initial_balance": 100000.0,
-          "phases": [
-            {
-              "name": "synthetic-evaluation",
-              "profit_target_pct": 5.0
-            }
-          ],
-          "official_rules": {
-            "daily_loss_pct": 5.0,
-            "max_total_loss_pct": 10.0,
-            "min_trading_days": 2,
-            "daily_loss_reference": "max_balance_equity",
-            "reset_timezone": "Europe/Prague",
-            "reset_hour": 0,
-            "target_measured_on": "balance"
-          },
-          "extra_rules": {
-            "max_days_per_phase": 10,
-            "soft_daily_loss_pct": 3.0,
-            "consistency": {
-              "enabled": false,
-              "max_best_day_share_pct": 50.0
-            },
-            "require_flat_to_pass": true,
-            "close_positions_on_fail": false
-          },
-          "risk": {
-            "working_capital_pct": 10.0,
-            "max_trade_risk_pct_of_working_capital": 8.0,
-            "over_cap_policy": "reject",
-            "max_open_positions": 5,
-            "max_total_open_risk_pct_of_wc": 30.0,
-            "max_currency_net_risk_pct_of_wc": 15.0,
-            "max_correlation": 0.85,
-            "max_spread_to_sl_ratio": 0.25,
-            "max_spread_points": null,
-            "max_entry_deviation_to_sl_ratio": 0.15,
-            "min_risk_reward": 0.0,
-            "max_margin_usage_pct": 50.0,
-            "headroom_buffer_pct_of_baseline": 0.25,
-            "allow_hedging": false
-          },
-          "universe": {
-            "id": "inline",
-            "description": "",
-            "allowed_categories": [
-              "FOREX_MAJOR",
-              "FOREX_MINOR",
-              "FOREX_JPY"
-            ],
-            "include_symbols": [],
-            "exclude_symbols": [],
-            "max_spread_atr_ratio": 0.15,
-            "shortlist_size": 10,
-            "sessions": {
-              "timezone": "UTC",
-              "weekdays": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
-              ],
-              "windows": [],
-              "require_24_7": false
-            }
-          },
-          "universe_ref": null
-        },
-        "firm": {
-          "firm": "synthetic-moderate",
-          "program": "synthetic",
-          "phase": "evaluation",
-          "account_type": "fixture",
-          "version": "1",
-          "source_url": "https://example.test/synthetic-contract",
-          "verified_at": "2026-10-01T00:00:00Z",
-          "valid_until": "2026-11-01T00:00:00Z",
-          "allowed_symbols": [
-            "EURUSD"
-          ],
-          "ea_allowed": true,
-          "max_open_positions": null,
-          "restrict_news": true,
-          "constraints": null
-        },
-        "symbol": "EURUSD",
-        "hypothetical_evaluation_fee": 400.0,
-        "hypothetical_operating_cost": 20.0,
-        "hypothetical_reward_on_pass": null
-      },
-      {
-        "id": "synthetic-strict-25000",
-        "simulation_only": true,
-        "challenge": {
-          "id": "synthetic-strict-25000",
-          "name": "synthetic-strict-25000",
-          "description": "SYNTHETIC ONLY; not an official firm contract",
-          "initial_balance": 25000.0,
-          "phases": [
-            {
-              "name": "synthetic-evaluation",
-              "profit_target_pct": 8.0
-            }
-          ],
-          "official_rules": {
-            "daily_loss_pct": 5.0,
-            "max_total_loss_pct": 10.0,
-            "min_trading_days": 2,
-            "daily_loss_reference": "max_balance_equity",
-            "reset_timezone": "Europe/Prague",
-            "reset_hour": 0,
-            "target_measured_on": "balance"
-          },
-          "extra_rules": {
-            "max_days_per_phase": 10,
-            "soft_daily_loss_pct": 3.0,
-            "consistency": {
-              "enabled": false,
-              "max_best_day_share_pct": 50.0
-            },
-            "require_flat_to_pass": true,
-            "close_positions_on_fail": false
-          },
-          "risk": {
-            "working_capital_pct": 10.0,
-            "max_trade_risk_pct_of_working_capital": 8.0,
-            "over_cap_policy": "reject",
-            "max_open_positions": 5,
-            "max_total_open_risk_pct_of_wc": 30.0,
-            "max_currency_net_risk_pct_of_wc": 15.0,
-            "max_correlation": 0.85,
-            "max_spread_to_sl_ratio": 0.25,
-            "max_spread_points": null,
-            "max_entry_deviation_to_sl_ratio": 0.15,
-            "min_risk_reward": 0.0,
-            "max_margin_usage_pct": 50.0,
-            "headroom_buffer_pct_of_baseline": 0.25,
-            "allow_hedging": false
-          },
-          "universe": {
-            "id": "inline",
-            "description": "",
-            "allowed_categories": [
-              "FOREX_MAJOR",
-              "FOREX_MINOR",
-              "FOREX_JPY"
-            ],
-            "include_symbols": [],
-            "exclude_symbols": [],
-            "max_spread_atr_ratio": 0.15,
-            "shortlist_size": 10,
-            "sessions": {
-              "timezone": "UTC",
-              "weekdays": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
-              ],
-              "windows": [],
-              "require_24_7": false
-            }
-          },
-          "universe_ref": null
-        },
-        "firm": {
-          "firm": "synthetic-strict",
-          "program": "synthetic",
-          "phase": "evaluation",
-          "account_type": "fixture",
-          "version": "1",
-          "source_url": "https://example.test/synthetic-contract",
-          "verified_at": "2026-10-01T00:00:00Z",
-          "valid_until": "2026-11-01T00:00:00Z",
-          "allowed_symbols": [
-            "EURUSD"
-          ],
-          "ea_allowed": true,
-          "max_open_positions": null,
-          "restrict_news": true,
-          "constraints": null
-        },
-        "symbol": "EURUSD",
-        "hypothetical_evaluation_fee": 100.0,
-        "hypothetical_operating_cost": 20.0,
-        "hypothetical_reward_on_pass": null
-      },
-      {
-        "id": "synthetic-strict-100000",
-        "simulation_only": true,
-        "challenge": {
-          "id": "synthetic-strict-100000",
-          "name": "synthetic-strict-100000",
-          "description": "SYNTHETIC ONLY; not an official firm contract",
-          "initial_balance": 100000.0,
-          "phases": [
-            {
-              "name": "synthetic-evaluation",
-              "profit_target_pct": 8.0
-            }
-          ],
-          "official_rules": {
-            "daily_loss_pct": 5.0,
-            "max_total_loss_pct": 10.0,
-            "min_trading_days": 2,
-            "daily_loss_reference": "max_balance_equity",
-            "reset_timezone": "Europe/Prague",
-            "reset_hour": 0,
-            "target_measured_on": "balance"
-          },
-          "extra_rules": {
-            "max_days_per_phase": 10,
-            "soft_daily_loss_pct": 3.0,
-            "consistency": {
-              "enabled": false,
-              "max_best_day_share_pct": 50.0
-            },
-            "require_flat_to_pass": true,
-            "close_positions_on_fail": false
-          },
-          "risk": {
-            "working_capital_pct": 10.0,
-            "max_trade_risk_pct_of_working_capital": 8.0,
-            "over_cap_policy": "reject",
-            "max_open_positions": 5,
-            "max_total_open_risk_pct_of_wc": 30.0,
-            "max_currency_net_risk_pct_of_wc": 15.0,
-            "max_correlation": 0.85,
-            "max_spread_to_sl_ratio": 0.25,
-            "max_spread_points": null,
-            "max_entry_deviation_to_sl_ratio": 0.15,
-            "min_risk_reward": 0.0,
-            "max_margin_usage_pct": 50.0,
-            "headroom_buffer_pct_of_baseline": 0.25,
-            "allow_hedging": false
-          },
-          "universe": {
-            "id": "inline",
-            "description": "",
-            "allowed_categories": [
-              "FOREX_MAJOR",
-              "FOREX_MINOR",
-              "FOREX_JPY"
-            ],
-            "include_symbols": [],
-            "exclude_symbols": [],
-            "max_spread_atr_ratio": 0.15,
-            "shortlist_size": 10,
-            "sessions": {
-              "timezone": "UTC",
-              "weekdays": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
-              ],
-              "windows": [],
-              "require_24_7": false
-            }
-          },
-          "universe_ref": null
-        },
-        "firm": {
-          "firm": "synthetic-strict",
-          "program": "synthetic",
-          "phase": "evaluation",
-          "account_type": "fixture",
-          "version": "1",
-          "source_url": "https://example.test/synthetic-contract",
-          "verified_at": "2026-10-01T00:00:00Z",
-          "valid_until": "2026-11-01T00:00:00Z",
-          "allowed_symbols": [
-            "EURUSD"
-          ],
-          "ea_allowed": true,
-          "max_open_positions": null,
-          "restrict_news": true,
-          "constraints": null
-        },
-        "symbol": "EURUSD",
-        "hypothetical_evaluation_fee": 400.0,
-        "hypothetical_operating_cost": 20.0,
-        "hypothetical_reward_on_pass": null
-      }
-    ],
     "paths": [
       {
         "id": "gains",
         "steps": [
           {
-            "at": "2026-10-08T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-08T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": 0.0
           },
           {
-            "at": "2026-10-09T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-09T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": 0.0
           },
           {
-            "at": "2026-10-10T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-10T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": true,
             "restricted_release": false,
-            "restart": true
+            "worst_equity_pct": 0.0
           }
         ]
       },
@@ -442,31 +46,37 @@
         "id": "daily-loss",
         "steps": [
           {
-            "at": "2026-10-08T12:00:00Z",
+            "at": "2026-10-08T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
             "gross_pnl_pct": -6.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": -6.1,
-            "calendar_available": true,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": -6.1
           },
           {
-            "at": "2026-10-09T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-09T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": 0.0
           },
           {
-            "at": "2026-10-10T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-10T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": true,
             "restricted_release": false,
-            "restart": true
+            "worst_equity_pct": 0.0
           }
         ]
       },
@@ -474,31 +84,37 @@
         "id": "news-outage",
         "steps": [
           {
-            "at": "2026-10-08T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-08T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": true,
-            "restart": false
+            "worst_equity_pct": 0.0
           },
           {
-            "at": "2026-10-09T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-09T12:00:00+00:00",
             "calendar_available": false,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": 0.0
           },
           {
-            "at": "2026-10-10T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-10T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": true,
             "restricted_release": false,
-            "restart": true
+            "worst_equity_pct": 0.0
           }
         ]
       },
@@ -506,33 +122,445 @@
         "id": "mixed",
         "steps": [
           {
-            "at": "2026-10-08T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-08T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": 0.0
           },
           {
-            "at": "2026-10-09T12:00:00Z",
+            "at": "2026-10-09T12:00:00+00:00",
+            "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
             "gross_pnl_pct": -2.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": -2.1,
-            "calendar_available": true,
+            "peak_equity_pct": null,
+            "restart": false,
             "restricted_release": false,
-            "restart": false
+            "worst_equity_pct": -2.1
           },
           {
-            "at": "2026-10-10T12:00:00Z",
-            "gross_pnl_pct": 3.0,
-            "cost_pct": 0.1,
-            "worst_equity_pct": 0.0,
+            "at": "2026-10-10T12:00:00+00:00",
             "calendar_available": true,
+            "cost_pct": 0.1,
+            "end_of_day": false,
+            "gross_pnl_pct": 3.0,
+            "peak_equity_pct": null,
+            "restart": true,
             "restricted_release": false,
-            "restart": true
+            "worst_equity_pct": 0.0
           }
         ]
+      }
+    ],
+    "variants": [
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": 3.0
+          },
+          "id": "synthetic-moderate-25000",
+          "initial_balance": 25000.0,
+          "name": "synthetic-moderate-25000",
+          "official_rules": {
+            "daily_loss_pct": 5.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 10.0,
+            "min_trading_days": 2,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 5.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": null,
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 100.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-moderate-25000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": 3.0
+          },
+          "id": "synthetic-moderate-100000",
+          "initial_balance": 100000.0,
+          "name": "synthetic-moderate-100000",
+          "official_rules": {
+            "daily_loss_pct": 5.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 10.0,
+            "min_trading_days": 2,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 5.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": null,
+          "ea_allowed": true,
+          "firm": "synthetic-moderate",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 400.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-moderate-100000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": 3.0
+          },
+          "id": "synthetic-strict-25000",
+          "initial_balance": 25000.0,
+          "name": "synthetic-strict-25000",
+          "official_rules": {
+            "daily_loss_pct": 5.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 10.0,
+            "min_trading_days": 2,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 8.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": null,
+          "ea_allowed": true,
+          "firm": "synthetic-strict",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 100.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-strict-25000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
+      },
+      {
+        "challenge": {
+          "description": "SYNTHETIC ONLY; not an official firm contract",
+          "extra_rules": {
+            "close_positions_on_fail": false,
+            "consistency": {
+              "enabled": false,
+              "max_best_day_share_pct": 50.0
+            },
+            "max_days_per_phase": 10,
+            "require_flat_to_pass": true,
+            "soft_daily_loss_pct": 3.0
+          },
+          "id": "synthetic-strict-100000",
+          "initial_balance": 100000.0,
+          "name": "synthetic-strict-100000",
+          "official_rules": {
+            "daily_loss_pct": 5.0,
+            "daily_loss_reference": "max_balance_equity",
+            "max_total_loss_pct": 10.0,
+            "min_trading_days": 2,
+            "reset_hour": 0,
+            "reset_timezone": "Europe/Prague",
+            "target_measured_on": "balance"
+          },
+          "phases": [
+            {
+              "name": "synthetic-evaluation",
+              "profit_target_pct": 8.0
+            }
+          ],
+          "risk": {
+            "allow_hedging": false,
+            "headroom_buffer_pct_of_baseline": 0.25,
+            "max_correlation": 0.85,
+            "max_currency_net_risk_pct_of_wc": 15.0,
+            "max_entry_deviation_to_sl_ratio": 0.15,
+            "max_margin_usage_pct": 50.0,
+            "max_open_positions": 5,
+            "max_spread_points": null,
+            "max_spread_to_sl_ratio": 0.25,
+            "max_total_open_risk_pct_of_wc": 30.0,
+            "max_trade_risk_pct_of_working_capital": 8.0,
+            "min_risk_reward": 0.0,
+            "over_cap_policy": "reject",
+            "working_capital_pct": 10.0
+          },
+          "universe": {
+            "allowed_categories": [
+              "FOREX_MAJOR",
+              "FOREX_MINOR",
+              "FOREX_JPY"
+            ],
+            "description": "",
+            "exclude_symbols": [],
+            "id": "inline",
+            "include_symbols": [],
+            "max_spread_atr_ratio": 0.15,
+            "sessions": {
+              "require_24_7": false,
+              "timezone": "UTC",
+              "weekdays": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "windows": []
+            },
+            "shortlist_size": 10
+          },
+          "universe_ref": null
+        },
+        "firm": {
+          "account_type": "fixture",
+          "allowed_symbols": [
+            "EURUSD"
+          ],
+          "constraints": null,
+          "ea_allowed": true,
+          "firm": "synthetic-strict",
+          "max_open_positions": null,
+          "phase": "evaluation",
+          "program": "synthetic",
+          "restrict_news": true,
+          "source_url": "https://example.test/synthetic-contract",
+          "valid_until": "2026-11-01T00:00:00+00:00",
+          "verified_at": "2026-10-01T00:00:00+00:00",
+          "version": "1"
+        },
+        "hypothetical_evaluation_fee": 400.0,
+        "hypothetical_operating_cost": 20.0,
+        "hypothetical_reward_on_pass": null,
+        "id": "synthetic-strict-100000",
+        "reset_drawdown_on_phase": false,
+        "simulation_only": true,
+        "symbol": "EURUSD"
       }
     ]
   },
@@ -626,6 +654,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 50.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -655,6 +686,9 @@
       "max_observed_drawdown_pct_initial": 6.1,
       "charged_simulated_trade_costs": 0.0,
       "costs_complete": false,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -681,6 +715,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 25.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -715,6 +752,9 @@
       "max_observed_drawdown_pct_initial": 2.1,
       "charged_simulated_trade_costs": 75.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -749,6 +789,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 200.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -778,6 +821,9 @@
       "max_observed_drawdown_pct_initial": 6.1,
       "charged_simulated_trade_costs": 0.0,
       "costs_complete": false,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -804,6 +850,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 100.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -838,6 +887,9 @@
       "max_observed_drawdown_pct_initial": 2.1,
       "charged_simulated_trade_costs": 300.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -872,6 +924,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 75.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -906,6 +961,9 @@
       "max_observed_drawdown_pct_initial": 6.1,
       "charged_simulated_trade_costs": 0.0,
       "costs_complete": false,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -932,6 +990,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 25.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -966,6 +1027,9 @@
       "max_observed_drawdown_pct_initial": 2.1,
       "charged_simulated_trade_costs": 75.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 100.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -1000,6 +1064,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 300.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -1034,6 +1101,9 @@
       "max_observed_drawdown_pct_initial": 6.1,
       "charged_simulated_trade_costs": 0.0,
       "costs_complete": false,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -1060,6 +1130,9 @@
       "max_observed_drawdown_pct_initial": 0.0,
       "charged_simulated_trade_costs": 100.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -1094,6 +1167,9 @@
       "max_observed_drawdown_pct_initial": 2.1,
       "charged_simulated_trade_costs": 300.0,
       "costs_complete": true,
+      "account_drawdown_observations": [],
+      "drawdown_state": null,
+      "drawdown_state_unavailable_reason": null,
       "hypothetical_evaluation_fee": 400.0,
       "hypothetical_operating_cost": 20.0,
       "hypothetical_reward": null,
@@ -1123,7 +1199,7 @@
   "limitations": [
     "No strategy returns, probability model, OOS edge or broker fills inferred",
     "Paths equally weighted by explicit scenario count; no real-world probability",
-    "Static watchdog rules only; no overnight, aggregate exposure or trailing campaign support",
+    "Static watchdog and explicitly supplied drawdown only; no overnight or aggregate exposure campaign support",
     "One flat episode at a time; no sizing, intrabar path or portfolio simulation",
     "Costs after a fatal intratrade trough are unknown, not assumed settled",
     "Rewards are explicit hypothetical inputs, never payouts or capital owned"

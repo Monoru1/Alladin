@@ -1,5 +1,20 @@
 # Alladin — Codex handoff — 2026-10-08
 
+## Lot 8 — 2026-10-08 : campagnes trailing et transitions de phase
+
+Base `8354460`. Challenge Factory compose le watchdog existant et les floors static/trailing_balance/trailing_equity/trailing_eod explicitement injectés en USD. Points de plus-haut d'equity avant creux, EOD explicite, reset d'ancrage de phase optionnel (false par défaut), état sérialisé/restart et observations de floors. POLICY_FAILED est terminal, non assimilé à un cas inachevé et sans récompense ; un creux négatif reste négatif, avec état non représentable signalé plutôt que fabriqué. Les autres contraintes (sessions/overnight/agrégats) et validation non flat restent rejetées. Aucun changement du watchdog opérationnel ou du RiskEngine.
+
+32 replays supplémentaires versionnés (4 modes × 2 allocations nominales × 4 chemins), en plus des 16 replays initiaux. Script accepte --fixture ; inputs et hashes sont canoniques, JSON identique entre processus de PYTHONHASHSEED différents. Les profils/trajectoires restent SYNTHÉTIQUES : aucune probabilité réelle, performance OOS, récompense effectivement reçue ou capital détenu inféré. Rapports et docs CHALLENGE_CAMPAIGNS.md mis à jour.
+
+ArchivedPolicyProvider accepte un sélecteur de phase explicitement injecté. Changer de phase exige un dossier disponible pour la nouvelle phase ; un dossier manquant bloque/revoit la proposition, sans fallback à l'ancienne phase. Aucun statut de compte financier découvert ou mode de trading promu automatiquement.
+
+Validation : **127 tests ciblés réussis** ; suite finale **1501 passed, 3 skipped MT5, 0 failed, 1 warning Starlette**, 228.69 s. Ruff src/tests/deux scripts **PASS** ; mypy **PASS, 117 fichiers** ; diff --check **PASS**. Trois rapports régénérés octet par octet à l’identique, campagne trailing testée entre processus. Versions/outils et manifeste du code testé : `docs/reports/policy_software_current.json`.
+
+Reprise Claude/Codex : lire les lots 7/8 et POLICY_ARCHIVE.md/CHALLENGE_CAMPAIGNS.md. Prochain chantier autonome : réservation atomique d'exposition et reconciliation PAPER, collecteurs complets/archives de couverture et campagnes de portefeuille/overnight. Dossiers toujours SIMULATION_ONLY, checkpoint toujours opt-in OBSERVE/PAPER. Contrats réels, sources complètes réellement vérifiées, MT5 DEMO, fills/reconciliation broker/endurance et validation de performance restent non qualifiés. Aucun compte financier, secret, achat ni trading réel ; Brain actif/Jafar/SNN-X préservés.
+
+---
+
+
 ## Lot 7 — 2026-10-08 : dossiers, archive et composite causal
 
 Base `b994334`. Dossiers persistants par AccountBinding/programme/phase, preuve documentaire et revue référencées, statut DRAFT/SIMULATION_ONLY, modes OBSERVE/PAPER uniquement. SQLite distinct du journal : documents bruts + batches liés à leur hash/réception, dossiers et révocations append-only/idempotents, intégrité des contenus, isolation et restart. Disponibilité inclut l'archivage local ; aucun fallback vers un ancien dossier/refresh permissif après expiration/révocation. Aucun compte/firme réellement admis.

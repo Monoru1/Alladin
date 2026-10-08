@@ -25,7 +25,7 @@ class ArchivedPolicyProvider:
         archive: PolicyArchive,
         binding: AccountBinding,
         program: str,
-        phase: str,
+        phase: str | Callable[[ActionProposal], str],
         mode: RunMode,
         open_positions: Callable[[ActionProposal], int],
         account_state: Callable[[ActionProposal], AccountPolicyState | None] = lambda _: None,
@@ -34,7 +34,11 @@ class ArchivedPolicyProvider:
         proposed_risk: Callable[[ActionProposal], float | None] = lambda _: None,
         exposure_group: Callable[[ActionProposal], str | None] = lambda _: None,
     ) -> None:
-        if mode not in {RunMode.OBSERVE, RunMode.PAPER} or not program.strip() or not phase.strip():
+        if (
+            mode not in {RunMode.OBSERVE, RunMode.PAPER}
+            or not program.strip()
+            or (isinstance(phase, str) and not phase.strip())
+        ):
             raise ValueError("explicit OBSERVE/PAPER program and phase required")
         self.archive, self.binding, self.program, self.phase, self.mode = (
             archive,
@@ -54,10 +58,11 @@ class ArchivedPolicyProvider:
     def __call__(self, proposal: ActionProposal) -> PolicyContext:
         if proposal.symbol is None:
             raise ValueError("market proposal required")
+        phase = self.phase(proposal) if callable(self.phase) else self.phase
         dossier = self.archive.resolve_dossier(
             binding=self.binding,
             program=self.program,
-            phase=self.phase,
+            phase=phase,
             mode=self.mode,
             now=proposal.timestamp,
         )

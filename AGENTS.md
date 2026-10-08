@@ -1,5 +1,10 @@
 # ALLADIN — Instructions pour Codex et agents de développement
 
+## État actuel après lot 8
+
+Lire les derniers handoffs, POLICY_ARCHIVE.md et CHALLENGE_CAMPAIGNS.md. Campagnes trailing configurées, EOD/reset explicites et sélecteur de phase testés ; 32 replays supplémentaires synthétiques. Dernière suite réellement exécutée : **1501 passed, 3 skipped MT5, 0 failed**, Ruff/mypy PASS (117 fichiers). Aucun dossier financier admis ni mode d’exécution promu ; checkpoint opt-in OBSERVE/PAPER.
+
+
 ## État actuel après lot 7
 
 Lire le dernier bloc des handoffs et docs/POLICY_ARCHIVE.md. Dossiers SIMULATION_ONLY persistants, archive causale et composite à gaps raccordés passivement au checkpoint opt-in OBSERVE/PAPER. Aucun compte réellement admis ni source publique partielle transformée en couverture complète. Dernière suite : 1484 passed, 3 skipped MT5 ; Ruff/mypy PASS (117 fichiers).
