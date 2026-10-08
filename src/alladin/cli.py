@@ -24,7 +24,6 @@ from alladin.market.scanner import MarketScanner
 from alladin.market.universe import MarketUniverse
 from alladin.orchestration.bootstrap import Components, build_services, make_agent, make_broker
 from alladin.report import money, status_block
-from alladin.risk import sizing
 from alladin.risk.exposure import compute_exposure
 
 for _stream in (sys.stdout, sys.stderr):  # Windows : évite les UnicodeEncodeError (pipes cp1252)
