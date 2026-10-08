@@ -1,5 +1,15 @@
 # ALLADIN — Plan d'implémentation
 
+## Complément 2026-10-08 — lot PolicyGate sans MT5
+
+- **IMPLEMENTED ISOLATED** : `src/alladin/challenge/policy_gate.py`, évaluation déterministe composée (OPEN, CLOSE, PARTIAL_CLOSE, MODIFY_STOP, MODIFY_TARGET, HOLD).
+- **ADDED / NOT RUN HERE** : `tests/test_policy_gate.py` (restrictions macro, calendrier absent, profil absent, firme, sortie/revue).
+- **NOT INTEGRATED** : tout raccordement à `ExecutionService`, acquisition de données de calendrier, profils de firmes réels, gestion de SL/TP côté broker, qualification 24/7.
+- Prochaine étape sans MT5 : `python -m pytest tests/test_propfirm_policy_foundations.py tests/test_policy_gate.py -q`, lint/typecheck, tests causaux / limites et REVIEW de l'architecture des sorties.
+
+---
+
+
 **Mis à jour :** 2026-10-05 · **Base :** lot Mission Control/soak courant (`main`)
 **Autorité :** le code et ses tests établissent l'existant ; les décisions `ADOPTED` de `docs/DECISIONS/` établissent la direction. Une cible documentaire n'est pas une capacité livrée.
 
