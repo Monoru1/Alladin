@@ -27,6 +27,14 @@ def classify_symbol(spec: InstrumentSpec) -> AssetCategory:
     base, quote = spec.currency_base.upper(), spec.currency_profit.upper()
     if base in _METALS:
         return AssetCategory.METAL
+    # Broker-proven cash indices only. Do not include shares, forwards or perps.
+    path_parts = {part.casefold() for part in spec.path.replace("/", "\\").split("\\")}
+    if (
+        spec.symbol.upper() in {"NAS100", "US500", "US30"}
+        and any("indice" in part or "index" in part for part in path_parts)
+        and spec.is_forex_like is False
+    ):
+        return AssetCategory.INDEX
     # Actions/indices/futures CFD ont souvent base == profit == USD : ce ne sont pas des paires de devises.
     if base == quote or spec.is_forex_like is False:
         return AssetCategory.OTHER
