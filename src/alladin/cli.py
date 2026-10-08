@@ -223,6 +223,7 @@ def mt5_test_order(
         typer.Option(help="% du capital de travail (défaut : le plus petit possible ≈ volume minimum)"),
     ] = None,
     run: RunOpt = None,
+    dry_run_only: Annotated[bool, typer.Option("--dry-run-only", help="Pré-évaluation seulement ; ne jamais envoyer d'ordre")] = False,
 ) -> None:
     """Ordre DEMO de TEST D'INTÉGRATION (run SYSTEM-TEST-nnn, jamais un RUN officiel), via tout le pipeline."""
     settings = get_settings()
@@ -351,6 +352,10 @@ def mt5_test_order(
     out("RISK ENGINE: APPROVED")
     for a in d.adjustments:
         out(f"  ajustement: {a}")
+    if dry_run_only:
+        out("\nDRY RUN ONLY : pré-évaluation terminée, aucun ordre ne sera envoyé.")
+        broker.disconnect()
+        return
     out("\nCet ordre sera envoyé sur le compte DEMO ci-dessus.")
 
     # 2. confirmation explicite : il faut TAPER le mot EXECUTE
