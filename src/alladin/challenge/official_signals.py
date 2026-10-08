@@ -31,7 +31,7 @@ class OfficialSource:
     hostname: str
 
     def __post_init__(self) -> None:
-        if not self.source_id.strip() or not self.hostname or self.hostname != self.hostname.lower():
+        if (not self.source_id.strip() or not self.hostname or\n                self.hostname != self.hostname.lower() or\n                any(char in self.hostname for char in "/:@?#")):
             raise ValueError("invalid official source")
         if _host("https://" + self.hostname) != self.hostname:
             raise ValueError("invalid source hostname")
