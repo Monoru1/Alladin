@@ -299,13 +299,12 @@ def mt5_test_order(
         d = side_e.sign
         px = tick.ask if side_e is Side.BUY else tick.bid
         sl, tp = stop_prices(spec, entry=px, direction=d, distance=stop_distance, rr=rr)
-        wc = sizing.working_capital(acct.equity, comps.profile.risk.working_capital_pct)
         if risk_pct is not None:
             pct = risk_pct
         else:
-            # Budget de test explicite et stable pendant ce run : ne dépend pas du premier tick.
-            # Le RiskEngine conserve le dernier mot sur le volume minimum et tous les plafonds.
-            pct = 0.1
+            # Budget de test stable (0,05 % du capital de travail), indépendant du tick.
+            # Le RiskEngine refuse si le minimum broker dépasse ce budget.
+            pct = 0.05
         now = broker.now()
         return TradeIntent(
             run_id=comps.run.run_id,
