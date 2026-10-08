@@ -65,6 +65,8 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 29. [DECISION-029 — SNN-X-06 — Dream Engine et consolidation hors production (ADOPTED)](./DECISION-029-SNN-X-DREAM-ENGINE.md)
 30. [DECISION-030 — Binance Spot natif pour Jafar et credentials Ed25519 locaux (ADOPTED)](./DECISION-030-JAFAR-BINANCE-SPOT-ED25519.md)
 
+31. [DECISION-031 — Univers multi-marchés FTMO et sélection de symboles (ADOPTED ; performances EXPERIMENTAL)](./DECISION-031-FTMO-MULTI-MARKET-SYMBOLS.md)
+
 ## Source de vérité
 
 - Architecture SNN : `docs/SNN/ALLADIN_SNN_BIBLE.md`
