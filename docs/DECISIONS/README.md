@@ -67,6 +67,11 @@ Les décisions ne sont pas des vérités éternelles. Si une expérience invalid
 
 31. [DECISION-031 — Univers multi-marchés FTMO et sélection de symboles (ADOPTED ; performances EXPERIMENTAL)](./DECISION-031-FTMO-MULTI-MARKET-SYMBOLS.md)
 
+32. [DECISION-032 — Economic Intelligence et décisions sensibles aux annonces (ADOPTED ; efficacité EXPERIMENTAL)](./DECISION-032-ECONOMIC-INTELLIGENCE.md)
+33. [DECISION-033 — Moteur multi-prop-firm et conformité par compte (ADOPTED ; intégrations PLANNED)](./DECISION-033-MULTI-PROPFIRM-COMPLIANCE.md)
+34. [DECISION-034 — Capital Engine : objectifs, preuve et croissance (ADOPTED ; performances EXPERIMENTAL)](./DECISION-034-CAPITAL-ENGINE-OBJECTIVES.md)
+35. [DECISION-035 — Autonomie surveillée, qualité et observabilité (ADOPTED ; qualification PLANNED)](./DECISION-035-AUTONOMOUS-OPERATIONS-QUALITY.md)
+
 ## Source de vérité
 
 - Architecture SNN : `docs/SNN/ALLADIN_SNN_BIBLE.md`
