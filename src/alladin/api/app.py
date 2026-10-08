@@ -223,6 +223,13 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
             result.append(row)
         return result
 
+    @app.get("/api/trades")
+    def trades(run_id: str | None = None) -> dict[str, Any]:
+        """Read-only journal trade lifecycle. Does not infer MT5 closure or realized P&L."""
+        rid = latest(run_id).run_id
+        rows = repo.trades_for_run(rid)
+        return {"run_id": rid, "trades": [t.model_dump(mode="json") for t in rows]}
+
     @app.get("/api/market")
     def market(run_id: str | None = None) -> dict[str, Any]:
         rec = latest(run_id)
