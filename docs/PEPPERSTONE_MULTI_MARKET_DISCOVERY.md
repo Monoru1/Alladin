@@ -74,3 +74,11 @@ Prix non nuls et 100 barres H1 reçues pour chacun. Âge brut négatif d'environ
 - Correctif scanner : ticks futurs >5 s, non finis, bid<=0, ask<=bid et ticks périmés rejetés avant historique/analyse ; tests déterministes ajoutés. Résultats tests post-correctif à exécuter, **aucun PASS inventé**.
 - Rapport de recette enrichi : comptes candidats/rejets, régimes ; `execution=NOT_INVOKED`, `policy_and_portfolio_approval=NOT_EVALUATED`, scores non probabilistes. Les rapports précédents portent l'ancien champ `order_count=0` : ils ne constituent pas une preuve d'audit des ordres au niveau broker.
 - À poursuivre selon décisions 021/031–035 : isoler la paire Forex absente de l'inventaire, qualité barres sur les quatre timeframes, risques de corrélation, frais/slippage, calendriers et conformité par compte, replay causal, supervision/restart, puis PAPER et DEMO seulement après validation. Jafar/SNN-X isolés ; aucune promotion automatique.
+
+## Recette scanner 03 validée par l'utilisateur — 2026-10-08
+- Windows PepperstoneUK-Demo, `offset_source=auto`, UTC+3 ; 8 demandés, 8 admissibles, 8 analysés, 8 candidats, **0 rejet**, 0.969 s ; 8 régimes RANGE.
+- Candidats : XAGUSD 0.7674, EURUSD 0.7319, GBPUSD 0.6910, US30 0.6479, NAS100 0.6421, US500 0.6238, XAUUSD 0.5609, USDJPY 0.5447. Scores relatifs du scanner, **pas** des probabilités de profit ni autorisations d'ordres.
+- `tests/test_scanner_tick_quality.py` + `tests/test_pepperstone_index_classification.py` : **21 passed** en 0.09 s. `mypy src/alladin/market/scanner.py` : PASS.
+- Ruff : une seule erreur I001 (imports non triés dans scanner.py), corrigée dans le commit `1645f22` ; Ruff après correctif **non encore exécuté**. Ne pas présenter le lot comme globalement validé avant cette vérification.
+- Aucun ordre ni PolicyGate/RiskEngine invoqué (`execution=NOT_INVOKED`, `policy_and_portfolio_approval=NOT_EVALUATED`). Cette recette n'évalue ni coûts nets, ni risque portefeuille, ni news, ni conformité prop firm, ni endurance.
+- Suite : confirmer Ruff, lancer une recette progressive 12 symboles maximum, inspecter les rejets des Forex, instrumenter couverture temporelle/historique et latence ; ne pas confondre la forte proportion RANGE sur un instantané avec une loi de marché.
