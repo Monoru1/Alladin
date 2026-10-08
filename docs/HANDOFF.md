@@ -1,10 +1,21 @@
 # ALLADIN — Agent Handoff & Operating Manual
 
-**Dernière mise à jour : 2026-10-04**
+**Dernière mise à jour : 2026-10-08**
 **Audience : Claude Code, Codex, ChatGPT et tout agent travaillant sur le repository**
 **Rôle : point d'entrée obligatoire avant toute modification structurelle**
 
 ---
+
+## Décision 031 — Univers FTMO multi-marchés (2026-10-08)
+
+Lire [DECISION-031](DECISIONS/DECISION-031-FTMO-MULTI-MARKET-SYMBOLS.md) avant tout travail sur l'univers de symboles, la sélection d'opportunités ou les challenges. **Décision documentaire uniquement : ne pas supposer que les nouveaux symboles, scanner, calendrier ou simulateur sont implémentés.**
+
+- Étendre progressivement Forex vers indices US100/US500/US30, métaux XAUUSD/XAGUSD, puis pétrole et autres CFD si le broker les expose réellement ; première cohorte : US100, XAUUSD, US500, EURUSD, GBPUSD, USDJPY.
+- Résoudre dynamiquement les noms et spécifications des instruments depuis le compte MT5/broker, sans coder en dur des alias FTMO.
+- Sélectionner les opportunités selon coûts, liquidité, régimes, calendrier économique et corrélations ; le risque portefeuille et le ChallengeWatchdog restent souverains.
+- Démontrer la robustesse par backtests causaux OOS, PAPER, DEMO et challenges simulés répétés. Le passage à une évaluation payante ou à tout environnement à enjeu financier nécessite une autorisation humaine explicite.
+- Les métriques prioritaires sont la probabilité de validation complète et de respect des règles, le drawdown, les coûts et les récompenses réellement encaissables, pas le nombre de symboles ou de trades.
+- Préserver Alladin existant, Jafar et SNN-X en parallèle ; aucune activation LIVE ni promesse de rentabilité par cette décision.
 
 ## Décisions SNN-X — reprise Claude du 2026-10-04
 
