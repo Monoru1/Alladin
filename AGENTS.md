@@ -1,5 +1,12 @@
 # ALLADIN — Instructions pour Codex et agents de développement
 
+## Lot PolicyGate sans MT5 (2026-10-08)
+
+Lire `docs/HANDOFF.md`. Le module `src/alladin/challenge/policy_gate.py` et ses tests `tests/test_policy_gate.py` sont maintenant sur main : évaluation pure des ouvertures/sorties/modifications avec firm profile + calendrier, sans exécution. Ne pas prétendre qu'il est activé dans `ExecutionService`. Tests non exécutés dans la session de création. Préférer une batterie de tests déterministes et une revue humaine des sorties protectrices avant intégration OBSERVE/PAPER. Maintenir les protections DEMO/LIVE.
+
+---
+
+
 Ce fichier complète et ne remplace PAS `docs/HANDOFF.md`, source de vérité opérationnelle. Avant modification : lire `docs/HANDOFF.md`, `docs/DECISIONS/README.md`, puis les décisions concernées et le code existant.
 
 ## Priorité 2026-10-08
