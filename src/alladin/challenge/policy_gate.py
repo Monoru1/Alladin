@@ -53,6 +53,10 @@ class PolicyContext:
     proposed_side: Side | None = None
     protective: bool = False
     native_protection_active: bool = False
+    dossier_id: str | None = None
+    dossier_sha256: str | None = None
+    calendar_gaps: tuple[str, ...] = ()
+    calendar_batch_sha256: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

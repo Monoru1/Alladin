@@ -1,5 +1,18 @@
 # ALLADIN — Plan d'implémentation
 
+## Lot 7 — 2026-10-08 : dossiers, archive et composite causal
+
+Base `b994334`. Dossiers persistants par AccountBinding/programme/phase, preuve documentaire et revue référencées, statut DRAFT/SIMULATION_ONLY, modes OBSERVE/PAPER uniquement. SQLite distinct du journal : documents bruts + batches liés à leur hash/réception, dossiers et révocations append-only/idempotents, intégrité des contenus, isolation et restart. Disponibilité inclut l'archivage local ; aucun fallback vers un ancien dossier/refresh permissif après expiration/révocation. Aucun compte/firme réellement admis.
+
+Composite calendrier : sources exigées par symbole et horizons, preuve de batch, identifiants qualifiés par source, gaps explicites. Aucun assemblage de sources partielles n'est promu complet ; BLS/BEA restent partiels. ArchivedPolicyProvider assemble passivement les snapshots injectés, vérifie mode/binding et alimente le checkpoint existant sans réseau ni ordre. Journal enrichi des IDs/hashes dossier/batches/gaps. Hashes canoniques stables entre processus/fuseaux. Voir `docs/POLICY_ARCHIVE.md`.
+
+Validation : **49 nouveaux tests ciblés réussis** ; suite **1484 passed, 3 skipped MT5, 0 failed, 1 warning Starlette**, 220.55 s. Ruff global src/tests/deux scripts **PASS** ; mypy **PASS, 117 fichiers** ; diff --check **PASS**. Environnement isolé Python 3.12.14 recréé, versions et hashes dans `docs/reports/policy_software_current.json`. Intégration de gestion PAPER via MockBroker sans envoi broker testée. Aucune activation globale, migration du journal existant, modification du Brain/RiskEngine/Jafar/SNN-X ou accès financier.
+
+Limites : DOCUMENT_REFERENCE n'authentifie pas un contrat ; hashes locaux ne résistent pas à une réécriture malveillante totale de la base. Complétude des sources externes et mappings encore à vérifier. Collecteurs/réservations atomiques multi-comptes et recette MT5 DEMO/endurance non raccordés. Prochain lot : étendre la campagne aux floors trailing avec état causal et points d'observation explicites, puis réservations/reconciliation PAPER. Les anciens blocs restent historiques.
+
+---
+
+
 ## Point de reprise mesurable de cette session
 
 | Chantier | Code livré | Limite restante |

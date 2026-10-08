@@ -78,6 +78,8 @@ class CalendarBatch(BaseModel):
     revisions: tuple[CalendarRevision, ...]
     coverage_complete: bool | None = Field(default=None, strict=True)
     document_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    coverage_start: AwareDatetime | None = None
+    coverage_end: AwareDatetime | None = None
 
     @field_validator("observed_at", "valid_until")
     @classmethod
@@ -87,6 +89,11 @@ class CalendarBatch(BaseModel):
             if (roundtrip.replace(tzinfo=None), roundtrip.fold) != (value.replace(tzinfo=None), value.fold):
                 raise ValueError("nonexistent or invalid local DST timestamp")
         return value.astimezone(UTC)
+
+    @field_validator("coverage_start", "coverage_end")
+    @classmethod
+    def utc_horizon(cls, value: datetime | None) -> datetime | None:
+        return cls.utc_times(value) if value is not None else None
 
     @field_validator("source", "source_url", "licence")
     @classmethod
@@ -99,6 +106,10 @@ class CalendarBatch(BaseModel):
     def validate_refresh(self) -> CalendarBatch:
         if self.valid_until < self.observed_at:
             raise ValueError("refresh expiry precedes observation")
+        if (self.coverage_start is None) != (self.coverage_end is None):
+            raise ValueError("both coverage horizon boundaries required")
+        if self.coverage_start is not None and self.coverage_end is not None and self.coverage_end < self.coverage_start:
+            raise ValueError("invalid coverage horizon")
         ids: set[tuple[str, int]] = set()
         latest: dict[str, CalendarRevision] = {}
         for row in sorted(self.revisions, key=lambda r: (r.event_id, r.revision)):

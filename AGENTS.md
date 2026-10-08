@@ -1,5 +1,10 @@
 # ALLADIN — Instructions pour Codex et agents de développement
 
+## État actuel après lot 7
+
+Lire le dernier bloc des handoffs et docs/POLICY_ARCHIVE.md. Dossiers SIMULATION_ONLY persistants, archive causale et composite à gaps raccordés passivement au checkpoint opt-in OBSERVE/PAPER. Aucun compte réellement admis ni source publique partielle transformée en couverture complète. Dernière suite : 1484 passed, 3 skipped MT5 ; Ruff/mypy PASS (117 fichiers).
+
+
 ## État actuel après lot 6 du 2026-10-08
 
 Lire le dernier bloc des handoffs et le tableau actuel du plan. Campagnes synthétiques reproductibles et audit après fill SL/TP PAPER livrés ; checkpoint toujours opt-in OBSERVE/PAPER. Dernière suite finale réellement exécutée : **1435 passed, 3 skipped MT5, 0 failed** ; Ruff PASS, mypy PASS (112 fichiers). Preuves : docs/reports/policy_software_current.json. Aucun contrat réel, trading, compte, disponibilité 24/7 ou performance admis par ces tests.

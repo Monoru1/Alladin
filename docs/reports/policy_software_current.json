@@ -1,8 +1,9 @@
 {
   "schema_version": 1,
+  "lot": 7,
   "scope": "SOFTWARE_ONLY_OBSERVE_PAPER_AND_SYNTHETIC_CAMPAIGNS",
-  "base_commit": "0b030edbe4ef5d38738e56b9615d171d8af9bff4",
-  "tested_source_manifest_sha256": "0b27b9e22157b12cce00a9f027008973f64f1ef3c78473a17af148845092788b",
+  "base_commit": "b994334e194c19682db6943382ad9fe5c395ab08",
+  "tested_source_manifest_sha256": "3bf667169f9f72fd7f07f75decbc8cc68c35751d8bc329046507f4b24ca309b1",
   "source_manifest": [
     {
       "path": "config/challenge_profiles/ftmo_2step_demo.yaml",
@@ -129,12 +130,16 @@
       "sha256": "bd33694cd8154fd590c7776c9a843fbd284b264163b4c6a2901a7f668bb231a0"
     },
     {
+      "path": "src/alladin/challenge/calendar_composite.py",
+      "sha256": "d343aa6a10d03ea1b088f113a208ea0c69730c13a3ef85995d738236e69f9513"
+    },
+    {
       "path": "src/alladin/challenge/capital_metrics.py",
       "sha256": "618342abe3d87b7602830071cba3e434c54741b70237557f6b6b8dea917f3b33"
     },
     {
       "path": "src/alladin/challenge/economic_calendar.py",
-      "sha256": "4ad6e602161be66feccf5130276817f9c12ee9388fb07d82f9315cdf2c9d5344"
+      "sha256": "d8e23cbece80bc837ddd95bd4a9bc4bd2d4904fb18f77d53b4a460cd20ce61be"
     },
     {
       "path": "src/alladin/challenge/event_policy.py",
@@ -153,12 +158,24 @@
       "sha256": "96f2b4a4d15da4b8de6fa9025481c6ec026fb63e7f61a62ea956ba71e4de2e77"
     },
     {
+      "path": "src/alladin/challenge/policy_archive.py",
+      "sha256": "fcd940597ab8dc1357d65f3e0d8ccbcfc33403114d948968e6a842f5743a2a78"
+    },
+    {
+      "path": "src/alladin/challenge/policy_dossier.py",
+      "sha256": "2504abcf99dfedd73cd9772fcb218ddbdc850594a5aebfc2ed24f0e52f63a989"
+    },
+    {
       "path": "src/alladin/challenge/policy_gate.py",
-      "sha256": "dd232eeac720a7e05e66b69897998f7ce1d944f011c07acf923e60e7e45318c5"
+      "sha256": "d913ac7da977eab3b7121d2b9cc46bee83568c7d7fad83ded08f41fb7c348987"
     },
     {
       "path": "src/alladin/challenge/policy_quality.py",
       "sha256": "ecd734d2be295e39fba42876a8768db61627daebf13e0a67069474fe40670e4a"
+    },
+    {
+      "path": "src/alladin/challenge/policy_serialization.py",
+      "sha256": "4a1fa364bd5fc1de1a35e11da0e6babe67d18e1bf988177256eaaacbb3232360"
     },
     {
       "path": "src/alladin/challenge/profiles.py",
@@ -346,7 +363,11 @@
     },
     {
       "path": "src/alladin/orchestration/policy_control.py",
-      "sha256": "b747782f350b9580c4e8a9643cd159381dce51ad6869d934fb43557c8b9d103f"
+      "sha256": "24fdbbbe5da4f49a84ecf5c1ff53cb99b14517c04d1302bea4473536bde505e3"
+    },
+    {
+      "path": "src/alladin/orchestration/policy_provider.py",
+      "sha256": "d8d2bb9b9a7790febb0ba22f7968f654797443fcc276f10ffe1b791d2f07f2bb"
     },
     {
       "path": "src/alladin/orchestration/state.py",
@@ -537,6 +558,10 @@
       "sha256": "b6d4f3226b665fcc0361c35dc638b9ce3b39560516e45699252a52ace6297b8b"
     },
     {
+      "path": "tests/test_calendar_composite.py",
+      "sha256": "1c2dddfb8bfadfb76faece95820344b12be1b7a89b720df11c6654215497e9cd"
+    },
+    {
       "path": "tests/test_challenge_factory.py",
       "sha256": "6da819b5eca253ce25834f4005849aeb397e8ba5276527b34bc5a479bc2d1123"
     },
@@ -653,6 +678,10 @@
       "sha256": "6105d181d0043edb80345dfda5ea9c5ed6e22caf8595c2454d9145243ebfcce5"
     },
     {
+      "path": "tests/test_policy_archive.py",
+      "sha256": "ee7e3f44332b21656365dca633bf1b5c174bd99ccfe1d23410a2123f9863ec32"
+    },
+    {
       "path": "tests/test_policy_compliance_simulation.py",
       "sha256": "db90cbea769ef4ae0df1920798c519eca8e44c36befeeddba52d33f07aade67b"
     },
@@ -671,6 +700,10 @@
     {
       "path": "tests/test_policy_market_stress.py",
       "sha256": "73570c54ad18dd9bece44c128a6b8c51b3239ce7e287930be6e572e809e2eb6e"
+    },
+    {
+      "path": "tests/test_policy_provider.py",
+      "sha256": "c11350755a5c4e7ca2e19871036852b2cb584db23f40af6215bdefa045c2bea7"
     },
     {
       "path": "tests/test_policy_quality.py",
@@ -747,21 +780,14 @@
     "fastapi": "0.142.4"
   },
   "full_suite": {
-    "command": "python -m pytest -o addopts='' -q --junitxml=/tmp/alladin-final-software.xml",
-    "passed": 1435,
+    "command": "python -m pytest -o addopts='' -q --junitxml=/tmp/alladin-lot7.xml",
+    "passed": 1484,
     "skipped": 3,
     "failed": 0,
     "errors": 0,
     "warnings": 1,
-    "seconds": 132.41,
-    "junit_sha256": "c7f36a4ea71c17f1c57328ff066fda14bcd233fc629e3d1519a1464f8c4f6788"
-  },
-  "targeted_suite": {
-    "command": "python -m pytest -o addopts='' -q tests/test_account_policy.py tests/test_economic_calendar.py tests/test_policy*.py tests/test_propfirm_policy_foundations.py tests/test_public_calendar.py tests/test_challenge_factory.py",
-    "passed": 498,
-    "failed": 0,
-    "skipped": 0,
-    "warnings": 1
+    "seconds": 220.55,
+    "junit_sha256": "2dc9eaf852cbcf13a720512ffbde66aa56c8cd77bca470ae9c9d44ef9cc2566b"
   },
   "skips": [
     {
@@ -784,20 +810,19 @@
   "mypy": {
     "command": "python -m mypy src/alladin scripts/report_policy_quality.py scripts/report_challenge_campaign.py",
     "status": "PASS",
-    "files": 112
+    "files": 117
   },
   "diff_check": "PASS",
-  "report_replay": "Byte-identical policy_quality_fixture.json and challenge_campaign_fixture.json",
   "execution_authorized": false,
   "mt5_acceptance": false,
   "performance_qualified": false,
   "unattended_qualified": false,
   "warning": "Starlette TestClient/httpx deprecation",
   "limitations": [
-    "No real account admission or trading enabled",
-    "Partial public calendars; no complete composite collector enabled",
-    "Synthetic scenario fractions are not real-world probability estimates",
-    "No atomic cross-process exposure reservation",
-    "No MT5 native fill, Windows reconciliation or endurance qualification"
+    "Simulation-only dossiers do not certify official contracts",
+    "Public calendar coverage remains partial; no complete real source activated",
+    "No atomic cross-process exposure reservation or broker reconciliation",
+    "Synthetic campaign outcomes are not real-world probability or OOS performance",
+    "No MT5 acceptance or prolonged endurance"
   ]
 }

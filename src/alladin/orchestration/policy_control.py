@@ -9,11 +9,8 @@ import hashlib
 import json
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import asdict, replace
-from datetime import datetime
+from dataclasses import replace
 from typing import Any
-
-from pydantic import BaseModel
 
 from alladin.brain import Action, ActionProposal, ProposalParameters, proposal_identity
 from alladin.challenge.policy_gate import (
@@ -24,10 +21,12 @@ from alladin.challenge.policy_gate import (
     evaluate_action,
 )
 from alladin.challenge.policy_quality import DATA_UNAVAILABLE_REASONS
+from alladin.challenge.policy_serialization import evidence_sha256
 from alladin.core.enums import RunMode, Side
 from alladin.core.workspace import AccountBinding
 from alladin.journal.service import JournalService
 from alladin.market.paper import PaperPosition
+from alladin.orchestration.policy_provider import ArchivedPolicyProvider
 
 ACTION_MAP = {Action.LONG: ProposedAction.OPEN, Action.SHORT: ProposedAction.OPEN,
               Action.CLOSE: ProposedAction.CLOSE, Action.PARTIAL_CLOSE: ProposedAction.PARTIAL_CLOSE,
@@ -36,17 +35,7 @@ ACTION_MAP = {Action.LONG: ProposedAction.OPEN, Action.SHORT: ProposedAction.OPE
 
 
 def context_hash(context: PolicyContext) -> str:
-    def encode(value: Any) -> Any:
-        if isinstance(value, datetime):
-            return value.isoformat()
-        if isinstance(value, BaseModel):
-            return value.model_dump(mode="json")
-        if isinstance(value, (set, frozenset)):
-            return sorted(value)
-        raise TypeError("unsupported policy context evidence")
-
-    text = json.dumps(asdict(context), sort_keys=True, allow_nan=False, default=encode, separators=(",", ":"))
-    return hashlib.sha256(text.encode()).hexdigest()
+    return evidence_sha256(context)
 
 
 class PolicyController:
@@ -69,6 +58,9 @@ class PolicyController:
         error = None
         digest = None
         try:
+            if isinstance(self.context_provider, ArchivedPolicyProvider) and (
+                    self.context_provider.mode is not mode or self.context_provider.binding != self.binding):
+                raise ValueError("archived provider mode/account mismatch")
             context = self.context_provider(proposal)
             if not isinstance(context, PolicyContext):
                 context = None
@@ -102,6 +94,10 @@ class PolicyController:
             "profile_version": profile.version if profile else None,
             "profile_source": profile.source_url if profile else None,
             "context_sha256": digest,
+            "dossier_id": context.dossier_id if context else None,
+            "dossier_sha256": context.dossier_sha256 if context else None,
+            "calendar_gaps": list(context.calendar_gaps) if context else [],
+            "calendar_batch_sha256": [list(pair) for pair in context.calendar_batch_sha256] if context else [],
             "calendar_source": calendar.source if calendar else None,
             "calendar_as_of": calendar.as_of.isoformat() if calendar else None,
             "calendar_valid_until": calendar.valid_until.isoformat() if calendar else None,
