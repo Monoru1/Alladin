@@ -16,8 +16,16 @@ $commands = @(
 foreach ($task in $commands) {
     $log = Join-Path $dir ($task.Name + '.log')
     $started = (Get-Date).ToUniversalTime().ToString('o')
-    & $task.Executable @($task.Arguments) *>&1 | Out-File -FilePath $log -Encoding utf8
-    $exit = $LASTEXITCODE
+    # Native stderr warnings (e.g. Git permission-denied temp dirs) must not
+    # become terminating PowerShell errors before pytest has a chance to run.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $task.Executable @($task.Arguments) 2>&1 | Out-File -FilePath $log -Encoding utf8
+        $exit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
     $summary += [pscustomobject]@{name=$task.Name; exit_code=$exit; started_utc=$started; log=$log}
     if ($exit -ne 0) { break }
 }
