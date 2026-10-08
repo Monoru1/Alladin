@@ -218,6 +218,7 @@ def mt5_test_order(
     side: Annotated[str, typer.Option(help="BUY | SELL")] = "BUY",
     sl_pips: Annotated[float, typer.Option(help="Distance du stop loss en pips")] = 20.0,
     rr: Annotated[float, typer.Option(help="Ratio gain/risque du TP")] = 2.0,
+    sl_price_distance: Annotated[float | None, typer.Option("--sl-price-distance", help="Distance SL en unités de prix (obligatoire pour CFD/indices)")] = None,
     risk_pct: Annotated[
         float | None,
         typer.Option(help="% du capital de travail (défaut : le plus petit possible ≈ volume minimum)"),
@@ -281,16 +282,23 @@ def mt5_test_order(
             2,
         )
     symbol = spec.symbol
+    # A CFD index is not a Forex pip: require an explicit price-unit distance.
+    from alladin.market.test_order_geometry import stop_distance_in_price, stop_prices
+
+    try:
+        stop_distance = stop_distance_in_price(spec, sl_pips=sl_pips, price_distance=sl_price_distance)
+    except ValueError as exc:
+        raise die(str(exc), 2) from exc
+    if not 0 < rr <= 10:
+        raise die("--rr doit être dans ]0, 10]", 2)
 
     def build_intent() -> TradeIntent:
         tick = broker.tick(symbol)
         if tick is None:
             raise die(f"Aucun tick pour {symbol} (marché fermé ?)", 2)
         d = side_e.sign
-        pip = spec.point * 10
         px = tick.ask if side_e is Side.BUY else tick.bid
-        sl = round(px - d * sl_pips * pip, spec.digits)
-        tp = round(px + d * sl_pips * rr * pip, spec.digits)
+        sl, tp = stop_prices(spec, entry=px, direction=d, distance=stop_distance, rr=rr)
         wc = sizing.working_capital(acct.equity, comps.profile.risk.working_capital_pct)
         if risk_pct is not None:
             pct = risk_pct
@@ -343,7 +351,7 @@ def mt5_test_order(
     ccy = acct.currency
     out(f"entry: {d.entry_price} | SL: {d.stop_loss} | TP: {d.take_profit}")
     out(
-        f"distance SL: {sl_dist:.{spec.digits}f} ({sl_dist / (spec.point * 10):.1f} pips) | RR: {abs(d.take_profit - d.entry_price) / sl_dist:.2f}"
+        f"distance SL: {sl_dist:.{spec.digits}f} unités de prix | RR: {abs(d.take_profit - d.entry_price) / sl_dist:.2f}"
     )
     out(
         f"risk requested: {it.requested_risk_pct_of_working_capital:g}% du capital de travail = {money(d.requested_risk_amount, ccy)}"
