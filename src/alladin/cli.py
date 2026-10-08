@@ -302,9 +302,10 @@ def mt5_test_order(
         wc = sizing.working_capital(acct.equity, comps.profile.risk.working_capital_pct)
         if risk_pct is not None:
             pct = risk_pct
-        else:  # juste assez de risque pour le volume minimum du broker
-            lpl = sizing.loss_per_lot(spec, px, sl)
-            pct = max(0.01, round(lpl * spec.volume_min * 1.05 / wc * 100, 4)) if wc > 0 else 0.01
+        else:
+            # Budget de test explicite et stable pendant ce run : ne dépend pas du premier tick.
+            # Le RiskEngine conserve le dernier mot sur le volume minimum et tous les plafonds.
+            pct = 0.1
         now = broker.now()
         return TradeIntent(
             run_id=comps.run.run_id,
