@@ -1,3 +1,14 @@
+## Jalon intégration Nasdaq et TradingView — 2026-10-08 (à valider)
+L'utilisateur a confirmé la suite Windows **1564 passed, 3 skipped, 1 warning** avant les modifications ci-dessous. Sur PepperstoneUK-Demo (compte masqué), SYSTEM-TEST-002 a effectué une pré-évaluation NAS100 BUY, entrée de référence 31101.3, SL 31081.3, TP 31141.3, 0.1 lot, risque estimé 1.78 EUR, marge 138.60 EUR, RiskEngine APPROVED, aucun ordre envoyé. Les prix sont historiques et non réutilisables.
+- `mt5 test-order --new-system-test-run` crée un run explicitement distinct sans assouplir le binding d'un run existant.
+- `mt5 test-order --sl-price-distance N` définit une distance en unités de prix ; les instruments non Forex ou incertains refusent l'ancien calcul `--sl-pips`. Géométrie et stops_level vérifiés avant le précontrôle ; prix frais et RiskEngine conservés. Un test d'ordre DEMO nécessite une confirmation EXECUTE, et **n'a pas été réalisé** dans ce jalon.
+- `market/tradingview_observe.py` expose des URL graphiques indicatives et un parseur d'alertes inertes : aucun webhook, aucune authentification réseau, aucune exécution, aucune équivalence automatique entre signal TradingView et TradeIntent. La correspondance venue/symbole doit être vérifiée.
+- Tests unitaires ajoutés pour distances et alertes ; **non exécutés au moment des commits**. Prochaines validations : Ruff/mypy, pytest complet, recette NAS100 dry-run avec `--sl-price-distance 20`, revue du profil challenge versus compte Pepperstone, contrôle broker `order_check` et positions_get en DEMO après accord explicite.
+- PolicyGate calendrier et firme : chemins OBSERVE/PAPER opt-in seulement ; ne pas présenter la commande MT5 DEMO comme intégrée au PolicyGate. Revue obligatoire avant certification de conformité.
+- Jafar, SNN-X, Brain et les autres workspaces n'ont pas été modifiés.
+
+---
+
 ## Jalon Pepperstone multi-marchés — 2026-10-08 (validation utilisateur)
 
 Sur Windows, l'utilisateur a exécuté la suite complète avec MT5 connecté à MetaQuotes-Demo : **1546 passed, 0 failed, 1 warning en 151.19 s**, dont **3 tests mt5_integration réussis** en lecture seule. Il s'agit de la base `a8c0a50`, avant les commits multi-marchés ; aucune nouvelle suite n'a encore été exécutée sur les commits ultérieurs.
