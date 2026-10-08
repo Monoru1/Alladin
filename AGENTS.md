@@ -1,0 +1,25 @@
+# ALLADIN — Instructions pour Codex et agents de développement
+
+Ce fichier complète et ne remplace PAS `docs/HANDOFF.md`, source de vérité opérationnelle. Avant modification : lire `docs/HANDOFF.md`, `docs/DECISIONS/README.md`, puis les décisions concernées et le code existant.
+
+## Priorité 2026-10-08
+Lire DECISION-031, DECISION-032, DECISION-033, DECISION-034 et DECISION-035.
+
+Fondations déjà livrées : `src/alladin/challenge/event_policy.py`, `firm_policy.py`, `capital_metrics.py`, tests `tests/test_propfirm_policy_foundations.py`.
+
+**Ne pas annoncer une intégration qui n'existe pas :** calendrier réel non ingéré, conformité non branchée au runtime, multi-firmes non connectées, autonomie 24/7 non certifiée. La suite de tests de ce lot nécessite une exécution locale/CI ; ne jamais falsifier PASS.
+
+## Prochain développement
+1. Exécuter les tests, lint, typage des modules du lot, corriger toute défaillance.
+2. Construire des adaptateurs de calendrier avec timestamps de disponibilité et provenance, expirations, DST, révisions et données replayables sans lookahead.
+3. Construire les profils spécifiques aux comptes **depuis les contrats officiels** ; revalidation périodique obligatoire.
+4. Brancher ComplianceGate + EventPolicy pour entrée ET gestion/fermeture de positions, en distinguant impérativement restrictions d'annonce et sorties de protection. En l'absence de profil ou calendrier fiable : bloquer les nouvelles entrées ; pour les positions existantes, protéger selon les obligations broker/firme et alerter.
+5. Tester scénarios et modes OBSERVE/PAPER/MT5 DEMO, redémarrages, fills et annulations. Aucune promotion LIVE automatique.
+6. Scorecards et Mission Control ensuite ; préserver Jafar, SNN-X et tout code non concerné.
+
+## Invariants
+- RiskEngine déterministe toujours souverain.
+- L'algorithme ne modifie jamais les règles de firmes ni l'autorisation d'exécution.
+- Aucun agent ne doit contourner limitations contractuelles (news trading, EAs, copie, comptes multiples).
+- Aucun objectif mensuel +20/+30 % ne justifie de désactiver les garde-fous.
+- Commit/push avec tests exacts et statut honnête. Conserver fichiers des autres agents.
