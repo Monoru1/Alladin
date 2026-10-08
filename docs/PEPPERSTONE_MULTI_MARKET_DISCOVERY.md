@@ -40,3 +40,16 @@ Aucun identifiant de compte, mot de passe ou jeton ne doit être enregistré dan
 - **Attention :** le diagnostic broker initial trouvait 91 paires Forex avec trade_mode=4, mais la découverte en admet 90. Examiner le motif d'exclusion de la paire manquante (catégorie ou spécifications) ; ne pas la forcer.
 - Ce résultat prouve la découverte réelle du catalogue, **pas** la disponibilité des ticks/historiques, la réussite d'un scan complet, la rentabilité ou l'exécution DEMO. Aucune commande d'ordre n'a été lancée.
 - Prochaine recette : analyser les exclusions Forex, vérifier les ticks non nuls et récents, puis lancer un cycle `OBSERVE` borné ; mesurer la latence sur 110 instruments et journaliser les rejets.
+
+## Première cotation multi-marchés reçue (2026-10-08)
+Diagnostic MT5 Python en lecture seule sur PepperstoneUK-Demo, après symbol_select, six instruments :
+| Symbole | Bid | Ask | H1 bars | Âge brut du tick (s) |
+|---|---:|---:|---:|---:|
+| NAS100 | 31063.6 | 31064.6 | 100 | -10798 |
+| US500 | 7787.7 | 7788.1 | 100 | -10798 |
+| US30 | 51173.8 | 51175.8 | 100 | -10798 |
+| XAUUSD | 4131.18 | 4131.29 | 100 | -10799 |
+| XAGUSD | 59.241 | 59.269 | 100 | -10799 |
+| EURUSD | 1.12026 | 1.12027 | 100 | -10799 |
+
+Prix non nuls et 100 barres H1 reçues pour chacun. Âge brut négatif d'environ 3 heures : probable décalage du serveur, **non encore prouvé**. Le diagnostic utilisait `datetime.now(UTC) - tick.time` sans compensation. Vérifier la logique de `MT5Broker._detect_server_offset`, `offset_source`, et la fraîcheur après normalisation, sans désactiver les contrôles ; horodatages futurs doivent rester fail-closed si décalage non fiable. Aucun ordre exécuté ; aucune validation de rentabilité ou de fonctionnement continu. Le scanner multi-timeframe exige davantage que 100 barres H1.
