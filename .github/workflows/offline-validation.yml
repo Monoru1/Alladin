@@ -1,0 +1,41 @@
+name: Offline validation (no broker)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project and test tooling
+        run: python -m pip install -e ".[dev]"
+      - name: Check formatting/lint
+        run: python -m ruff check src/alladin tests
+      - name: Static type check
+        run: python -m mypy src/alladin
+      - name: Targeted offline tests
+        run: |
+          python -m pytest -o addopts='' -q \
+            tests/test_paper_risk_reservations.py \
+            tests/test_paper_reconciliation.py \
+            tests/test_economic_intelligence.py \
+            tests/test_official_signals.py \
+            tests/test_market_observatory.py \
+            tests/test_offline_diagnostics.py \
+            tests/test_performance_research.py
+      - name: Complete software regression suite (no MT5 integration)
+        run: python -m pytest -o addopts='' -q -m "not mt5_integration"
