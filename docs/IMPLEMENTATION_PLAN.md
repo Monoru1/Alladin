@@ -1,3 +1,11 @@
+## Lot Pepperstone NAS100 / TradingView — 2026-10-08
+**Livré, non encore validé localement :** nouveau run SYSTEM-TEST isolé, arrêt `--dry-run-only`, `--sl-price-distance` pour indices/CFD et vérification du stop minimum, parseur TradingView OBSERVE-only, URL graphiques indicatives, tests unitaires, handoff actualisé.
+**Validation utilisateur antérieure :** 1564 passed / 3 skipped, scanner 8/8, NAS100 dry-run APPROVED sur Pepperstone DEMO, aucun ordre.
+**À faire sans raccourci :** exécuter tests + Ruff + mypy après commits ; recette CLI NAS100 avec distance de prix ; vérifier arrondi aux pas de tick et distances des stops broker, contexte de marché, slippage, commission, isolation du profil challenge ; vérifier order_check et SL/TP natifs sur ordre DEMO uniquement avec consentement explicite ; test redémarrage/réconciliation ; brancher TradingView via adaptateur authentifié et anti-rejeu en OBSERVE seulement, puis audit de provenance et journal causal ; revue PolicyGate compte/firm/calendar en DEMO ; intégration Command Center et métriques de supervision. Aucune promotion LIVE.
+**Limites :** lien TradingView indicatif, pas de webhook fonctionnel, pas d'ordres automatisés, pas de conformité FTMO certifiée. Ne pas confondre un signal d'alerte externe avec une proposition autorisée.
+
+---
+
 # ALLADIN — Plan d'implémentation
 
 ## Lot 8 — 2026-10-08 : campagnes trailing et transitions de phase
