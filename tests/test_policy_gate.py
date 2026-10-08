@@ -1,13 +1,16 @@
 """Tests purs de composition : aucun broker, MT5 ni réseau."""
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alladin.challenge.event_policy import CalendarSnapshot, EconomicEvent
 from alladin.challenge.firm_policy import FirmProfile
 from alladin.challenge.policy_gate import (
-    GateVerdict, PolicyContext, ProposedAction, evaluate_action,
+    GateVerdict,
+    PolicyContext,
+    ProposedAction,
+    evaluate_action,
 )
 
-NOW = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 8, 12, tzinfo=UTC)
 
 
 def firm():

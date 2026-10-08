@@ -6,7 +6,7 @@ The caller must provide a trusted, versioned calendar and firm profile.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 
@@ -25,9 +25,13 @@ class EconomicEvent:
     published_at: datetime | None = None
 
     def __post_init__(self) -> None:
-        if not self.event_id or self.release_at.tzinfo is None:
+        if not self.event_id.strip() or self.release_at.utcoffset() is None:
             raise ValueError("event_id and timezone-aware release_at required")
-        if self.published_at is not None and self.published_at.tzinfo is None:
+        if not self.impacted_symbols or any(not s.strip() or s != s.strip() for s in self.impacted_symbols):
+            raise ValueError("nonempty unambiguous impacted symbols required")
+        if type(self.restricted) is not bool:
+            raise ValueError("restricted must be boolean")
+        if self.published_at is not None and self.published_at.utcoffset() is None:
             raise ValueError("published_at must be timezone-aware")
 
 
@@ -39,10 +43,12 @@ class CalendarSnapshot:
     events: tuple[EconomicEvent, ...]
 
     def __post_init__(self) -> None:
-        if self.as_of.tzinfo is None or self.valid_until.tzinfo is None:
+        if self.as_of.utcoffset() is None or self.valid_until.utcoffset() is None:
             raise ValueError("timezone-aware snapshot required")
         if self.valid_until < self.as_of or not self.source.strip():
             raise ValueError("snapshot validity and source required")
+        if len({e.event_id for e in self.events}) != len(self.events):
+            raise ValueError("snapshot must contain one revision per event_id")
 
 
 @dataclass(frozen=True)
@@ -75,7 +81,7 @@ class EventPolicy:
         `restrict_news` is supplied by a verified firm/account/phase profile;
         this module never guesses which firm rules apply.
         """
-        if now.tzinfo is None:
+        if now.utcoffset() is None:
             return EventDecision(EventVerdict.BLOCK, "CLOCK_NOT_TIMEZONE_AWARE")
         if snapshot is None:
             return EventDecision(EventVerdict.BLOCK, "CALENDAR_MISSING")

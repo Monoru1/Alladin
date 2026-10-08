@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -13,14 +14,15 @@ class CapitalLedger:
     taxes_paid: float
 
     def __post_init__(self) -> None:
-        if min(
+        amounts = (
             self.simulated_allocation,
             self.evaluation_fees_paid,
             self.payouts_received,
             self.operating_costs_paid,
             self.taxes_paid,
-        ) < 0:
-            raise ValueError("ledger amounts must be nonnegative")
+        )
+        if any(not isfinite(value) or value < 0 for value in amounts):
+            raise ValueError("ledger amounts must be finite and nonnegative")
 
     @property
     def net_cash_generated(self) -> float:

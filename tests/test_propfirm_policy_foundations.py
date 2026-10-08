@@ -1,17 +1,22 @@
 """DECISION 032-034: pure deterministic policy contracts, no live orders."""
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from alladin.challenge.capital_metrics import CapitalLedger
 from alladin.challenge.event_policy import (
-    CalendarSnapshot, EconomicEvent, EventPolicy, EventVerdict,
+    CalendarSnapshot,
+    EconomicEvent,
+    EventPolicy,
+    EventVerdict,
 )
 from alladin.challenge.firm_policy import (
-    FirmProfile, FirmVerdict, check_new_entry,
+    FirmProfile,
+    FirmVerdict,
+    check_new_entry,
 )
 
-UTC = timezone.utc
+UTC = UTC
 NOW = datetime(2026, 10, 8, 12, tzinfo=UTC)
 
 

@@ -1,5 +1,18 @@
 # ALLADIN — Claude Handoff
 
+## Lot autonome 1 — 2026-10-08 : validation PolicyGate
+
+Base reprise : `a5073c7` sur main. Tests initiaux : 14 passed. Après durcissement :
+`python -m pytest -o addopts='' -q tests/test_policy_gate.py tests/test_propfirm_policy_foundations.py tests/test_policy_gate_validation.py` : **51 passed**.
+Ruff modules challenge + ces trois fichiers : PASS ; mypy challenge : PASS (9 fichiers), mypy global : PASS (104 fichiers) ; diff --check : PASS.
+Ruff global : 15 erreurs préexistantes dans les tests Jafar execution/testnet, non attribuées au lot.
+
+Actions inconnues bloquées ; horloge/contexte invalides et automatisation interdite escaladent la gestion des positions en REVIEW (OPEN bloqué). Les montants non finis, symboles ambigus et révisions dupliquées dans un snapshot sont rejetés. HOLD reste sans transaction. Aucun branchement à ExecutionService ni changement des modes/risques. La suite globale est en cours ; aucun PASS global déclaré à ce stade.
+Suite : calendrier causal et fixtures synthétiques ; revue des sorties protectrices, contrats réels, source licenciée, intégration OBSERVE/PAPER, MT5 DEMO et endurance restent nécessaires.
+
+---
+
+
 ## Mise à jour autonome sans MT5 — 2026-10-08
 
 Lire `docs/HANDOFF.md`, `AGENTS.md`, décisions 032–035.

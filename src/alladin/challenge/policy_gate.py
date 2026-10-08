@@ -59,11 +59,19 @@ def evaluate_action(
     Une sortie protectrice d'urgence doit faire l'objet d'une procédure spécifique
     et ne saurait être bloquée par ce module isolé sans analyse du compte.
     """
+    if not isinstance(action, ProposedAction):
+        return PolicyDecision(GateVerdict.BLOCK, "UNKNOWN_ACTION")
     if action is ProposedAction.HOLD:
         return PolicyDecision(GateVerdict.ALLOW, "NO_BROKER_TRANSACTION")
-    if context.now.tzinfo is None:
-        return PolicyDecision(GateVerdict.BLOCK, "CLOCK_UNTRUSTED")
     is_entry = action is ProposedAction.OPEN
+    if context.now.utcoffset() is None:
+        return PolicyDecision(
+            GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "CLOCK_UNTRUSTED"
+        )
+    if not context.symbol.strip() or type(context.open_positions) is not int or context.open_positions < 0:
+        return PolicyDecision(
+            GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "INVALID_POSITION_CONTEXT"
+        )
     if context.firm_profile is None:
         return PolicyDecision(
             GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW,
@@ -73,6 +81,10 @@ def evaluate_action(
         return PolicyDecision(
             GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW,
             "FIRM_PROFILE_STALE",
+        )
+    if not context.firm_profile.ea_allowed:
+        return PolicyDecision(
+            GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "AUTOMATION_NOT_PERMITTED"
         )
     if is_entry:
         firm = check_new_entry(

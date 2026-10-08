@@ -29,13 +29,17 @@ class FirmProfile:
     max_open_positions: int | None = None
 
     def __post_init__(self) -> None:
-        if self.verified_at.tzinfo is None or self.valid_until.tzinfo is None:
+        if self.verified_at.utcoffset() is None or self.valid_until.utcoffset() is None:
             raise ValueError("verification timestamps must be timezone-aware")
         if self.valid_until < self.verified_at:
             raise ValueError("valid_until before verified_at")
-        if not all((self.firm, self.program, self.phase, self.version, self.source_url)):
+        if not all(s.strip() for s in (self.firm, self.program, self.phase, self.account_type, self.version, self.source_url)):
             raise ValueError("identity, version and source required")
-        if self.max_open_positions is not None and self.max_open_positions < 0:
+        if type(self.ea_allowed) is not bool:
+            raise ValueError("ea_allowed must be boolean")
+        if any(not s.strip() or s != s.strip() for s in self.allowed_symbols):
+            raise ValueError("unambiguous allowed symbols required")
+        if self.max_open_positions is not None and (type(self.max_open_positions) is not int or self.max_open_positions < 0):
             raise ValueError("negative position limit")
 
 
@@ -53,7 +57,7 @@ def check_new_entry(
     open_positions: int,
 ) -> FirmDecision:
     """Missing/expired profiles block entry; no account inferred from symbol."""
-    if now.tzinfo is None:
+    if now.utcoffset() is None:
         return FirmDecision(FirmVerdict.BLOCK, "CLOCK_NOT_TIMEZONE_AWARE")
     if profile is None:
         return FirmDecision(FirmVerdict.BLOCK, "FIRM_PROFILE_MISSING")
@@ -63,7 +67,7 @@ def check_new_entry(
         return FirmDecision(FirmVerdict.BLOCK, "AUTOMATION_NOT_PERMITTED")
     if symbol.upper() not in {s.upper() for s in profile.allowed_symbols}:
         return FirmDecision(FirmVerdict.BLOCK, "SYMBOL_NOT_AUTHORIZED")
-    if open_positions < 0:
+    if type(open_positions) is not int or open_positions < 0:
         return FirmDecision(FirmVerdict.BLOCK, "INVALID_POSITION_COUNT")
     if profile.max_open_positions is not None and open_positions >= profile.max_open_positions:
         return FirmDecision(FirmVerdict.BLOCK, "POSITION_LIMIT")
