@@ -22,7 +22,14 @@ def _host(url: str) -> str:
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or
             parsed.password or parsed.fragment or parsed.port not in (None, 443)):
         raise ValueError("canonical HTTPS URL without credentials/fragment required")
-    hostname = parsed.hostname.lower()\n    if hostname.endswith(".") or not hostname.isascii() or any(\n        not label or len(label) > 63 or label.startswith("-") or label.endswith("-") or\n        not all(char.isalnum() or char == "-" for char in label)\n        for label in hostname.split(".")\n    ):\n        raise ValueError("noncanonical source hostname")\n    return hostname
+    hostname = parsed.hostname.lower()
+    if hostname.endswith(".") or not hostname.isascii() or any(
+        not label or len(label) > 63 or label.startswith("-") or label.endswith("-") or
+        not all(char.isalnum() or char == "-" for char in label)
+        for label in hostname.split(".")
+    ):
+        raise ValueError("noncanonical source hostname")
+    return hostname
 
 
 @dataclass(frozen=True)
@@ -31,7 +38,9 @@ class OfficialSource:
     hostname: str
 
     def __post_init__(self) -> None:
-        if (not self.source_id.strip() or not self.hostname or\n                self.hostname != self.hostname.lower() or\n                any(char in self.hostname for char in "/:@?#")):
+        if (not self.source_id.strip() or not self.hostname or
+                self.hostname != self.hostname.lower() or
+                any(char in self.hostname for char in "/:@?#")):
             raise ValueError("invalid official source")
         if _host("https://" + self.hostname) != self.hostname:
             raise ValueError("invalid source hostname")
