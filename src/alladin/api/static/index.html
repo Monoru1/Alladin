@@ -751,6 +751,8 @@ details.trace-raw pre {
       <span class="status-chip muted" id="h-algo"><span class="label">ALGO</span> --</span>
       <span class="status-sep"></span>
       <span class="status-chip muted" id="h-run"><span class="label">RUN</span> --</span>
+      <label for="run-picker" style="font-size:12px;color:var(--text-muted)">Afficher :</label>
+      <select id="run-picker" aria-label="Sélectionner un run" style="background:var(--surface-raised);color:var(--text-primary);border:1px solid var(--border);border-radius:5px;padding:5px;max-width:220px"><option value="">Chargement…</option></select>
       <span class="status-chip muted" id="h-cycle"><span class="label">CYCLE</span> --</span>
       <span class="status-sep"></span>
       <span class="status-chip muted" id="h-heartbeat"><span class="label">POLL</span> --</span>
@@ -1003,7 +1005,39 @@ function setDot(id, tone) {
   if (d) d.className = "dot " + (tone || "");
 }
 
+let selectedRun = new URLSearchParams(location.search).get("run_id") || "";
+const scopedRoutes = ["/api/overview", "/api/positions", "/api/market", "/api/journal", "/api/outcomes", "/api/policy", "/api/opportunities"];
+function scopedUrl(u) {
+  if (!selectedRun || !scopedRoutes.some(route => u === route || u.startsWith(route + "?"))) return u;
+  return u + (u.includes("?") ? "&" : "?") + "run_id=" + encodeURIComponent(selectedRun);
+}
+async function loadRunPicker() {
+  const picker = document.getElementById("run-picker");
+  try {
+    const runs = await api("/api/runs");
+    picker.replaceChildren();
+    for (const run of [...runs].reverse()) {
+      const option = document.createElement("option");
+      option.value = run.run_id;
+      option.textContent = run.run_id + " · " + run.kind + " · " + run.state;
+      picker.append(option);
+    }
+    if (selectedRun && runs.some(r => r.run_id === selectedRun)) picker.value = selectedRun;
+    else if (runs.length) {
+      const official = [...runs].reverse().find(r => r.kind === "RUN");
+      selectedRun = (official || runs[runs.length - 1]).run_id;
+      picker.value = selectedRun;
+    }
+    picker.onchange = () => {
+      const url = new URL(location.href);
+      url.searchParams.set("run_id", picker.value);
+      location.assign(url.href);
+    };
+    refreshFast(); refreshMedium(); refreshSlow(); refreshOutcomes();
+  } catch (error) { picker.replaceChildren(new Option("Runs indisponibles", "")); }
+}
 async function api(u) {
+  u = scopedUrl(u);
   if (_inflight[u]) return _inflight[u];
   const p = fetch(u).then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); }).finally(() => delete _inflight[u]);
   _inflight[u] = p;
@@ -1416,6 +1450,7 @@ document.querySelectorAll(".sidebar-link, .mobile-nav button").forEach(b => {
 });
 
 /* ── Tiered polling ───────────────────────────────────────── */
+loadRunPicker();
 refreshFast();  setInterval(refreshFast, 2000);
 refreshMedium(); setInterval(refreshMedium, 8000);
 refreshSlow();  setInterval(refreshSlow, 30000);
