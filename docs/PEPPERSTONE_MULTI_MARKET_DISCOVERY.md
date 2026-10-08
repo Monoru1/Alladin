@@ -31,3 +31,12 @@ Aucun identifiant de compte, mot de passe ou jeton ne doit être enregistré dan
 - Commit code `6e4535e` : 10 tests ciblés réussis en 0.05 s ; Ruff PASS ; mypy PASS (1 fichier). Les 1546 tests précédents ont été exécutés **avant** ce commit, ne pas les présenter comme une suite complète post-INDEX.
 - Chemins broker vérifiés : `Retail\\Indices\\Majors\\NAS100`, `Retail\\Indices\\Majors\\US500`, `Retail\\Indices\\Majors\\US30` ; `trade_calc_mode=2` pour les trois.
 - La catégorie `INDEX` native et le profil `pepperstone_multimarket_research` sont en place ; la découverte effective et la fraîcheur des ticks restent à valider en OBSERVE, sans ordre.
+
+## Découverte réelle Alladin validée par l'utilisateur — 2026-10-08
+- Commande en lecture seule : `MT5Broker` + `MarketUniverse` + `UniverseRules` chargé depuis `config/universes/pepperstone_multimarket_research.yaml`.
+- Serveur `PepperstoneUK-Demo`, type `DEMO`.
+- **1725 découverts, 110 membres admissibles** : `FOREX_EXOTIC=62`, `FOREX_JPY=6`, `FOREX_MAJOR=7`, `FOREX_MINOR=15`, `INDEX=3`, `METAL=17`.
+- `NAS100`, `US500`, `US30` classés `INDEX` ; `XAUUSD`, `XAGUSD` classés `METAL`.
+- **Attention :** le diagnostic broker initial trouvait 91 paires Forex avec trade_mode=4, mais la découverte en admet 90. Examiner le motif d'exclusion de la paire manquante (catégorie ou spécifications) ; ne pas la forcer.
+- Ce résultat prouve la découverte réelle du catalogue, **pas** la disponibilité des ticks/historiques, la réussite d'un scan complet, la rentabilité ou l'exécution DEMO. Aucune commande d'ordre n'a été lancée.
+- Prochaine recette : analyser les exclusions Forex, vérifier les ticks non nuls et récents, puis lancer un cycle `OBSERVE` borné ; mesurer la latence sur 110 instruments et journaliser les rejets.
