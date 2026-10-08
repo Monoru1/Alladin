@@ -100,6 +100,7 @@ class AssetCategory(StrEnum):
     FOREX_JPY = "FOREX_JPY"
     FOREX_EXOTIC = "FOREX_EXOTIC"
     METAL = "METAL"
+    INDEX = "INDEX"
     OTHER = "OTHER"
 
 
