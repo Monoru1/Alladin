@@ -9,16 +9,24 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from alladin.challenge.economic_intelligence import (
-    ConsensusObservation, EconomicRelease, assess_release,
+    ConsensusObservation,
+    EconomicRelease,
+    assess_release,
 )
 from alladin.challenge.market_observatory import (
-    Annotation, Candle, observatory_snapshot,
+    Annotation,
+    Candle,
+    observatory_snapshot,
 )
 from alladin.challenge.official_signals import (
-    OfficialPublication, OfficialSource, verify_publication,
+    OfficialPublication,
+    OfficialSource,
+    verify_publication,
 )
 from alladin.challenge.paper_reconciliation import (
-    PaperFill, PaperSnapshot, reconcile_paper,
+    PaperFill,
+    PaperSnapshot,
+    reconcile_paper,
 )
 from alladin.challenge.paper_risk_reservations import PaperRiskReservations
 
