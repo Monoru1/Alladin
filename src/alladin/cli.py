@@ -224,6 +224,7 @@ def mt5_test_order(
     ] = None,
     run: RunOpt = None,
     dry_run_only: Annotated[bool, typer.Option("--dry-run-only", help="Pré-évaluation seulement ; ne jamais envoyer d'ordre")] = False,
+    new_system_test_run: Annotated[bool, typer.Option("--new-system-test-run", help="Créer un nouveau run SYSTEM-TEST lié au compte courant, sans reprendre un ancien run")] = False,
 ) -> None:
     """Ordre DEMO de TEST D'INTÉGRATION (run SYSTEM-TEST-nnn, jamais un RUN officiel), via tout le pipeline."""
     settings = get_settings()
@@ -245,8 +246,20 @@ def mt5_test_order(
     except ValueError as exc:
         raise die("--side : BUY ou SELL", 2) from exc
 
-    # run : SYSTEM-TEST (jamais RUN-00x officiel) ; le dernier ouvert, sinon création avec confirmation
-    comps = build_services(settings, broker, run_id=run, run_kind="SYSTEM-TEST")
+    # Ne jamais contourner un binding existant : nouveau run explicitement demandé.
+    if new_system_test_run and run is not None:
+        raise die("--new-system-test-run et --run sont incompatibles", 2)
+    if new_system_test_run:
+        comps = build_services(settings, broker, create_run=True, run_kind="SYSTEM-TEST")
+    else:
+        try:
+            comps = build_services(settings, broker, run_id=run, run_kind="SYSTEM-TEST")
+        except AlladinError as exc:
+            raise die(
+                f"Reprise SYSTEM-TEST refusée : {exc}. "
+                "Pour un compte différent, utiliser --new-system-test-run (ancien run préservé).",
+                3,
+            ) from exc
     if comps is None:
         if not typer.confirm(
             "\nAucun run SYSTEM-TEST actif. En créer un (n'affecte pas les RUN officiels) ?", default=False
