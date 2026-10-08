@@ -1,5 +1,15 @@
 # ALLADIN — Claude Handoff
 
+## Mise à jour autonome sans MT5 — 2026-10-08
+
+Lire `docs/HANDOFF.md`, `AGENTS.md`, décisions 032–035.
+Ajout : `src/alladin/challenge/policy_gate.py` et `tests/test_policy_gate.py` (PolicyGate pure, aucune exécution). Combine contexte de firme et macro pour OPEN/CLOSE/PARTIAL_CLOSE/MODIFY_STOP/MODIFY_TARGET/HOLD et retours ALLOW/DEFER/BLOCK/REVIEW. Ne pas confondre avec intégration broker : **non raccordée**.
+
+Avant continuation : `python -m pytest tests/test_propfirm_policy_foundations.py tests/test_policy_gate.py -q`, `python -m ruff check src/alladin/challenge tests/test_policy_gate.py`, `python -m mypy src/alladin/challenge/policy_gate.py`. Aucun PASS déclaré pour ces nouveaux tests. Respecter la restriction FTMO Standard funded sur certaines clôtures au voisinage des annonces ; les sorties protectrices requièrent un arbitrage conforme et une revue spécifique.
+
+---
+
+
 ## Lot 2026-10-08 — décisions 032–035 : fondations implémentées (lecture obligatoire Claude/Codex)
 
 Décisions : [032](DECISIONS/DECISION-032-ECONOMIC-INTELLIGENCE.md) · [033](DECISIONS/DECISION-033-MULTI-PROPFIRM-COMPLIANCE.md) · [034](DECISIONS/DECISION-034-CAPITAL-ENGINE-OBJECTIVES.md) · [035](DECISIONS/DECISION-035-AUTONOMOUS-OPERATIONS-QUALITY.md).
