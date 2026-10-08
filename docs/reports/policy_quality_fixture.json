@@ -24,6 +24,9 @@
     "CLOSE": 6,
     "OPEN": 6
   },
+  "refused_decisions": 12,
+  "data_unavailable_decisions": 2,
+  "labelled_expectation_match_fraction": 1.0,
   "measurements": {
     "confirmed_fills": null,
     "net_trading_pnl": null,
@@ -37,7 +40,7 @@
     "No live calendar coverage or provider SLA certified",
     "No real firm contract or account admission certified",
     "No broker fills, protective exit review or risk approval",
-    "Weekend/overnight, copy trading and cross-account exposure not covered",
+    "Account constraints may be tested separately; this report does not certify live scope",
     "No MT5 DEMO, OOS performance or prolonged soak qualification"
   ],
   "records": [
@@ -61,6 +64,7 @@
         "phase": "evaluation",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -69,7 +73,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -92,6 +97,7 @@
         "phase": "evaluation",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -100,7 +106,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -123,6 +130,7 @@
         "phase": "funded",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -131,7 +139,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -154,6 +163,7 @@
         "phase": "funded",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -162,7 +172,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -185,6 +196,7 @@
         "phase": "funded",
         "account_type": "swing",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -193,7 +205,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -216,6 +229,7 @@
         "phase": "funded",
         "account_type": "swing",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -224,7 +238,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -245,6 +260,7 @@
         "phase": "funded",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -253,7 +269,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -274,6 +291,7 @@
         "phase": "funded",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -282,7 +300,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -303,6 +322,7 @@
         "phase": "funded",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -311,7 +331,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -332,6 +353,7 @@
         "phase": "funded",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -340,7 +362,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -361,6 +384,7 @@
         "phase": "evaluation",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -369,7 +393,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     },
     {
@@ -392,6 +417,7 @@
         "phase": "evaluation",
         "account_type": "standard",
         "version": "fixture-2026-10-08",
+        "constraints": null,
         "source_url": "https://example.test/synthetic-contract",
         "verified_at": "2026-10-08T00:00:00+00:00",
         "valid_until": "2026-10-09T00:00:00+00:00",
@@ -400,7 +426,8 @@
       "calendar": {
         "source": "synthetic",
         "as_of": "2026-10-08T11:59:00+00:00",
-        "valid_until": "2026-10-08T12:01:00+00:00"
+        "valid_until": "2026-10-08T12:01:00+00:00",
+        "coverage_complete": null
       }
     }
   ],

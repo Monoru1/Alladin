@@ -8,6 +8,15 @@ from typing import Any
 from alladin.challenge.capital_metrics import CapitalLedger
 from alladin.challenge.policy_gate import GateVerdict, PolicyContext, ProposedAction, evaluate_action
 
+DATA_UNAVAILABLE_REASONS = frozenset({
+    "CALENDAR_MISSING", "CALENDAR_STALE_OR_FUTURE", "CALENDAR_COVERAGE_INCOMPLETE",
+    "POLICY_CONTEXT_UNAVAILABLE", "ACCOUNT_STATE_UNAVAILABLE", "ACCOUNT_STATE_MISMATCH",
+    "EXPOSURE_UNAVAILABLE", "EXPOSURE_CURRENCY_MISMATCH", "PROPOSED_EXPOSURE_UNAVAILABLE",
+    "PROPOSED_DIRECTION_UNAVAILABLE", "MARKET_SCHEDULE_UNAVAILABLE", "FIRM_PROFILE_MISSING",
+    "FIRM_PROFILE_STALE", "CLOCK_UNTRUSTED", "INVALID_POSITION_CONTEXT",
+    "NEWS_RULE_UNVERIFIED", "NEWS_RULE_PROFILE_MISMATCH",
+})
+
 
 @dataclass(frozen=True)
 class PolicyProbe:
@@ -67,12 +76,14 @@ def build_policy_quality_report(
             "profile": None if profile is None else {
                 "firm": profile.firm, "program": profile.program, "phase": profile.phase,
                 "account_type": profile.account_type, "version": profile.version,
+                "constraints": profile.constraints.model_dump(mode="json") if profile.constraints else None,
                 "source_url": profile.source_url, "verified_at": profile.verified_at.isoformat(),
                 "valid_until": profile.valid_until.isoformat(), "restrict_news": profile.restrict_news,
             },
             "calendar": None if calendar is None else {
                 "source": calendar.source, "as_of": calendar.as_of.isoformat(),
                 "valid_until": calendar.valid_until.isoformat(),
+                "coverage_complete": calendar.coverage_complete,
             },
         })
     status = "FAIL" if mismatches else ("PASS" if probes and labelled == len(probes) else "UNASSESSED")
@@ -83,6 +94,9 @@ def build_policy_quality_report(
         "samples": len(probes), "labelled_samples": labelled, "expectation_mismatches": mismatches,
         "verdict_counts": dict(sorted(verdicts.items())), "reason_counts": dict(sorted(reasons.items())),
         "action_counts": dict(sorted(actions.items())),
+        "refused_decisions": sum(count for verdict, count in verdicts.items() if verdict != "ALLOW"),
+        "data_unavailable_decisions": sum(count for reason, count in reasons.items() if reason in DATA_UNAVAILABLE_REASONS),
+        "labelled_expectation_match_fraction": (labelled-mismatches)/labelled if labelled else None,
         "measurements": {"confirmed_fills": None, "net_trading_pnl": None, "max_drawdown": None,
                          "slippage": None, "availability": None, "recovery_seconds": None},
         "capital": None if ledger is None else {
@@ -93,7 +107,7 @@ def build_policy_quality_report(
         "limitations": ["No live calendar coverage or provider SLA certified",
                         "No real firm contract or account admission certified",
                         "No broker fills, protective exit review or risk approval",
-                        "Weekend/overnight, copy trading and cross-account exposure not covered",
+                        "Account constraints may be tested separately; this report does not certify live scope",
                         "No MT5 DEMO, OOS performance or prolonged soak qualification"],
         "records": records,
     }

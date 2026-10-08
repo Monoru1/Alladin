@@ -161,3 +161,49 @@ def test_paper_entry_keeps_risk_validation(svc,monkeypatch,missing):
     else:
         assert report['latest']['verdict'] == 'ALLOW'
         assert svc.repo.events(svc.run.run_id,types=['risk.decision'])
+
+
+def test_changed_context_same_verdict_is_replay_incident(svc):
+    c=controller(svc)
+    p=proposal(svc,Action.LONG)
+    assert c.assess(p,RunMode.PAPER).verdict is GateVerdict.ALLOW
+    c.context_provider=lambda p: replace(context(svc,p),open_positions=1)
+    assert c.assess(p,RunMode.PAPER).reason == 'POLICY_REPLAY_MISMATCH'
+
+
+def test_proposal_direction_inconsistent_provider_refused(svc):
+    from alladin.core.enums import Side
+    c=controller(svc)
+    c.context_provider=lambda p: replace(context(svc,p),proposed_side=Side.SELL)
+    assert c.assess(proposal(svc,Action.LONG),RunMode.PAPER).reason == 'POLICY_CONTEXT_UNAVAILABLE'
+
+
+@pytest.mark.parametrize('restriction',[False,True])
+@pytest.mark.parametrize('exit_kind',['SL','TP'])
+def test_native_paper_stop_preserved_and_conflict_reported(svc,monkeypatch,restriction,exit_kind):
+    from alladin.agents.base import AgentDecision
+    from alladin.core.enums import DecisionKind
+    monkeypatch.setattr(svc.broker,'_send',lambda *a,**kw: pytest.fail('unexpected broker execution'))
+    paper=opened(svc,RunMode.PAPER)
+    engine=svc.engine(MockAgent(script=[AgentDecision(decision=DecisionKind.NO_TRADE,reason='native audit only')]),
+                      run_mode=RunMode.PAPER,policy_controller=controller(svc,restricted=restriction))
+    engine.paper_engine=paper
+    pos=paper.open_positions()[0]
+    price=pos.sl-.0002 if exit_kind=='SL' else pos.tp+.0002
+    svc.broker.set_price(pos.symbol,price,price+.0001)
+    engine.run_cycle()
+    assert not paper.open_positions()
+    report=policy_journal_report(svc.journal,svc.run.run_id)
+    native=next(d.payload for d in svc.repo.events(svc.run.run_id,types=['policy.decision'])
+                if d.payload['assessment_phase']=='POST_NATIVE_PAPER_FILL')
+    assert native['verdict'] == ('REVIEW' if restriction else 'ALLOW')
+    assert native['execution_authorized'] is False
+    assert report['post_native_fill_assessments'] == 1
+    assert report['native_fill_reviews'] == int(restriction)
+    assert report['refused_decisions'] == 0
+    if restriction:
+        incident=next(i for i in report['incidents'] if i['reason']=='NATIVE_PAPER_EXIT_REQUIRES_REVIEW')
+        assert incident['policy_reason']=='PROTECTIVE_NEWS_CONFLICT'
+        assert incident['simulated_fill_observed'] is True
+    else:
+        assert not report['incidents']

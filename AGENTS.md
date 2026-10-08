@@ -1,5 +1,10 @@
 # ALLADIN — Instructions pour Codex et agents de développement
 
+## État actuel après lot 6 du 2026-10-08
+
+Lire le dernier bloc des handoffs et le tableau actuel du plan. Campagnes synthétiques reproductibles et audit après fill SL/TP PAPER livrés ; checkpoint toujours opt-in OBSERVE/PAPER. Dernière suite finale réellement exécutée : **1435 passed, 3 skipped MT5, 0 failed** ; Ruff PASS, mypy PASS (112 fichiers). Preuves : docs/reports/policy_software_current.json. Aucun contrat réel, trading, compte, disponibilité 24/7 ou performance admis par ces tests.
+
+
 ## État actuel après lot 5 du 2026-10-08
 
 Lire les blocs lot 4/5 des handoffs. PolicyGate dispose maintenant de contraintes de compte et d’un checkpoint **opt-in OBSERVE/PAPER** dans l’orchestrateur ; aucune activation globale ni chemin DEMO autorisé par ce checkpoint. Sources publiques partielles : voir docs/PUBLIC_CALENDAR.md. Les mentions antérieures « hors runtime/non ingéré » sont historiques ou décrivent les sondes offline. Dernière suite réellement exécutée : 1416 passed, 3 skipped MT5 ; Ruff/mypy PASS. Préserver protections natives et RiskEngine.

@@ -155,6 +155,15 @@ class OrchestrationEngine:
                     EventType.POSITION_CLOSED,
                     {"paper": True, **pc.to_dict()},
                 )
+                if self.policy_controller is not None:
+                    try:
+                        self.policy_controller.audit_native_exit(pc, cycle_id)
+                    except Exception as exc:
+                        self.journal.log(rid, "policy.incident", {
+                            "reason": "NATIVE_PAPER_AUDIT_UNAVAILABLE", "error_type": type(exc).__name__,
+                            "paper_id": pc.paper_id, "simulated_fill_observed": True,
+                            "execution_authorized": False,
+                        }, cycle_id=cycle_id)
 
         # 1. positions & watchdog d'abord
         rep = self.monitor.sync()

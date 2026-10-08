@@ -1,6 +1,6 @@
 # Validation offline du PolicyGate
 
-Les modules de politique restent isolés de `ExecutionService`. Aucun ALLOW ne constitue une autorisation de trading : RiskEngine, modes, broker, ownership et watchdog restent des contrôles indépendants. REVIEW demande une procédure de protection et de conformité ; il ne désactive ni stop natif ni kill switch.
+Les sondes de ce rapport restent offline. Depuis le lot 5, un `PolicyController` optionnel est injecté dans l’orchestrateur uniquement OBSERVE/PAPER, en amont des soumissions existantes ; il reste désactivé sans injection explicite. Aucun ALLOW ne constitue une autorisation de trading : RiskEngine, modes, broker, ownership et watchdog restent des contrôles indépendants. REVIEW demande une procédure de protection et de conformité ; il ne désactive ni stop natif ni kill switch.
 
 ## Reproduire les preuves
 
@@ -32,15 +32,15 @@ Un refresh vide représente une déclaration explicite du fournisseur, pas une p
 
 `tests/fixtures/policy/firm_profiles.json` contient six variantes **SYNTHETIC-ONLY**, datées et expirables : évaluation, funded standard, funded swing, automatisation interdite, news inconnue et limite de positions nulle. Elles ne constituent ni des contrats FTMO ni une admission d'autres firmes. Leur structure vérifie la séparation phase/type/compte et les divergences de contraintes sans présumer un accès financier.
 
-Les simulations couvrent OPEN/CLOSE/PARTIAL_CLOSE/MODIFY_STOP/MODIFY_TARGET/HOLD, les bornes et secondes extérieures des fenêtres, calendrier absent/périmé, profils futurs/expirés, restrictions contradictoires, indépendance des contextes et restart. Des tests de stress réutilisent `BacktestRunner` (gaps adverses BUY/SELL, spread, commission et slippage) et `ChallengeWatchdog` (perte flottante après restore pendant le DST). Ces tests ne raccordent pas PolicyGate au simulateur ni au runtime.
+Les simulations couvrent OPEN/CLOSE/PARTIAL_CLOSE/MODIFY_STOP/MODIFY_TARGET/HOLD, les bornes et secondes extérieures des fenêtres, calendrier absent/périmé, profils futurs/expirés, restrictions contradictoires, indépendance des contextes et restart. Des tests de stress réutilisent `BacktestRunner` (gaps adverses BUY/SELL, spread, commission et slippage) et `ChallengeWatchdog` (perte flottante après restore pendant le DST). Ces tests de stress restent indépendants ; les nouveaux tests `test_policy_control.py` valident séparément le checkpoint runtime avec MockBroker/PAPER.
 
 ## Limites restantes
 
-- Revue humaine des sorties protectrices et des déclenchements SL/TP broker avant intégration.
+- Sorties protectrices évaluées et SL/TP PAPER audités après fill simulé ; validation contractuelle des protections natives et MT5 DEMO encore nécessaire.
 - Fournisseur économique fiable/licencié, couverture vérifiable, archivage et associations aux symboles effectivement exposés.
 - Contrats officiels par compte et revalidation périodique : fixtures synthétiques exclues de toute admission réelle.
-- Week-end/overnight, copy trading, trailing drawdown et exposition/corrélation multi-comptes non couverts par PolicyGate.
-- Intégration OBSERVE/PAPER à exécution désactivée, puis MT5 DEMO, panne/reconciliation de bout en bout et soak prolongé.
+- Week-end/overnight, trailing et exposition agrégée sont configurables dans PolicyGate (lot 4) ; données/horaire/convertisseurs/reservations atomiques et contrats réels restent à fournir. Restrictions de copie au-delà de l’opposition inter-comptes et corrélations réelles restent non couvertes.
+- Checkpoint opt-in OBSERVE/PAPER testé ; configuration persistante d’admission des comptes, MT5 DEMO, panne/reconciliation broker et soak prolongé restent à réaliser.
 - Ces preuves logicielles n'établissent ni avantage OOS, ni rendement, ni disponibilité 24/7.
 
 Aucune migration de données et aucun changement des modes, des règles RiskEngine, de Jafar ou de SNN-X. Le nettoyage Ruff dans deux fichiers de tests Jafar retire uniquement des imports inutilisés et trie les imports.
@@ -54,3 +54,11 @@ Aucune migration de données et aucun changement des modes, des règles RiskEngi
 Protection et restriction d'annonce sont deux faits distincts : une simple précaution ne retarde pas une sortie protectrice conforme ; un conflit contractuel ou une incertitude exige REVIEW et une alerte. Aucun retrait d'une protection native n'est prévu. En cas de deadline de détention et de news simultanées, une politique peut devenir impossible à satisfaire : pas de transaction autorisée par ce seul gate.
 
 Références officielles relues le 08/10/2026, sans admission d'un compte réel : [FTMO annonces](https://ftmo.com/en/faq/can-i-trade-news/) et [FTMO détention](https://ftmo.com/faq/do-i-have-to-close-my-positions-overnight-or-before-the-weekend/). Les clauses varient par programme/phase/type, et les horaires doivent être fournis par le broker. Les fixtures restent SYNTHÉTIQUES.
+
+## Compléments lots 5–6
+
+`docs/PUBLIC_CALENDAR.md` décrit les sources publiques partielles et le contrat causal. `docs/CHALLENGE_CAMPAIGNS.md` décrit les seize replays synthétiques et leurs limites. Le JSON de sondes ajoute refus, indisponibilité des données et taux de correspondance des attentes labellisées ; ce taux n’est pas une certification de conformité.
+
+GET `/api/policy` lit le journal du run : décisions, raisons, refus pré-proposition, évaluations après fill natif PAPER, revues et incidents, intégrité. Uptime reste null. L’intégrité du hash ne prouve ni couverture fournisseur ni SLA. Le SHA-256 du contexte complet détecte une divergence de preuve même si le verdict rejoué est identique. Une direction de contexte incompatible avec LONG/SHORT est refusée.
+
+Le checkpoint observe les SL/TP PAPER **après** leur clôture automatique et journalise les conflits contractuels ou pannes d’audit. Il ne les désactive pas et n’assimile pas un fill déjà observé à un ordre refusé. Aucun changement du Brain, du RiskEngine, des autorisations de trading ou des fonctionnalités Jafar/SNN-X.

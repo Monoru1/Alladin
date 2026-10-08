@@ -1,0 +1,803 @@
+{
+  "schema_version": 1,
+  "scope": "SOFTWARE_ONLY_OBSERVE_PAPER_AND_SYNTHETIC_CAMPAIGNS",
+  "base_commit": "0b030edbe4ef5d38738e56b9615d171d8af9bff4",
+  "tested_source_manifest_sha256": "0b27b9e22157b12cce00a9f027008973f64f1ef3c78473a17af148845092788b",
+  "source_manifest": [
+    {
+      "path": "config/challenge_profiles/ftmo_2step_demo.yaml",
+      "sha256": "748601c8158f818eface2c67a8ce08d5f1fd58ae3b3965d9d728eae0a193f46b"
+    },
+    {
+      "path": "config/challenge_profiles/jafar_observe.yaml",
+      "sha256": "bd5ca078071c113833a9e4de927ca3434785918e120afe7bcec4a497c2301fc3"
+    },
+    {
+      "path": "config/reward_policies/outcome_v1.yaml",
+      "sha256": "da59c493278485be551e4e6d79c71b5e5ddfebbdbca0972a5ab69189e6a9eb9c"
+    },
+    {
+      "path": "config/strategies/jafar/strategies.yaml",
+      "sha256": "ebe1e41500bad3f4bbc90e0937331f028892f4af32b1c00bd9221700e57bca67"
+    },
+    {
+      "path": "config/strategies/strategies.yaml",
+      "sha256": "392fdc82d84dd010334c13033134b29c1cb8030be5072207db1e51e7ae2d9c55"
+    },
+    {
+      "path": "config/universes/conservative.yaml",
+      "sha256": "5c015d454cad7f2e5329d95f622c6d55acebe99e2c96124a7dba056877d00fd1"
+    },
+    {
+      "path": "config/universes/jafar_observe.yaml",
+      "sha256": "fc6607db007e86dc84f29e93ed0a1412de4100010ea1e076515f1b05c54ca5c4"
+    },
+    {
+      "path": "config/universes/lab.yaml",
+      "sha256": "acded3d13668527f9841c6ccb2eb29580ad2c670c327f676317e4384fa0de896"
+    },
+    {
+      "path": "scripts/report_challenge_campaign.py",
+      "sha256": "1d56f8cbb17027d2fcdd123f90d7bc4b3b75c1f185e707be2b0f5c6f8ffe9d9f"
+    },
+    {
+      "path": "scripts/report_policy_quality.py",
+      "sha256": "6b0f88e10b95c59e74bf5fefb747dbd27d0177dbc2ace3284d635aa08c9be310"
+    },
+    {
+      "path": "src/alladin/__init__.py",
+      "sha256": "271c0d5614769cd6dba610a91d6965077475c6c78d2e2c21e717ac9bfea9f2c6"
+    },
+    {
+      "path": "src/alladin/__main__.py",
+      "sha256": "0bbefcf0cdf3ca79b3d39562daf1c705654b14acee9d335c46345b6f34186c58"
+    },
+    {
+      "path": "src/alladin/agents/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/agents/base.py",
+      "sha256": "bd76e6b35d64635254fcda34654c154957c6f98485ae42e004d8bb983b67c340"
+    },
+    {
+      "path": "src/alladin/agents/claude.py",
+      "sha256": "d1164aef3d27654c82ce3e107bd8b2e02db3dfb78b3b9233d4221275eec47404"
+    },
+    {
+      "path": "src/alladin/agents/cli.py",
+      "sha256": "dd9cf29051836fe9d8b59a456562e551ba9dbf0d33a9d629d1ce8c8b59ffaa9c"
+    },
+    {
+      "path": "src/alladin/agents/codex.py",
+      "sha256": "a7b9a42a38773fffdf62192c255f7d2ac861ccaea0c2c2da577737060287263b"
+    },
+    {
+      "path": "src/alladin/agents/mock.py",
+      "sha256": "b4d779283f988303ad39f17b9f0154b4a06fc6355b691310e0a2228e7848bcfd"
+    },
+    {
+      "path": "src/alladin/api/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/api/app.py",
+      "sha256": "ff7f6ddbc9a4feb1795d8c17360f5003814b3a91051a5b44b3fef133b29957a7"
+    },
+    {
+      "path": "src/alladin/brain.py",
+      "sha256": "8551beba68fdd25ffcad052c548cc557ad27ceaa4110f6edd8ad6c5d1753c1a8"
+    },
+    {
+      "path": "src/alladin/brokers/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/brokers/base.py",
+      "sha256": "f255538a597e793b52f2c67360c0f7ed17c6a087e72d74ac3c7f2dc820f8ef3d"
+    },
+    {
+      "path": "src/alladin/brokers/binance.py",
+      "sha256": "3879743335ddb85c7e92e0dfac880935e1b22b85691c35d13068027b642b45cc"
+    },
+    {
+      "path": "src/alladin/brokers/crypto.py",
+      "sha256": "954fc5b1dc5dc95a494a6df2aa825ef8330e4aec41b4b41daea75b37d493bcb6"
+    },
+    {
+      "path": "src/alladin/brokers/crypto_observe.py",
+      "sha256": "51fbc2a16fb283ec684685a1312fbd12ffd30c7a7ae790f1e5e4b51f2639ab60"
+    },
+    {
+      "path": "src/alladin/brokers/crypto_universe.py",
+      "sha256": "90fc30e8b587c618804ab3cfb87a9a6df6ce14f10acf987fdd9b3814d32d5c5a"
+    },
+    {
+      "path": "src/alladin/brokers/mock.py",
+      "sha256": "86b6d5b429515a218c03b0eb469b6ecc4402abc7ff3e1e10d0ed78affa39b83e"
+    },
+    {
+      "path": "src/alladin/brokers/mt5.py",
+      "sha256": "5821c4d7343eebbebd5770493295970e810d14ba3ad370623246fad23aa6e455"
+    },
+    {
+      "path": "src/alladin/challenge/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/challenge/account_policy.py",
+      "sha256": "bd33694cd8154fd590c7776c9a843fbd284b264163b4c6a2901a7f668bb231a0"
+    },
+    {
+      "path": "src/alladin/challenge/capital_metrics.py",
+      "sha256": "618342abe3d87b7602830071cba3e434c54741b70237557f6b6b8dea917f3b33"
+    },
+    {
+      "path": "src/alladin/challenge/economic_calendar.py",
+      "sha256": "4ad6e602161be66feccf5130276817f9c12ee9388fb07d82f9315cdf2c9d5344"
+    },
+    {
+      "path": "src/alladin/challenge/event_policy.py",
+      "sha256": "2e2533b8e14996585d101d8460793ecf856d3f12e596a965de048e87dbd696dc"
+    },
+    {
+      "path": "src/alladin/challenge/factory.py",
+      "sha256": "1dfc9571f20a88af2cca1b2a71fb81b736b66d4f9c3fe8ced49e4e6d66889d31"
+    },
+    {
+      "path": "src/alladin/challenge/firm_policy.py",
+      "sha256": "1d82568f2144ee3e4091dcc8ce5e91d8f150b5d2c1d88da779a8daf66574ddd8"
+    },
+    {
+      "path": "src/alladin/challenge/models.py",
+      "sha256": "96f2b4a4d15da4b8de6fa9025481c6ec026fb63e7f61a62ea956ba71e4de2e77"
+    },
+    {
+      "path": "src/alladin/challenge/policy_gate.py",
+      "sha256": "dd232eeac720a7e05e66b69897998f7ce1d944f011c07acf923e60e7e45318c5"
+    },
+    {
+      "path": "src/alladin/challenge/policy_quality.py",
+      "sha256": "ecd734d2be295e39fba42876a8768db61627daebf13e0a67069474fe40670e4a"
+    },
+    {
+      "path": "src/alladin/challenge/profiles.py",
+      "sha256": "823861330044309161fc6a2232f8da62af28d7817cd10224999457cc5828bf89"
+    },
+    {
+      "path": "src/alladin/challenge/public_calendar.py",
+      "sha256": "cd53035a635e68822a7d2a294c25fd206b87d24d8b002455929292fa6c7c36c7"
+    },
+    {
+      "path": "src/alladin/challenge/rules.py",
+      "sha256": "878e7b164c8f7ee73b156c4bcf9c52c8fbe2447b29b444f60e77162516c09d0c"
+    },
+    {
+      "path": "src/alladin/challenge/watchdog.py",
+      "sha256": "66c4bcb1dd38138e4c87ea539bc263c18c8cb7ac1a8ef76ed8d9d36d484c5eec"
+    },
+    {
+      "path": "src/alladin/cli.py",
+      "sha256": "e77a7c0f9e53f40d10af96fa5f88e6f4f62d054b8744a437760382e436ff3036"
+    },
+    {
+      "path": "src/alladin/core/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/core/approval.py",
+      "sha256": "8aac35477f211b0eed5175bb56c5830d28ee3323538e3a93fa9688c0e88ccdc0"
+    },
+    {
+      "path": "src/alladin/core/config.py",
+      "sha256": "740e8309001dc714ce21713ad21624eb8682bbe348587f6be574f03869732065"
+    },
+    {
+      "path": "src/alladin/core/enums.py",
+      "sha256": "a183d58191d39b17c6e79d5d909a7a2d3c0c015f5a7ac740645878362b9ace26"
+    },
+    {
+      "path": "src/alladin/core/errors.py",
+      "sha256": "17b174e86e4c142bb31ab50f79544c9c40f8d873221f0c79aba51b07ac51bcdc"
+    },
+    {
+      "path": "src/alladin/core/killswitch.py",
+      "sha256": "476a758bcea91f288ca371d10d81b550c1ef5ef5ca39ab0cc01fcf3010590076"
+    },
+    {
+      "path": "src/alladin/core/logging.py",
+      "sha256": "8d4f62ae44330a4e286e58707b852a4f17bf1d7edd30517169d33ae9fc246240"
+    },
+    {
+      "path": "src/alladin/core/models.py",
+      "sha256": "6645bcd96e1c2cb8dcb79c2199a2b904b3476e2aeb72cf376ebf035c8bfd7aa9"
+    },
+    {
+      "path": "src/alladin/core/workspace.py",
+      "sha256": "b8032ce8a215ef7b284890baffc71cb40c9d12af76c1df33756f21988b8fc570"
+    },
+    {
+      "path": "src/alladin/demo.py",
+      "sha256": "b2329777a0f6f6c62b83c848bee1baa6d6ea1b3270898def4170b94fbbce31cd"
+    },
+    {
+      "path": "src/alladin/execution/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/execution/models.py",
+      "sha256": "fe49065754e00fc8a667cdd2a3c9d48301e5b1f25e689db5f437c46e2f51f326"
+    },
+    {
+      "path": "src/alladin/execution/order_lifecycle.py",
+      "sha256": "f130ff6d6491729d6ead40b66b24bbcd860be1adfd715f630092b361c3375398"
+    },
+    {
+      "path": "src/alladin/execution/position_actions.py",
+      "sha256": "3ee3ab8c77f32e48396733a14470bb0c1198714ad61b8cd98ebbb6da675fa6f8"
+    },
+    {
+      "path": "src/alladin/execution/service.py",
+      "sha256": "7afd10d3f29d11dfc511046a1e5131bb83f7bf0f01f6aece1927d86c7478588b"
+    },
+    {
+      "path": "src/alladin/jafar/__init__.py",
+      "sha256": "5795e4714103ddc6b477d34f5b3de31efb211625858491fb3c43ee19c43a541b"
+    },
+    {
+      "path": "src/alladin/jafar/execution.py",
+      "sha256": "cbeb0cc71dfdad1350248dc148f67a29d535049a9802809d30bd74c834d3fc2d"
+    },
+    {
+      "path": "src/alladin/jafar/paper.py",
+      "sha256": "467a27124ae0ee80ba84d96625a45f6461f68c9162ce8db21c63afa44284418f"
+    },
+    {
+      "path": "src/alladin/jafar/testnet.py",
+      "sha256": "7e55affc3cdf6a0f5be7efb1d577e9e347ffa8f728f9885106029f08ab9c5a19"
+    },
+    {
+      "path": "src/alladin/journal/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/journal/models.py",
+      "sha256": "ac524cc5d0c96f052520f9f3a979fd5e71e0089da1e558db7f6b392f7d571499"
+    },
+    {
+      "path": "src/alladin/journal/repository.py",
+      "sha256": "5c34ee8a9f7a25f183ab0d345c384e66ad69e1d51aabb50f41938cf1da15d8b6"
+    },
+    {
+      "path": "src/alladin/journal/service.py",
+      "sha256": "09bb3f4f90367083bef03bbb3e7a5a5b96fcb8f6b2579fc67060911bbcf0f97a"
+    },
+    {
+      "path": "src/alladin/market/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/market/archive.py",
+      "sha256": "4449bf138e0a7b03820b83a30a5ad3f098e39887f525f50dbdcf34be21f0d932"
+    },
+    {
+      "path": "src/alladin/market/context.py",
+      "sha256": "c588f5a672d17abe2d0414cc0797622921782abfac5172f0438b035cc68830f7"
+    },
+    {
+      "path": "src/alladin/market/indicators.py",
+      "sha256": "580ada9bf8c3613aeb683c37caa20b29236d2b73fa63b971a7afa12f234bb837"
+    },
+    {
+      "path": "src/alladin/market/models.py",
+      "sha256": "b817e96b2a11a1dc73e188043f3d11f896610ad66bfd74fd7ee2f6c13395814f"
+    },
+    {
+      "path": "src/alladin/market/opportunity.py",
+      "sha256": "a71c58d0a8ea91f43582719c1eecf061eba4f259c6b2940149a5abed465e1d46"
+    },
+    {
+      "path": "src/alladin/market/paper.py",
+      "sha256": "d69f05660c08dbe78400e2e5367a180236af21d987b937e930a72c524f065526"
+    },
+    {
+      "path": "src/alladin/market/quality.py",
+      "sha256": "b5b43eacdcb0874baa56df3c389e84941badb477687233646f87a37c6f174e69"
+    },
+    {
+      "path": "src/alladin/market/regime.py",
+      "sha256": "929c41935e2d305b2cf50fb8d3d66446affd98d378ce43a1923648fbf8ad070b"
+    },
+    {
+      "path": "src/alladin/market/scanner.py",
+      "sha256": "2f5075e2d49ef4111ac6cbc8db86298dda872fd79d185fafb142fcf2db8b1078"
+    },
+    {
+      "path": "src/alladin/market/sessions.py",
+      "sha256": "a09dc8f43d59757989f82df0f707baf640ffaf40d5058d02415252fbedeae2f3"
+    },
+    {
+      "path": "src/alladin/market/universe.py",
+      "sha256": "61527f9ef0535b9aaeb52670656d78fd96a1741a943dd7fbfaf4f6a70a58cc02"
+    },
+    {
+      "path": "src/alladin/orchestration/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/orchestration/bootstrap.py",
+      "sha256": "3bdd77e68b189b0a5e716ec1433ead15bb9eda2866b3c8f149bea499d2533e0b"
+    },
+    {
+      "path": "src/alladin/orchestration/engine.py",
+      "sha256": "952177f4839b6bcd5acbb6c261d9ca9dc9f5760556763aeb65108a5b1d5c5c32"
+    },
+    {
+      "path": "src/alladin/orchestration/health.py",
+      "sha256": "7457bcf6bf242b9f44f035ee3a46ca0854f15970d78d4a22491772f0845fc6ed"
+    },
+    {
+      "path": "src/alladin/orchestration/jafar.py",
+      "sha256": "f98baf2840bbea3ab7e2c61120b48532ed964e971b02b5e70ed7e6341fd797be"
+    },
+    {
+      "path": "src/alladin/orchestration/monitor.py",
+      "sha256": "f38ecfcaa508267039eebe601db3dda566e937976667b4c28bf54889ab5236eb"
+    },
+    {
+      "path": "src/alladin/orchestration/policy_control.py",
+      "sha256": "b747782f350b9580c4e8a9643cd159381dce51ad6869d934fb43557c8b9d103f"
+    },
+    {
+      "path": "src/alladin/orchestration/state.py",
+      "sha256": "2fadce20044d4748418a3fbe6139bd78db6d0ed6cd17317d0a73afe0438acecb"
+    },
+    {
+      "path": "src/alladin/replay.py",
+      "sha256": "f7541a4ec77902de4c4d7d57246243b4bf7a05e8da5ac54a5946c950c6f51eb8"
+    },
+    {
+      "path": "src/alladin/report.py",
+      "sha256": "7922ec11edb73946f0b69c983d86f6cb8973acbd9da8385c14cee93c7c83c198"
+    },
+    {
+      "path": "src/alladin/research/__init__.py",
+      "sha256": "9e1d644303d4ad7250ad1f64610a85ad6ce6a14def901ba89585e8a754182f95"
+    },
+    {
+      "path": "src/alladin/research/backtest.py",
+      "sha256": "ef54a8c71bbeb43bf8ed17c2d64c21820be8bbe53369711fc03d1bf0767eed9d"
+    },
+    {
+      "path": "src/alladin/research/btc_experiment.py",
+      "sha256": "57ac7db33b02a54bdbc9b277e3e94ce8d3677f354a2b195ecf5a9d92d428f503"
+    },
+    {
+      "path": "src/alladin/research/models.py",
+      "sha256": "430b421b3fe137536dcacfeff866bcce181289668eb455509791b74e2412721a"
+    },
+    {
+      "path": "src/alladin/research/outcomes.py",
+      "sha256": "55d7e072789bcc96145e0a369750d3432d34d816f631b268d952d2686122001b"
+    },
+    {
+      "path": "src/alladin/research/r_analytics.py",
+      "sha256": "a0adc4b46e70cc0e99bcdfbedab94c91f83491ea19c6c72620f790d3eec000b8"
+    },
+    {
+      "path": "src/alladin/research/repository.py",
+      "sha256": "a4b5e5f905514339766b07f83bacbef3d1d9fcdd68d0bcf8a8a5d592c76e1adb"
+    },
+    {
+      "path": "src/alladin/research/scorecard.py",
+      "sha256": "6823c8317bb83d793405f9c7b6393da3662a10fc11f64a2311824aff4a6a2e29"
+    },
+    {
+      "path": "src/alladin/research/snn/__init__.py",
+      "sha256": "897e162ed888fa73fff8063732b49ab005bd240ac5b4338545a9ba55d910fcc4"
+    },
+    {
+      "path": "src/alladin/research/snn/encoder.py",
+      "sha256": "74d94b692b9bddd9e8e0539ea13cf85a38938fd55cc07954b875b928d87eaf65"
+    },
+    {
+      "path": "src/alladin/research/snn/experiment.py",
+      "sha256": "ff5d37cb9ad4eb9116c38b21a29bd572bded0d56c2e1fca574739584a7db27cd"
+    },
+    {
+      "path": "src/alladin/research/snn/lif.py",
+      "sha256": "73e661e395cd99cd89982ca3655de2c5051b7d77000ef638d9f8237284eb805b"
+    },
+    {
+      "path": "src/alladin/research/snn/rstdp.py",
+      "sha256": "8443479a5cc1e068fe25d4ad5f5a535e9f5a749e6ba529e0b898bed99cc3a539"
+    },
+    {
+      "path": "src/alladin/research/snn/shadow_brain.py",
+      "sha256": "09cfd2d6cd6bce1993c76af5c5fe3d7b35b9d942b6299d2effacb7a8985a71b7"
+    },
+    {
+      "path": "src/alladin/research/splits.py",
+      "sha256": "eaf8408fa5390c15f9abfa8199faa46aa30bc96df86dc840285bd6685e6c45c8"
+    },
+    {
+      "path": "src/alladin/risk/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/risk/correlation.py",
+      "sha256": "d8d5bf5a91984c0b773208efeea818add858abeee47fae43e30670b1edf9e666"
+    },
+    {
+      "path": "src/alladin/risk/engine.py",
+      "sha256": "6787846e1062857e642792afc318ce1308030af02971e8a0c11af6a905f42206"
+    },
+    {
+      "path": "src/alladin/risk/exposure.py",
+      "sha256": "229ef1cd9cc0601a9890241a5b386f6e3ad63562377e191d44c45d1e3e45c882"
+    },
+    {
+      "path": "src/alladin/risk/models.py",
+      "sha256": "f295aaee254e87469b2488ca185aefb2989937acb0d2aed5e7201eaed6943937"
+    },
+    {
+      "path": "src/alladin/risk/portfolio.py",
+      "sha256": "47ab0c7041b9c644bb3a6384383e73710e53ad3bd1f38e0afbeeb50660ca1299"
+    },
+    {
+      "path": "src/alladin/risk/position.py",
+      "sha256": "3a5659f0d45c2bbeddc2262bedb55a936ad479adb73a6b3ab892c4e05268def3"
+    },
+    {
+      "path": "src/alladin/risk/sizing.py",
+      "sha256": "174a3e4f2a2042148b1348c402b1870d5152bea8f3747d8b0044f12a9bc8202c"
+    },
+    {
+      "path": "src/alladin/strategies/__init__.py",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "src/alladin/strategies/base.py",
+      "sha256": "9b4f74789ce817d5d15d4b077bf8956ef5788435ef1dac30165aaf40ca2b2be2"
+    },
+    {
+      "path": "src/alladin/strategies/breakout.py",
+      "sha256": "a1bcfc06d4b87d629ba97e4ca6a9a2cf6527be0b74a2afcb1cc5472ce5222c7f"
+    },
+    {
+      "path": "src/alladin/strategies/performance.py",
+      "sha256": "a0975f984ffaa4d7a2413eb1a894bdcf409e069389b4818e44db21fc2d514ef0"
+    },
+    {
+      "path": "src/alladin/strategies/range.py",
+      "sha256": "ed6a5c1c8af201b474afc130a0619e16370f514a3f8c55081924209aadcb7535"
+    },
+    {
+      "path": "src/alladin/strategies/registry.py",
+      "sha256": "8a15d418b751b5c64c2ccbaec498128afac36bec53db2635b0970277cc28f26a"
+    },
+    {
+      "path": "src/alladin/strategies/router.py",
+      "sha256": "79eec8fa0e9db9b69432efa758e9a8882abcea4a355378b9e14447b451fd9876"
+    },
+    {
+      "path": "src/alladin/strategies/trend.py",
+      "sha256": "2594ab5bba6ef45422b83e04a10c629c023104462b76245180d2f09d3d90fdcc"
+    },
+    {
+      "path": "tests/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/conftest.py",
+      "sha256": "a8f771f9a9e1e08218efca90babed224b829dc701745b8757abbb36818dd037b"
+    },
+    {
+      "path": "tests/fake_mt5.py",
+      "sha256": "33a93da6fc7985103609f1b60f0227007c3f966afb8f5bf59ab886a5c2ad2687"
+    },
+    {
+      "path": "tests/fixtures/policy/challenge_campaign.json",
+      "sha256": "8efe439d60bdf4d192e1a395b101acc6d1f9141fb5a8b70bccc6628c8e3d8f71"
+    },
+    {
+      "path": "tests/fixtures/policy/firm_profiles.json",
+      "sha256": "be19c2a530bbbddb8d0a4fbbb6dd07dde4d6e6b23fd23dc6b336b1d0fa63d337"
+    },
+    {
+      "path": "tests/integration/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tests/integration/test_mt5_live.py",
+      "sha256": "ead9f57dfc9aedb3c7e433453e50110cf2a34d7e822017c7634bc52fb68042e5"
+    },
+    {
+      "path": "tests/policy_fixtures.py",
+      "sha256": "4fa4482c4bb1af5aa0580ac6262086044d121270f683481ce95eda5307a25f49"
+    },
+    {
+      "path": "tests/test_account_policy.py",
+      "sha256": "c0a0b75eeca4f2d6e36ef3b461283b5b5ce473df7a22d6c3ee3d62bf34c27272"
+    },
+    {
+      "path": "tests/test_agents.py",
+      "sha256": "f2eae288066b454e091be58ce0894688be3dec96d3edf42a252d7f53f4e5e6c1"
+    },
+    {
+      "path": "tests/test_api.py",
+      "sha256": "956a133d9b439d2d68ab9939042794b35bd934139800c3992a3f7a1ad886b0a9"
+    },
+    {
+      "path": "tests/test_backtest.py",
+      "sha256": "2d3e40e26b0b84956c909e68d8b3bb26991c1b73da8052a1916ec9808c983ae3"
+    },
+    {
+      "path": "tests/test_btc_experiment.py",
+      "sha256": "b6d4f3226b665fcc0361c35dc638b9ce3b39560516e45699252a52ace6297b8b"
+    },
+    {
+      "path": "tests/test_challenge_factory.py",
+      "sha256": "6da819b5eca253ce25834f4005849aeb397e8ba5276527b34bc5a479bc2d1123"
+    },
+    {
+      "path": "tests/test_cli.py",
+      "sha256": "abbdbc15e86814098d73ef7b07015abf87a6d4f0a53a5091e8ebb2f911452435"
+    },
+    {
+      "path": "tests/test_crypto_foundations.py",
+      "sha256": "8aff5115892ea41292eb49e312975d582c2670463511f8c06e7df731d83e265d"
+    },
+    {
+      "path": "tests/test_crypto_metadata.py",
+      "sha256": "602418c97e2d9238208ffb2c13d2ca30ba334220405555b4752014652c9fd343"
+    },
+    {
+      "path": "tests/test_crypto_portfolio.py",
+      "sha256": "ccf53e2271a57fc837daa98e9c9dae7c5cc152c95ea117393c84e1d57db3e057"
+    },
+    {
+      "path": "tests/test_crypto_universe.py",
+      "sha256": "b06ab5e73eacc37eed6c5d462c9825abe89d872edc8f4db41210ea51cc2b91fe"
+    },
+    {
+      "path": "tests/test_daemon_modes.py",
+      "sha256": "be85c4f7a4ab0469f2180205e8e20dea9587a3dfebf4a593bf99b7ae0c8c06c6"
+    },
+    {
+      "path": "tests/test_dashboard_formatting.py",
+      "sha256": "d504548933a8dd34029ba945a94afa369b1b6d114da84d40ac72d71035ba4b18"
+    },
+    {
+      "path": "tests/test_deploy_artifacts.py",
+      "sha256": "80d07d22cf8130ce99dd92c35eba6a7f90695b633846a39df3ab2f32fea3129d"
+    },
+    {
+      "path": "tests/test_economic_calendar.py",
+      "sha256": "d3f974576047ae81708334431c7ec0388fb720a9199352bf0196b4a5eb1db2bc"
+    },
+    {
+      "path": "tests/test_exchange_order_lifecycle.py",
+      "sha256": "cffbc67d9aa2fa1428175c89d4150096c093e054b6cde18df1cf729ee3859d5a"
+    },
+    {
+      "path": "tests/test_execution.py",
+      "sha256": "ce6f2d5f31f05112f61df1cf611e6dd89617e605a4a5f9cfdd19ccef77eb7b06"
+    },
+    {
+      "path": "tests/test_jafar_execution.py",
+      "sha256": "5c5ef21323dd0b110f836b803f98b29d8d6b01542572f2666d08adaa43a5672f"
+    },
+    {
+      "path": "tests/test_jafar_observe.py",
+      "sha256": "4e6249db9e1bd2478c7142a57fd557518eae0471f9c7f083057a5d658b122a8c"
+    },
+    {
+      "path": "tests/test_jafar_paper.py",
+      "sha256": "67bd4fdcb024c4fceed2966edfe80e1841a51968d985d6983b67f0b235e79b74"
+    },
+    {
+      "path": "tests/test_jafar_paper_endurance.py",
+      "sha256": "b2f4c9ebb745c4e35044ecdc9397c296f96f7c86c198c71ffc707736ea42b024"
+    },
+    {
+      "path": "tests/test_jafar_paper_mc_coherence.py",
+      "sha256": "1edc86658777136a43cdb4d3fac95405b4b12b2344773155710a6073078e3d72"
+    },
+    {
+      "path": "tests/test_jafar_runtime_health.py",
+      "sha256": "1590ad2f6011e1ec98ba860e80e5961d4e69ff1b5eaaea267c105a6dc73894ef"
+    },
+    {
+      "path": "tests/test_jafar_soak_report.py",
+      "sha256": "9b1b9607ee87f14960bd30b82ef96f436ff0c290d95b31d2439d9034edc4250c"
+    },
+    {
+      "path": "tests/test_jafar_testnet.py",
+      "sha256": "e443b98c654968f7a2e0bcff8d48dd1c21ab89c8a60cc3932070996d41a21a28"
+    },
+    {
+      "path": "tests/test_journal.py",
+      "sha256": "37bc165f0e24ad164622416798cecb131b13698d676723be29bbbb54bf5c169f"
+    },
+    {
+      "path": "tests/test_market.py",
+      "sha256": "36430e35b915483959afc5ead4f8482ad5c804718fb93d76736f90e1e7922dde"
+    },
+    {
+      "path": "tests/test_market_quality.py",
+      "sha256": "1e5f6815fae91f1ef85a0dd65d926d68e445b3eb67c584271f9b9718bae989cc"
+    },
+    {
+      "path": "tests/test_mission_control_health.py",
+      "sha256": "e5ca74d793425b53ea5fc1478ff683d858738e7810503b51af871b27d9a8d9ae"
+    },
+    {
+      "path": "tests/test_mt5_broker.py",
+      "sha256": "2573175d118644d3af42737e51efc9a4aa54d247480402c1c8dbe8fba466ca85"
+    },
+    {
+      "path": "tests/test_observability.py",
+      "sha256": "79ff78e70149028fd211e1ae0161ae23891a76abfb2ff96eb4a79458de796e85"
+    },
+    {
+      "path": "tests/test_orchestration.py",
+      "sha256": "a630091836b03f101288b5bdaf9f2dba388469eb7b33fb4bd0da11bb799484cd"
+    },
+    {
+      "path": "tests/test_outcomes.py",
+      "sha256": "8d0d12d33d7db1c2aae990caa4b015b44d1d2c2fda13b83e7c5b6405bf9468b2"
+    },
+    {
+      "path": "tests/test_paper_engine.py",
+      "sha256": "6105d181d0043edb80345dfda5ea9c5ed6e22caf8595c2454d9145243ebfcce5"
+    },
+    {
+      "path": "tests/test_policy_compliance_simulation.py",
+      "sha256": "db90cbea769ef4ae0df1920798c519eca8e44c36befeeddba52d33f07aade67b"
+    },
+    {
+      "path": "tests/test_policy_control.py",
+      "sha256": "72549a38232d2d8add7255d64d5688be06e3e08185063f01af646a68d5bc8e6f"
+    },
+    {
+      "path": "tests/test_policy_gate.py",
+      "sha256": "970bb0fc0533ff3e602753233ddb9170cc11d707a1288213a61e4c8ae23bc07a"
+    },
+    {
+      "path": "tests/test_policy_gate_validation.py",
+      "sha256": "1103fda5da97ce7d83332b2cb4e70f3579c7693060dbd12bc2b27cee294f9aac"
+    },
+    {
+      "path": "tests/test_policy_market_stress.py",
+      "sha256": "73570c54ad18dd9bece44c128a6b8c51b3239ce7e287930be6e572e809e2eb6e"
+    },
+    {
+      "path": "tests/test_policy_quality.py",
+      "sha256": "43b5be3dec69fe09b9fcb8fe4c1e1fec5e8242926e7019a80b09451baf2dd993"
+    },
+    {
+      "path": "tests/test_position_lifecycle.py",
+      "sha256": "ee9c393937ef5b1aa8767634cda4e838cd000f5dc3c7c392388db94e27866463"
+    },
+    {
+      "path": "tests/test_position_primitives.py",
+      "sha256": "591eb48036cf91446a85ae681806de8867f84b31d7c272327a869d4b27ef2ec7"
+    },
+    {
+      "path": "tests/test_position_risk.py",
+      "sha256": "5f852143aeed86855450bf80a7f054e206a7049f5aebee3e3b4d247aa0c03564"
+    },
+    {
+      "path": "tests/test_propfirm_policy_foundations.py",
+      "sha256": "e1efaeb5aee1cd8ffcba925ddaeded1417e60baaaa95ff5479e1c6454ec2b3ff"
+    },
+    {
+      "path": "tests/test_public_calendar.py",
+      "sha256": "248cd85cb2f5fe4a3559319bec6976655d87923990fcaa72aebb8d9c7e1d72d5"
+    },
+    {
+      "path": "tests/test_research_replay.py",
+      "sha256": "6c1aceedc6094170e67dce9b07ce6067adb9372e081124d42dd3642288935428"
+    },
+    {
+      "path": "tests/test_risk_engine.py",
+      "sha256": "161fba0b068e905c3726421b84a1f7f98de514609faf691c6f6c2c6c7e86603e"
+    },
+    {
+      "path": "tests/test_runtime_health.py",
+      "sha256": "f11a9a71fa9afdfdd0d55e6cdb180d739dfbf16cdcf2e34a509441950efdb770"
+    },
+    {
+      "path": "tests/test_shadow_brain.py",
+      "sha256": "ed495ff8568abb59afbb3867758eef06c8a113a20319a5776959e9ebad43a89f"
+    },
+    {
+      "path": "tests/test_sizing.py",
+      "sha256": "82e2e1a391742595dbae86866a3b6310eab0bd6a5c16f4e9d9f00a3e26b0fc67"
+    },
+    {
+      "path": "tests/test_snn_k1.py",
+      "sha256": "1630f3c9b11af082e0e09393af6031db6e3ea350a952945c83da8e74487ecbd9"
+    },
+    {
+      "path": "tests/test_strategy_lifecycle.py",
+      "sha256": "1986c3bd212e19d4456d0c8986bedfd56a9a8706744c9c6247090da93f274e96"
+    },
+    {
+      "path": "tests/test_watchdog.py",
+      "sha256": "4179b8a5c39cf19dd7098b6c47cd72ad16545c98263c1107076096aa882996c9"
+    },
+    {
+      "path": "tests/test_workspaces.py",
+      "sha256": "1bba0aca7fe1c6bcae77582fd7ab4d8ff5756bb4780ee35aabf9a249a4e22433"
+    },
+    {
+      "path": "tests/test_workstation_acceptance.py",
+      "sha256": "752d2753408a7108b40d03c54186059c0cc6664a0a12622ab359146c3e8f7db1"
+    }
+  ],
+  "python": "3.12.14",
+  "packages": {
+    "pytest": "9.1.1",
+    "ruff": "0.16.10",
+    "mypy": "2.4.0",
+    "pydantic": "2.13.5",
+    "SQLAlchemy": "2.1.4",
+    "fastapi": "0.142.4"
+  },
+  "full_suite": {
+    "command": "python -m pytest -o addopts='' -q --junitxml=/tmp/alladin-final-software.xml",
+    "passed": 1435,
+    "skipped": 3,
+    "failed": 0,
+    "errors": 0,
+    "warnings": 1,
+    "seconds": 132.41,
+    "junit_sha256": "c7f36a4ea71c17f1c57328ff066fda14bcd233fc629e3d1519a1464f8c4f6788"
+  },
+  "targeted_suite": {
+    "command": "python -m pytest -o addopts='' -q tests/test_account_policy.py tests/test_economic_calendar.py tests/test_policy*.py tests/test_propfirm_policy_foundations.py tests/test_public_calendar.py tests/test_challenge_factory.py",
+    "passed": 498,
+    "failed": 0,
+    "skipped": 0,
+    "warnings": 1
+  },
+  "skips": [
+    {
+      "test": "tests.integration.test_mt5_live.test_account_is_demo_and_readable",
+      "reason": "int\u00e9gration MT5 : passer --run-mt5 (terminal connect\u00e9 \u00e0 un compte DEMO)"
+    },
+    {
+      "test": "tests.integration.test_mt5_live.test_symbols_discovered_dynamically",
+      "reason": "int\u00e9gration MT5 : passer --run-mt5 (terminal connect\u00e9 \u00e0 un compte DEMO)"
+    },
+    {
+      "test": "tests.integration.test_mt5_live.test_market_data_for_a_tradable_forex_symbol",
+      "reason": "int\u00e9gration MT5 : passer --run-mt5 (terminal connect\u00e9 \u00e0 un compte DEMO)"
+    }
+  ],
+  "ruff": {
+    "command": "python -m ruff check src/alladin tests scripts/report_policy_quality.py scripts/report_challenge_campaign.py",
+    "status": "PASS"
+  },
+  "mypy": {
+    "command": "python -m mypy src/alladin scripts/report_policy_quality.py scripts/report_challenge_campaign.py",
+    "status": "PASS",
+    "files": 112
+  },
+  "diff_check": "PASS",
+  "report_replay": "Byte-identical policy_quality_fixture.json and challenge_campaign_fixture.json",
+  "execution_authorized": false,
+  "mt5_acceptance": false,
+  "performance_qualified": false,
+  "unattended_qualified": false,
+  "warning": "Starlette TestClient/httpx deprecation",
+  "limitations": [
+    "No real account admission or trading enabled",
+    "Partial public calendars; no complete composite collector enabled",
+    "Synthetic scenario fractions are not real-world probability estimates",
+    "No atomic cross-process exposure reservation",
+    "No MT5 native fill, Windows reconciliation or endurance qualification"
+  ]
+}

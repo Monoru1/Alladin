@@ -84,3 +84,15 @@ def test_script_reproduces_json(tmp_path):
 def test_invalid_probe_identity():
     with pytest.raises(ValueError):
         replace(probe(), account_ref=" ")
+
+
+def test_refusals_data_failure_and_match_fraction_are_distinct():
+    a=probe(probe_id='news')
+    b=probe(probe_id='outage',context=replace(probe().context,calendar=None),
+            expected_reason='CALENDAR_MISSING')
+    report=build_policy_quality_report((a,b))
+    assert report['refused_decisions'] == 2
+    assert report['data_unavailable_decisions'] == 1
+    assert report['labelled_expectation_match_fraction'] == 1.
+    assert report['records'][0]['calendar']['coverage_complete'] is None
+    assert report['unattended_qualified'] is False

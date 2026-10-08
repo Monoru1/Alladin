@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "simulation_only": true,
+  "variants": [
+    {
+      "id": "synthetic-moderate-25000",
+      "simulation_only": true,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward_on_pass": null,
+      "symbol": "EURUSD",
+      "challenge": {
+        "id": "synthetic-moderate-25000",
+        "name": "synthetic-moderate-25000",
+        "description": "SYNTHETIC ONLY; not an official firm contract",
+        "initial_balance": 25000.0,
+        "phases": [
+          {
+            "name": "synthetic-evaluation",
+            "profit_target_pct": 5.0
+          }
+        ],
+        "official_rules": {
+          "daily_loss_pct": 5.0,
+          "max_total_loss_pct": 10.0,
+          "min_trading_days": 2,
+          "reset_timezone": "Europe/Prague"
+        },
+        "extra_rules": {
+          "max_days_per_phase": 10,
+          "soft_daily_loss_pct": 3.0
+        }
+      },
+      "firm": {
+        "firm": "synthetic-moderate",
+        "program": "synthetic",
+        "phase": "evaluation",
+        "account_type": "fixture",
+        "version": "1",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-01T00:00:00Z",
+        "valid_until": "2026-11-01T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD"
+        ],
+        "ea_allowed": true,
+        "restrict_news": true
+      }
+    },
+    {
+      "id": "synthetic-moderate-100000",
+      "simulation_only": true,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward_on_pass": null,
+      "symbol": "EURUSD",
+      "challenge": {
+        "id": "synthetic-moderate-100000",
+        "name": "synthetic-moderate-100000",
+        "description": "SYNTHETIC ONLY; not an official firm contract",
+        "initial_balance": 100000.0,
+        "phases": [
+          {
+            "name": "synthetic-evaluation",
+            "profit_target_pct": 5.0
+          }
+        ],
+        "official_rules": {
+          "daily_loss_pct": 5.0,
+          "max_total_loss_pct": 10.0,
+          "min_trading_days": 2,
+          "reset_timezone": "Europe/Prague"
+        },
+        "extra_rules": {
+          "max_days_per_phase": 10,
+          "soft_daily_loss_pct": 3.0
+        }
+      },
+      "firm": {
+        "firm": "synthetic-moderate",
+        "program": "synthetic",
+        "phase": "evaluation",
+        "account_type": "fixture",
+        "version": "1",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-01T00:00:00Z",
+        "valid_until": "2026-11-01T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD"
+        ],
+        "ea_allowed": true,
+        "restrict_news": true
+      }
+    },
+    {
+      "id": "synthetic-strict-25000",
+      "simulation_only": true,
+      "hypothetical_evaluation_fee": 100.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward_on_pass": null,
+      "symbol": "EURUSD",
+      "challenge": {
+        "id": "synthetic-strict-25000",
+        "name": "synthetic-strict-25000",
+        "description": "SYNTHETIC ONLY; not an official firm contract",
+        "initial_balance": 25000.0,
+        "phases": [
+          {
+            "name": "synthetic-evaluation",
+            "profit_target_pct": 8.0
+          }
+        ],
+        "official_rules": {
+          "daily_loss_pct": 5.0,
+          "max_total_loss_pct": 10.0,
+          "min_trading_days": 2,
+          "reset_timezone": "Europe/Prague"
+        },
+        "extra_rules": {
+          "max_days_per_phase": 10,
+          "soft_daily_loss_pct": 3.0
+        }
+      },
+      "firm": {
+        "firm": "synthetic-strict",
+        "program": "synthetic",
+        "phase": "evaluation",
+        "account_type": "fixture",
+        "version": "1",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-01T00:00:00Z",
+        "valid_until": "2026-11-01T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD"
+        ],
+        "ea_allowed": true,
+        "restrict_news": true
+      }
+    },
+    {
+      "id": "synthetic-strict-100000",
+      "simulation_only": true,
+      "hypothetical_evaluation_fee": 400.0,
+      "hypothetical_operating_cost": 20.0,
+      "hypothetical_reward_on_pass": null,
+      "symbol": "EURUSD",
+      "challenge": {
+        "id": "synthetic-strict-100000",
+        "name": "synthetic-strict-100000",
+        "description": "SYNTHETIC ONLY; not an official firm contract",
+        "initial_balance": 100000.0,
+        "phases": [
+          {
+            "name": "synthetic-evaluation",
+            "profit_target_pct": 8.0
+          }
+        ],
+        "official_rules": {
+          "daily_loss_pct": 5.0,
+          "max_total_loss_pct": 10.0,
+          "min_trading_days": 2,
+          "reset_timezone": "Europe/Prague"
+        },
+        "extra_rules": {
+          "max_days_per_phase": 10,
+          "soft_daily_loss_pct": 3.0
+        }
+      },
+      "firm": {
+        "firm": "synthetic-strict",
+        "program": "synthetic",
+        "phase": "evaluation",
+        "account_type": "fixture",
+        "version": "1",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-01T00:00:00Z",
+        "valid_until": "2026-11-01T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD"
+        ],
+        "ea_allowed": true,
+        "restrict_news": true
+      }
+    }
+  ],
+  "paths": [
+    {
+      "id": "gains",
+      "steps": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": true
+        }
+      ]
+    },
+    {
+      "id": "daily-loss",
+      "steps": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "gross_pnl_pct": -6.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": -6.1,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": true
+        }
+      ]
+    },
+    {
+      "id": "news-outage",
+      "steps": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": true,
+          "restart": false
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": false,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": true
+        }
+      ]
+    },
+    {
+      "id": "mixed",
+      "steps": [
+        {
+          "at": "2026-10-08T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-09T12:00:00+00:00",
+          "gross_pnl_pct": -2.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": -2.1,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": false
+        },
+        {
+          "at": "2026-10-10T12:00:00+00:00",
+          "gross_pnl_pct": 3.0,
+          "cost_pct": 0.1,
+          "worst_equity_pct": 0.0,
+          "calendar_available": true,
+          "restricted_release": false,
+          "restart": true
+        }
+      ]
+    }
+  ]
+}

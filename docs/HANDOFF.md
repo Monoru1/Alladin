@@ -1,5 +1,21 @@
 # ALLADIN — Agent Handoff & Operating Manual
 
+## Lot 6 — 2026-10-08 : campagnes et preuves opérationnelles PAPER
+
+Base `0b030ed`. `challenge/factory.py` et script `report_challenge_campaign.py` : seize replays appariés (deux profils SYNTHÉTIQUES × deux allocations nominales × quatre chemins). PolicyGate d'entrée + watchdog existant, reset avant perte, arrêt au creux éliminatoire, phases/restart, annonces/pannes. Drawdown aux points observés, cas inachevés conservés, frais/coûts/récompenses explicitement hypothétiques. Aucune stratégie, probabilité réelle ou cash généré inféré ; compte/récompense absents restent null. Les contraintes avancées non raccordées sont rejetées, jamais ignorées. Voir `docs/CHALLENGE_CAMPAIGNS.md`, fixtures et rapport versionnés.
+
+Qualité : refus, raisons d'indisponibilité, correspondance des attentes labellisées ; contexte complet hashé dans le journal et direction LONG/SHORT du provider vérifiée. Un contexte changé avec même verdict devient un incident de replay. Audit après fill natif SL/TP PAPER : protection préservée, conflit contractuel ou panne journalisés, pas d'assimilation à une proposition refusée. API /api/policy distingue refus pré-proposition et revues après fill simulé ; aucun changement de routes existantes ni interface cockpit.
+
+Validation finale : **498 passed** ciblés ; suite finale **1435 passed, 3 skipped MT5, 0 failed, 1 warning Starlette**, 132.41 s. Ruff src/tests/deux scripts : **PASS**. Mypy src/deux scripts : **PASS, 112 fichiers**. Diff --check : **PASS**. Environnement, hash du code/fixtures, commandes et skips exacts : `docs/reports/policy_software_current.json`.
+Deux rapports régénérés octet par octet à l'identique. Une suite intermédiaire avait **1431 passed, 2 failed, 3 skipped** : les deux fixtures SL PAPER laissaient MockAgent ouvrir une nouvelle position après la clôture ; fixture corrigée en NO_TRADE et étendue aux TP. Aucune protection supprimée pour obtenir un PASS.
+
+Reprise commune Claude/Codex : lire ce bloc puis les lots 4/5, PUBLIC_CALENDAR.md et CHALLENGE_CAMPAIGNS.md. Prochain lot logiciel : admission persistante de profils par compte/phase + composite calendrier causal à couverture vérifiable, archive de réception/licence/mapping, réservations atomiques de risques/expositions, replay trailing/overnight/portefeuille raccordé au runtime. Le checkpoint reste opt-in OBSERVE/PAPER et le collecteur n'est pas activé automatiquement. Aucun contrat réel admis, aucun LIVE/DEMO activé, aucune modification Brain/RiskEngine/Jafar/SNN-X, aucun compte financier ni achat.
+
+À réaliser sur Windows/MT5 DEMO : terminal et liaison serveur/compte, ownership/magic, règles horaires réelles, fills SL/TP et restrictions d'annonces, latences/slippage, pannes/redémarrages/reconciliation et endurance. Performance OOS et probabilités de validation exigent ensuite des données/expériences, pas une extrapolation des quatre chemins synthétiques. Pas de readiness 24/7 ni rendement démontré.
+
+---
+
+
 ## Lot 5 — 2026-10-08 : sources publiques et checkpoint OBSERVE/PAPER
 
 Base `1ca8fa2`. Adaptateurs à URLs fixes BLS ICS, BEA ICS/JSON, GET borné sans identifiants/redirects, provenance SHA-256, réception causale, SEQUENCE/DST/révisions, rejet des calendriers incertains. Couverture explicitement partielle : OPEN bloqué, gestion transactionnelle REVIEW. Documentation `docs/PUBLIC_CALENDAR.md`. Smoke réel : BLS ICS 313 événements (hash 92a350111ace106deaab5584e4084366bd367b594a0d0bad116008d82d63e501), BEA ICS 166 (c6320686f93a1200c1226ed92eed1c7d2531491006b6da7099fadaab57c433e9). BEA JSON a révélé la métadonnée file_last_updated : schéma corrigé/testé offline ; la tentative de téléchargement suivante a expiré, pas de PASS réseau JSON annoncé.
