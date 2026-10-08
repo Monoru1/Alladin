@@ -1,5 +1,10 @@
 # ALLADIN — Instructions pour Codex et agents de développement
 
+## État actuel après lot 5 du 2026-10-08
+
+Lire les blocs lot 4/5 des handoffs. PolicyGate dispose maintenant de contraintes de compte et d’un checkpoint **opt-in OBSERVE/PAPER** dans l’orchestrateur ; aucune activation globale ni chemin DEMO autorisé par ce checkpoint. Sources publiques partielles : voir docs/PUBLIC_CALENDAR.md. Les mentions antérieures « hors runtime/non ingéré » sont historiques ou décrivent les sondes offline. Dernière suite réellement exécutée : 1416 passed, 3 skipped MT5 ; Ruff/mypy PASS. Préserver protections natives et RiskEngine.
+
+
 ## Reprise après validation offline du 2026-10-08
 
 Lire le dernier lot dans les trois handoffs et `docs/POLICY_VALIDATION.md`. Les PolicyGate/event/firm/capital/calendar et sondes de qualité sont implémentés et testés **hors runtime** ; les paragraphes plus anciens « tests non exécutés » décrivent leur création, pas leur état actuel. Commande ciblée : `python -m pytest -o addopts='' -q tests/test_economic_calendar.py tests/test_policy*.py tests/test_propfirm_policy_foundations.py`. Rapport : `python scripts/report_policy_quality.py`. Fixtures SYNTHETIC-ONLY : jamais des contrats/admissions réels. Aucun branchement broker, aucune revue des sorties protectrices ni qualification 24/7 déduite d'un PASS logiciel. Maintenir RiskEngine et protections des modes.

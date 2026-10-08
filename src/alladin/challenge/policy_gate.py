@@ -138,7 +138,7 @@ def evaluate_action(
         restrict_news=context.restrict_news,
     )
     if news.verdict is EventVerdict.BLOCK:
-        if news.reason in {"CALENDAR_MISSING", "CALENDAR_STALE_OR_FUTURE"}:
+        if news.reason in {"CALENDAR_MISSING", "CALENDAR_STALE_OR_FUTURE", "CALENDAR_COVERAGE_INCOMPLETE"}:
             return PolicyDecision(
                 GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW,
                 news.reason,

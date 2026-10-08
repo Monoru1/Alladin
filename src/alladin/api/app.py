@@ -21,6 +21,7 @@ from alladin.journal.repository import JournalRepository
 from alladin.journal.service import JournalService
 from alladin.market.universe import MarketUniverse
 from alladin.orchestration.health import RuntimeHealthTracker, RuntimeStatus
+from alladin.orchestration.policy_control import policy_journal_report
 from alladin.research.models import StrategyStatus
 from alladin.research.repository import ResearchRepository
 from alladin.risk import sizing
@@ -240,6 +241,10 @@ def create_app(settings: Settings | None = None, repo: JournalRepository | None 
         rows = repo.events(latest(run_id).run_id, [event] if event else None,
                            limit=limit, desc=True, cycle_id=cycle_id)
         return [e.model_dump(mode="json") for e in rows]
+
+    @app.get("/api/policy")
+    def policy_report(run_id: str | None = None) -> dict[str, Any]:
+        return policy_journal_report(journal, latest(run_id).run_id)
 
     @app.get("/api/strategies")
     def strategies() -> list[dict[str, Any]]:

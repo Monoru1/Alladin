@@ -1,5 +1,18 @@
 # Alladin — Codex handoff — 2026-10-08
 
+## Lot 5 — 2026-10-08 : sources publiques et checkpoint OBSERVE/PAPER
+
+Base `1ca8fa2`. Adaptateurs à URLs fixes BLS ICS, BEA ICS/JSON, GET borné sans identifiants/redirects, provenance SHA-256, réception causale, SEQUENCE/DST/révisions, rejet des calendriers incertains. Couverture explicitement partielle : OPEN bloqué, gestion transactionnelle REVIEW. Documentation `docs/PUBLIC_CALENDAR.md`. Smoke réel : BLS ICS 313 événements (hash 92a350111ace106deaab5584e4084366bd367b594a0d0bad116008d82d63e501), BEA ICS 166 (c6320686f93a1200c1226ed92eed1c7d2531491006b6da7099fadaab57c433e9). BEA JSON a révélé la métadonnée file_last_updated : schéma corrigé/testé offline ; la tentative de téléchargement suivante a expiré, pas de PASS réseau JSON annoncé.
+
+`PolicyController` injecté explicitement dans Components.engine : uniquement OBSERVE/PAPER, compte/journal/instant/symbole vérifiés, panne du provider fail-closed, ALLOW seul poursuit vers RiskEngine/exécution PAPER existants. Les six actions OPEN/CLOSE/PARTIAL_CLOSE/MODIFY_STOP/MODIFY_TARGET/HOLD sont testées ; aucune modification du Brain actif ni activation globale. Journal policy.decision/policy.incident, déduplication après restart, divergence de replay refusée. GET read-only /api/policy : refus, disponibilité par décision (pas uptime), incidents et intégrité ; aucune qualification automatique. Les protections SL/TP PAPER natives restent actives avant le checkpoint.
+
+Tests ciblés : **88 passed, 1 warning**. Suite générale : **1416 passed, 3 skipped MT5, 1 warning Starlette**, 131.03 s, JUnit /tmp/alladin-lot5.xml. Ruff src/tests/script rapport : **PASS** ; mypy src + script rapport : **PASS, 110 fichiers** ; diff --check : PASS. Les erreurs initiales des nouveaux tests (mauvais noms d'API MockBroker/contexte) ont été corrigées avant cette suite finale.
+
+Limites : collecteur/composite calendrier non configuré, licence/couverture/mapping contractuel à vérifier ; BEA JSON ne garantit pas un ID stable entre dates ; contraintes de compte sans réservations atomiques multi-processus ; conformité des fills natifs et MT5 DEMO/endurance non certifiée ; aucune admission officielle ni permission d'exécution. Suite : campagnes synthétiques reproductibles et rapports. Windows/MT5/comptes toujours inutilisés.
+
+---
+
+
 ## Lot 4 — 2026-10-08 : contraintes de compte et protection
 
 Base `8a48b5b`. Ajout `challenge/account_policy.py` et champ optionnel `FirmProfile.constraints` : sessions/actions permises, weekend et durée de coupure configurés via horaires injectés, drawdown static/trailing_balance/trailing_equity/trailing_eod avec état sérialisable, limites agrégées de positions/risque/groupes et opposition inter-comptes sur un scope explicite en devise commune. Données expirées/manquantes/divergentes : OPEN bloqué, gestion/HOLD soumis à revue. Pas de règles officielles codées par défaut ; legacy inchangé sans contraintes.

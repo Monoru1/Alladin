@@ -44,6 +44,7 @@ class CalendarSnapshot:
     valid_until: datetime
     source: str
     events: tuple[EconomicEvent, ...]
+    coverage_complete: bool | None = None
 
     def __post_init__(self) -> None:
         if self.as_of.utcoffset() is None or self.valid_until.utcoffset() is None:
@@ -52,6 +53,8 @@ class CalendarSnapshot:
         object.__setattr__(self, "valid_until", self.valid_until.astimezone(UTC))
         if self.valid_until < self.as_of or not self.source.strip():
             raise ValueError("snapshot validity and source required")
+        if self.coverage_complete is not None and type(self.coverage_complete) is not bool:
+            raise ValueError("coverage status must be boolean or legacy unknown")
         if len({e.event_id for e in self.events}) != len(self.events):
             raise ValueError("snapshot must contain one revision per event_id")
 
@@ -97,6 +100,8 @@ class EventPolicy:
             return EventDecision(EventVerdict.BLOCK, "CALENDAR_MISSING")
         if not snapshot.as_of <= now <= snapshot.valid_until:
             return EventDecision(EventVerdict.BLOCK, "CALENDAR_STALE_OR_FUTURE")
+        if snapshot.coverage_complete is False:
+            return EventDecision(EventVerdict.BLOCK, "CALENDAR_COVERAGE_INCOMPLETE")
         matches = []
         for event in snapshot.events:
             if event.published_at is not None and event.published_at > now:

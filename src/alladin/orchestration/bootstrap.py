@@ -40,6 +40,7 @@ from alladin.market.scanner import MarketScanner
 from alladin.market.universe import MarketUniverse
 from alladin.orchestration.engine import OrchestrationEngine
 from alladin.orchestration.monitor import PositionMonitor
+from alladin.orchestration.policy_control import PolicyController
 from alladin.orchestration.state import RunContext, RunManager
 from alladin.research.models import StrategyStatus
 from alladin.research.outcomes import OutcomeEngine, RewardPolicy
@@ -125,6 +126,7 @@ class Components:
         execute: bool = False,
         run_mode: RunMode = RunMode.OBSERVE,
         brain: Brain | None = None,
+        policy_controller: PolicyController | None = None,
     ) -> OrchestrationEngine:
         shadow_brains: tuple[ShadowBrain, ...] = ()
         if self.run.workspace is WorkspaceId.JAFAR:
@@ -185,6 +187,7 @@ class Components:
             brain=brain,
             outcomes=self.outcomes,
             shadow_brains=shadow_brains,
+            policy_controller=policy_controller,
         )
 
 

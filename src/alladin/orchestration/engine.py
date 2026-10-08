@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 from alladin.agents.base import AgentAdapter, AgentIntentDraft
 from alladin.brain import Action, ActionProposal, Brain, BrainContext, ClassicBrainAdapter
 from alladin.brokers.base import BrokerAdapter
+from alladin.challenge.policy_gate import GateVerdict
 from alladin.core.enums import RunMode, RunState, Side
 from alladin.core.errors import AlladinError
 from alladin.core.models import TradeIntent
@@ -32,6 +33,7 @@ from alladin.market.opportunity import Opportunity, OpportunityStatus, opportuni
 from alladin.market.paper import PaperExperimentEngine
 from alladin.market.scanner import MarketScanner
 from alladin.orchestration.monitor import PositionMonitor
+from alladin.orchestration.policy_control import PolicyController
 from alladin.orchestration.state import RunContext, RunManager
 from alladin.research.outcomes import OutcomeEngine
 from alladin.research.snn.shadow_brain import ShadowBrain, ShadowObservation
@@ -73,6 +75,7 @@ class OrchestrationEngine:
         brain: Brain | None = None,
         outcomes: OutcomeEngine | None = None,
         shadow_brains: tuple[ShadowBrain, ...] = (),
+        policy_controller: PolicyController | None = None,
     ) -> None:
         self.broker, self.run, self.manager, self.journal = broker, run, manager, journal
         self.scanner, self.router, self.agent = scanner, router, agent
@@ -82,6 +85,12 @@ class OrchestrationEngine:
             run_mode = RunMode.DEMO
         if run.workspace is WorkspaceId.JAFAR and run_mode is not RunMode.OBSERVE:
             raise AlladinError("Jafar skeleton autorise OBSERVE uniquement")
+        if policy_controller is not None:
+            if run_mode not in {RunMode.OBSERVE, RunMode.PAPER}:
+                raise AlladinError("PolicyController requires OBSERVE/PAPER")
+            if run.account_binding != policy_controller.binding or journal is not policy_controller.journal:
+                raise AlladinError("PolicyController run binding/journal mismatch")
+        self.policy_controller = policy_controller
         self.run_mode = run_mode
         self.execute = run_mode is RunMode.DEMO  # compatibilité interne
         self.paper_engine = paper_engine
@@ -249,6 +258,12 @@ class OrchestrationEngine:
                 proposal.reasons[0] if proposal.reasons else "l'agent ne propose aucun trade",
                 shortlist, proposal.proposal_id,
             )
+        if self.policy_controller is not None:
+            policy = self.policy_controller.assess(proposal, self.run_mode)
+            if policy.verdict is not GateVerdict.ALLOW:
+                return self._no_trade(scan, evaluated, self.agent.name,
+                                      f"PolicyGate {policy.verdict.value}: {policy.reason}",
+                                      shortlist, proposal.proposal_id)
         if proposal.action not in (Action.LONG, Action.SHORT):
             management_result = self.execution.submit_position_action(proposal, self.run_mode, self.paper_engine)
             if management_result.confirmed:

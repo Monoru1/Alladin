@@ -76,6 +76,8 @@ class CalendarBatch(BaseModel):
     observed_at: AwareDatetime
     valid_until: AwareDatetime
     revisions: tuple[CalendarRevision, ...]
+    coverage_complete: bool | None = Field(default=None, strict=True)
+    document_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("observed_at", "valid_until")
     @classmethod
@@ -122,7 +124,7 @@ class CalendarBatch(BaseModel):
             for _, row in sorted(latest.items())
         )
         return CalendarSnapshot(self.observed_at.astimezone(UTC), self.valid_until.astimezone(UTC),
-                                self.source, events)
+                                self.source, events, self.coverage_complete)
 
 
 def replay_calendar(batches: tuple[CalendarBatch, ...], *, now: datetime) -> CalendarSnapshot | None:
