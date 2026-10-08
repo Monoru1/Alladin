@@ -150,6 +150,16 @@ def test_test_order_unknown_cfd_calculation_requires_explicit_price_distance(
     assert fake.order_send_calls == []
 
 
+def test_test_order_default_risk_budget_is_stable_across_ticks(
+    cli_env: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = use_fake(monkeypatch, FakeMT5())
+    res = runner.invoke(cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\n")
+    assert res.exit_code == 0, res.output
+    assert "risk requested: 0.05%" in res.output
+    assert fake.order_send_calls == []
+
+
 def test_test_order_no_input_at_all_sends_nothing(cli_env: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = use_fake(monkeypatch, FakeMT5())
     runner.invoke(cli.app, ["mt5", "test-order"], input="")  # stdin fermé (non interactif)
