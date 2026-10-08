@@ -123,7 +123,7 @@ def test_test_order_dry_run_never_sends_even_if_stdin_contains_execute(
 ) -> None:
     fake = use_fake(monkeypatch, FakeMT5())
     res = runner.invoke(
-        cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\\nEXECUTE\\n"
+        cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\nEXECUTE\n"
     )
     assert res.exit_code == 0, res.output
     assert "DRY RUN ONLY" in res.output
@@ -144,7 +144,7 @@ def test_test_order_unknown_cfd_calculation_requires_explicit_price_distance(
 
     monkeypatch.setattr(fake, "_info", unclassified_info)
     use_fake(monkeypatch, fake)
-    res = runner.invoke(cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\\n")
+    res = runner.invoke(cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\n")
     assert res.exit_code == 2
     assert "--sl-price-distance" in res.output
     assert fake.order_send_calls == []
