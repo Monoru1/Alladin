@@ -817,6 +817,12 @@ details.trace-raw pre {
       <div id="positions-body"><p class="empty">Aucune position ALLADIN ouverte.</p></div>
     </article>
 
+    <!-- Journal trade lifecycle, independent of experimental reward capture -->
+    <article class="panel s12">
+      <h2><span class="dot"></span> Trades du run <span class="panel-count" id="trades-count"></span></h2>
+      <div id="trades-body"><p class="empty">Chargement du journal des trades…</p></div>
+    </article>
+
     <!-- Risk map -->
     <article class="panel s6">
       <h2><span class="dot"></span> Risk &mdash; Currency Exposure</h2>
@@ -1006,7 +1012,7 @@ function setDot(id, tone) {
 }
 
 let selectedRun = new URLSearchParams(location.search).get("run_id") || "";
-const scopedRoutes = ["/api/overview", "/api/positions", "/api/market", "/api/journal", "/api/outcomes", "/api/policy", "/api/opportunities"];
+const scopedRoutes = ["/api/overview", "/api/positions", "/api/market", "/api/journal", "/api/outcomes", "/api/policy", "/api/opportunities", "/api/trades"];
 function scopedUrl(u) {
   if (!selectedRun || !scopedRoutes.some(route => u === route || u.startsWith(route + "?"))) return u;
   return u + (u.includes("?") ? "&" : "?") + "run_id=" + encodeURIComponent(selectedRun);
@@ -1033,7 +1039,7 @@ async function loadRunPicker() {
       url.searchParams.set("run_id", picker.value);
       location.assign(url.href);
     };
-    refreshFast(); refreshMedium(); refreshSlow(); refreshOutcomes();
+    refreshFast(); refreshMedium(); refreshSlow(); refreshOutcomes(); refreshTrades();
   } catch (error) { picker.replaceChildren(new Option("Runs indisponibles", "")); }
 }
 async function api(u) {
@@ -1399,6 +1405,38 @@ async function refreshResearch() {
   finally { _refreshing.research = false; }
 }
 
+async function refreshTrades() {
+  const body = document.getElementById("trades-body");
+  try {
+    const data = await api("/api/trades");
+    const rows = data.trades || [];
+    document.getElementById("trades-count").textContent = rows.length + " enregistrés";
+    body.replaceChildren();
+    if (!rows.length) {
+      body.textContent = "Aucun trade journalisé pour ce run.";
+      return;
+    }
+    const table = document.createElement("table");
+    const head = table.createTHead().insertRow();
+    for (const title of ["Statut journal", "Instrument", "Sens", "Volume", "Entrée", "Sortie", "P&L réalisé", "Ticket"]) {
+      const th = document.createElement("th"); th.textContent = title; head.append(th);
+    }
+    const tbody = table.createTBody();
+    for (const t of rows) {
+      const tr = tbody.insertRow();
+      const values = [t.status, t.symbol, t.side, t.volume, t.entry_executed ?? t.entry_requested,
+        t.close_price ?? "—", t.net_pnl == null ? "Non réconcilié" : money(t.net_pnl, t.account_currency || "EUR"),
+        t.ticket ?? "—"];
+      for (const value of values) tr.insertCell().textContent = String(value ?? "—");
+    }
+    body.append(table);
+    const note = document.createElement("p");
+    note.className = "text-muted";
+    note.textContent = "État du journal Alladin, pas une confirmation de synchronisation avec l'historique MT5. Une position disparue du broker mais encore OPEN dans le journal nécessite réconciliation.";
+    body.append(note);
+  } catch (err) { body.textContent = "Trades indisponibles : " + err.message; }
+}
+
 async function refreshOutcomes() {
   if (_refreshing.outcomes) return;
   _refreshing.outcomes = true;
@@ -1452,6 +1490,7 @@ document.querySelectorAll(".sidebar-link, .mobile-nav button").forEach(b => {
 /* ── Tiered polling ───────────────────────────────────────── */
 loadRunPicker();
 refreshFast();  setInterval(refreshFast, 2000);
+refreshTrades(); setInterval(refreshTrades, 8000);
 refreshMedium(); setInterval(refreshMedium, 8000);
 refreshSlow();  setInterval(refreshSlow, 30000);
 refreshOutcomes(); setInterval(refreshOutcomes, 30000);
