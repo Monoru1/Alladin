@@ -1,0 +1,14 @@
+# PepperstoneUK-Demo research universe — OPT-IN, never used by default.
+# Broker-confirmed names on 2026-10-08. No order execution is enabled by this file.
+# Existing LAB Forex categories remain intact; metal discovery stays dynamic.
+# Index cash CFDs currently classify as OTHER; explicit includes permit discovery
+# without opening the entire OTHER category (shares/ETFs/futures/perpetuals).
+# Scanner still rejects disabled symbols, invalid specs, zero/stale ticks,
+# insufficient bars, unacceptable spreads and risk-sizing failures.
+id: pepperstone_multimarket_research
+description: "Forex complet + metaux + indices cash Pepperstone en recherche opt-in"
+allowed_categories: [FOREX_MAJOR, FOREX_MINOR, FOREX_JPY, FOREX_EXOTIC, METAL]
+include_symbols: [NAS100, US500, US30]
+exclude_symbols: []
+max_spread_atr_ratio: 0.15
+shortlist_size: 10
