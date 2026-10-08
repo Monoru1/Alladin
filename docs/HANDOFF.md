@@ -6,6 +6,32 @@
 
 ---
 
+## Lot 2026-10-08 — décisions 032–035 : fondations implémentées (lecture obligatoire Claude/Codex)
+
+Décisions : [032](DECISIONS/DECISION-032-ECONOMIC-INTELLIGENCE.md) · [033](DECISIONS/DECISION-033-MULTI-PROPFIRM-COMPLIANCE.md) · [034](DECISIONS/DECISION-034-CAPITAL-ENGINE-OBJECTIVES.md) · [035](DECISIONS/DECISION-035-AUTONOMOUS-OPERATIONS-QUALITY.md).
+
+**Code nouveau (fondations seulement)** :
+- `src/alladin/challenge/event_policy.py` : événement macro horodaté, snapshot avec fraîcheur, évaluation déterministe BLOCK/DEFER/ALLOW et causality as-of ; fenêtre de précaution expérimentale.
+- `src/alladin/challenge/firm_policy.py` : profils versionnés de firme/produit/phase/type de compte, refus si règles périmées, EA interdit, symbole non autorisé ou limite de positions atteinte.
+- `src/alladin/challenge/capital_metrics.py` : distinguer capital nominal simulé et cash net effectivement encaissé.
+- `tests/test_propfirm_policy_foundations.py` : tests unitaires de politique et comptabilité.
+
+**État véridique** : modules isolés ; PAS de fournisseur de calendrier connecté, PAS d'injection du ComplianceGate/EventPolicy dans ExecutionService, PAS de nouveaux ordres réels ni certification 24/7. Tests ajoutés mais non exécutés depuis cette session distante. Ne pas déclarer de recette MT5 ou de suite complète PASS à partir de ce commit.
+
+**Urgence sécurité / FTMO** : sur FTMO Account Standard, certains événements interdisent **ouverture et fermeture**, y compris déclenchement de SL/TP, de T-2 min à T+2 min ; pas les mêmes contraintes en évaluation ou Swing. Une fermeture automatique durant cette fenêtre peut enfreindre les règles. Lire la source officielle avant d'implémenter des décisions CLOSE : https://ftmo.com/faq/can-i-trade-news/ . Les fenêtres et instruments dépendent de la version du profil. Ne jamais remplacer le RiskEngine déterministe ; pas d'autopromotion LIVE.
+
+**Ordre de réalisation pour Claude/Codex** :
+1. Exécuter `python -m pytest tests/test_propfirm_policy_foundations.py -q`, Ruff et mypy ; corriger tout problème identifié avant raccordement.
+2. Introduire source fiable/licenciée de calendrier + ingestion auditable (heure de connaissance, retards, révisions, freshness et DST), et firm profiles sourcés. Vérifier les règles officielles **au moment de l'utilisation**.
+3. Ajouter un point de contrôle conjoint firm/event avant toute nouvelle entrée et avant les sorties concernées, sans casser les sorties de protection prioritaires ou le watchdog. Un snapshot absent bloque les **nouvelles entrées** ; traiter les sorties existantes séparément selon les conditions applicables et alerter en cas de risque de violation.
+4. Ajouter tests intégration, replay as-of, pannes, reboots, weekend, annonces, SL/TP, multi-comptes, Mock/PAPER/DEMO, puis mise à jour Mission Control.
+5. Calculer une scorecard de qualité : pertes, drawdown, coûts, refus conformes, données périmées, disponibilité, PnL net encaissé ; vérifier en soak prolongé.
+6. Laisser Jafar/SNN-X indépendants et la restriction actuelle DEMO/LIVE inchangée.
+
+**Attention** : les profils des firmes ne sont pas validés par la seule création d'une classe Python. Aucun objectif de rendement mensuel n'est garanti ; les scénarios +20/+30 % post-validation servent à la simulation, pas à une obligation d'exécution.
+
+---
+
 ## Décision 031 — Univers FTMO multi-marchés (2026-10-08)
 
 Lire [DECISION-031](DECISIONS/DECISION-031-FTMO-MULTI-MARKET-SYMBOLS.md) avant tout travail sur l'univers de symboles, la sélection d'opportunités ou les challenges. **Décision documentaire uniquement : ne pas supposer que les nouveaux symboles, scanner, calendrier ou simulateur sont implémentés.**
