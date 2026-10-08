@@ -1012,7 +1012,7 @@ function setDot(id, tone) {
 }
 
 let selectedRun = new URLSearchParams(location.search).get("run_id") || "";
-const scopedRoutes = ["/api/overview", "/api/positions", "/api/market", "/api/journal", "/api/outcomes", "/api/policy", "/api/opportunities", "/api/trades"];
+const scopedRoutes = ["/api/overview", "/api/positions", "/api/market", "/api/journal", "/api/outcomes", "/api/policy", "/api/opportunities", "/api/history"];
 function scopedUrl(u) {
   if (!selectedRun || !scopedRoutes.some(route => u === route || u.startsWith(route + "?"))) return u;
   return u + (u.includes("?") ? "&" : "?") + "run_id=" + encodeURIComponent(selectedRun);
@@ -1408,7 +1408,7 @@ async function refreshResearch() {
 async function refreshTrades() {
   const body = document.getElementById("trades-body");
   try {
-    const data = await api("/api/trades");
+    const data = await api("/api/history");
     const rows = data.trades || [];
     document.getElementById("trades-count").textContent = rows.length + " enregistrés";
     body.replaceChildren();
