@@ -16,7 +16,6 @@ from alladin.challenge.firm_policy import (
     check_new_entry,
 )
 
-UTC = UTC
 NOW = datetime(2026, 10, 8, 12, tzinfo=UTC)
 
 

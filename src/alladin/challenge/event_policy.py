@@ -6,7 +6,7 @@ The caller must provide a trusted, versioned calendar and firm profile.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 
@@ -33,6 +33,9 @@ class EconomicEvent:
             raise ValueError("restricted must be boolean")
         if self.published_at is not None and self.published_at.utcoffset() is None:
             raise ValueError("published_at must be timezone-aware")
+        object.__setattr__(self, "release_at", self.release_at.astimezone(UTC))
+        if self.published_at is not None:
+            object.__setattr__(self, "published_at", self.published_at.astimezone(UTC))
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,8 @@ class CalendarSnapshot:
     def __post_init__(self) -> None:
         if self.as_of.utcoffset() is None or self.valid_until.utcoffset() is None:
             raise ValueError("timezone-aware snapshot required")
+        object.__setattr__(self, "as_of", self.as_of.astimezone(UTC))
+        object.__setattr__(self, "valid_until", self.valid_until.astimezone(UTC))
         if self.valid_until < self.as_of or not self.source.strip():
             raise ValueError("snapshot validity and source required")
         if len({e.event_id for e in self.events}) != len(self.events):
@@ -83,6 +88,7 @@ class EventPolicy:
         """
         if now.utcoffset() is None:
             return EventDecision(EventVerdict.BLOCK, "CLOCK_NOT_TIMEZONE_AWARE")
+        now = now.astimezone(UTC)
         if snapshot is None:
             return EventDecision(EventVerdict.BLOCK, "CALENDAR_MISSING")
         if not snapshot.as_of <= now <= snapshot.valid_until:

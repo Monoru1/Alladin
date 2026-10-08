@@ -95,6 +95,15 @@ def evaluate_action(
         )
         if firm.verdict is FirmVerdict.BLOCK:
             return PolicyDecision(GateVerdict.BLOCK, firm.reason)
+    if context.restrict_news is not None and type(context.restrict_news) is not bool:
+        return PolicyDecision(
+            GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "NEWS_RULE_UNVERIFIED"
+        )
+    if (context.firm_profile.restrict_news is not None
+            and context.restrict_news != context.firm_profile.restrict_news):
+        return PolicyDecision(
+            GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "NEWS_RULE_PROFILE_MISMATCH"
+        )
     if context.restrict_news is None:
         return PolicyDecision(
             GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW,

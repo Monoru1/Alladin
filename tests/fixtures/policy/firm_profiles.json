@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "simulation_only": true,
+  "profiles": [
+    {
+      "fixture_id": "evaluation",
+      "profile": {
+        "firm": "SYNTHETIC-ONLY",
+        "program": "two-step-fixture",
+        "phase": "evaluation",
+        "account_type": "standard",
+        "version": "fixture-2026-10-08",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-08T00:00:00Z",
+        "valid_until": "2026-10-09T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD",
+          "XAUUSD",
+          "US100.cash"
+        ],
+        "ea_allowed": true,
+        "max_open_positions": 3,
+        "restrict_news": false
+      }
+    },
+    {
+      "fixture_id": "funded_standard",
+      "profile": {
+        "firm": "SYNTHETIC-ONLY",
+        "program": "two-step-fixture",
+        "phase": "funded",
+        "account_type": "standard",
+        "version": "fixture-2026-10-08",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-08T00:00:00Z",
+        "valid_until": "2026-10-09T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD",
+          "XAUUSD",
+          "US100.cash"
+        ],
+        "ea_allowed": true,
+        "max_open_positions": 3,
+        "restrict_news": true
+      }
+    },
+    {
+      "fixture_id": "funded_swing",
+      "profile": {
+        "firm": "SYNTHETIC-ONLY",
+        "program": "two-step-fixture",
+        "phase": "funded",
+        "account_type": "swing",
+        "version": "fixture-2026-10-08",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-08T00:00:00Z",
+        "valid_until": "2026-10-09T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD",
+          "XAUUSD",
+          "US100.cash"
+        ],
+        "ea_allowed": true,
+        "max_open_positions": 3,
+        "restrict_news": false
+      }
+    },
+    {
+      "fixture_id": "no_automation",
+      "profile": {
+        "firm": "SYNTHETIC-ONLY",
+        "program": "two-step-fixture",
+        "phase": "funded",
+        "account_type": "standard",
+        "version": "fixture-2026-10-08",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-08T00:00:00Z",
+        "valid_until": "2026-10-09T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD",
+          "XAUUSD",
+          "US100.cash"
+        ],
+        "ea_allowed": false,
+        "max_open_positions": 3,
+        "restrict_news": true
+      }
+    },
+    {
+      "fixture_id": "unknown_news",
+      "profile": {
+        "firm": "SYNTHETIC-ONLY",
+        "program": "two-step-fixture",
+        "phase": "funded",
+        "account_type": "standard",
+        "version": "fixture-2026-10-08",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-08T00:00:00Z",
+        "valid_until": "2026-10-09T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD",
+          "XAUUSD",
+          "US100.cash"
+        ],
+        "ea_allowed": true,
+        "max_open_positions": 3,
+        "restrict_news": null
+      }
+    },
+    {
+      "fixture_id": "zero_positions",
+      "profile": {
+        "firm": "SYNTHETIC-ONLY",
+        "program": "two-step-fixture",
+        "phase": "evaluation",
+        "account_type": "standard",
+        "version": "fixture-2026-10-08",
+        "source_url": "https://example.test/synthetic-contract",
+        "verified_at": "2026-10-08T00:00:00Z",
+        "valid_until": "2026-10-09T00:00:00Z",
+        "allowed_symbols": [
+          "EURUSD",
+          "XAUUSD",
+          "US100.cash"
+        ],
+        "ea_allowed": true,
+        "max_open_positions": 0,
+        "restrict_news": false
+      }
+    }
+  ]
+}
