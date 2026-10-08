@@ -26,3 +26,8 @@ Relevés manuels de l'utilisateur via l'API Python MetaTrader5 sur PepperstoneUK
 5. Préserver RiskEngine déterministe, PolicyGate fail-closed, SL/TP, isolation des comptes, Jafar et SNN-X. Ne pas confondre un compte DEMO broker avec un challenge FTMO contractuellement qualifié.
 
 Aucun identifiant de compte, mot de passe ou jeton ne doit être enregistré dans ce document.
+
+## Validation du jalon INDEX (Windows utilisateur, 2026-10-08)
+- Commit code `6e4535e` : 10 tests ciblés réussis en 0.05 s ; Ruff PASS ; mypy PASS (1 fichier). Les 1546 tests précédents ont été exécutés **avant** ce commit, ne pas les présenter comme une suite complète post-INDEX.
+- Chemins broker vérifiés : `Retail\\Indices\\Majors\\NAS100`, `Retail\\Indices\\Majors\\US500`, `Retail\\Indices\\Majors\\US30` ; `trade_calc_mode=2` pour les trois.
+- La catégorie `INDEX` native et le profil `pepperstone_multimarket_research` sont en place ; la découverte effective et la fraîcheur des ticks restent à valider en OBSERVE, sans ordre.
