@@ -118,6 +118,38 @@ def test_test_order_sends_nothing_without_the_explicit_word(
     assert "Annulé : aucun ordre envoyé" in res.output and fake.order_send_calls == []
 
 
+def test_test_order_dry_run_never_sends_even_if_stdin_contains_execute(
+    cli_env: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = use_fake(monkeypatch, FakeMT5())
+    res = runner.invoke(
+        cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\\nEXECUTE\\n"
+    )
+    assert res.exit_code == 0, res.output
+    assert "DRY RUN ONLY" in res.output
+    assert fake.order_send_calls == []
+
+
+def test_test_order_unknown_cfd_calculation_requires_explicit_price_distance(
+    cli_env: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = FakeMT5()
+    original_info = fake._info
+
+    def unclassified_info(name: str):
+        info = original_info(name)
+        if name == "EURUSD":
+            delattr(info, "trade_calc_mode")
+        return info
+
+    monkeypatch.setattr(fake, "_info", unclassified_info)
+    use_fake(monkeypatch, fake)
+    res = runner.invoke(cli.app, ["mt5", "test-order", "--dry-run-only"], input="y\\n")
+    assert res.exit_code == 2
+    assert "--sl-price-distance" in res.output
+    assert fake.order_send_calls == []
+
+
 def test_test_order_no_input_at_all_sends_nothing(cli_env: Settings, monkeypatch: pytest.MonkeyPatch) -> None:
     fake = use_fake(monkeypatch, FakeMT5())
     runner.invoke(cli.app, ["mt5", "test-order"], input="")  # stdin fermé (non interactif)
