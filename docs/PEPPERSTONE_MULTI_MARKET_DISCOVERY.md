@@ -59,3 +59,11 @@ Prix non nuls et 100 barres H1 reçues pour chacun. Âge brut négatif d'environ
 - Âges normalisés observés : EURUSD 0.94 s, NAS100 0.94 s, XAUUSD 1.94 s.
 - L'anomalie d'âge brut -3 h était donc expliquée pour ces trois symboles par le décalage du serveur. Cela ne prouve pas la fraîcheur de tous les 110 instruments, ni la disponibilité constante de données ou de fills.
 - Prochaine étape : cycle scanner borné OBSERVE, mesurer nombre analysés/rejetés, temps d'exécution, couverture historique multi-timeframe ; aucune exécution d'ordre.
+
+## Recette scanner bornée — 2026-10-08
+- Script opt-in `scripts/accept_pepperstone_scanner.py` : appelle le MarketScanner existant sur 8 symboles maximum par défaut (EURUSD, GBPUSD, USDJPY, NAS100, US500, US30, XAUUSD, XAGUSD), quatre timeframes M15/H1/H4/D1, 300 barres demandées.
+- Contrôle serveur PepperstoneUK-Demo, compte DEMO, offset_source=auto ; pas d'ExecutionService, d'ordre ou de promotion de mode.
+- Sortie JSON : couverture, candidats, régimes, rejets, latence. `--symbols` permet un sous-ensemble de 1 à 12 ; `--output` enregistre le rapport localement.
+- **Non encore exécuté par l'utilisateur ni testé sur son environnement** au moment du commit ; aucun résultat de scan, conformité, P&L ou qualité du feed n'est présumé.
+- DECISION-021/031 : découverte distincte de l'éligibilité et de l'exécution ; DECISION-032/033 : calendrier et firm profile non automatiquement certifiés par ce scan ; DECISION-034 : aucune performance inférée ; DECISION-035 : qualité et durée mesurées, sans qualification unattended.
+- Limitation connue du scanner existant : des ticks >10 min dans le futur sont notés comme suspects mais non rejetés. Corriger en fail-closed et tester avant toute promotion vers PAPER/DEMO ; le script exige déjà une horloge auto-vérifiée.
