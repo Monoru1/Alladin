@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import math
 
 from alladin.brokers.base import BrokerAdapter
 from alladin.challenge.models import UniverseRules
@@ -17,6 +18,21 @@ from alladin.market.universe import MarketUniverse
 from alladin.risk.sizing import loss_per_lot
 
 DEFAULT_TIMEFRAMES = (Timeframe.M15, Timeframe.H1, Timeframe.H4, Timeframe.D1)
+MAX_FUTURE_TICK_S = 5.0
+
+
+def tick_quality_error(bid: float, ask: float, age_s: float, max_age_s: float | None) -> str | None:
+    """Fail closed on invalid quotes or uncertain clock before analysing market data."""
+    if not all(math.isfinite(v) for v in (bid, ask, age_s)):
+        return "tick non fini ou horodatage invalide"
+    if bid <= 0 or ask <= bid:
+        return f"tick de mauvaise qualité (bid {bid}, ask {ask})"
+    if age_s < -MAX_FUTURE_TICK_S:
+        return f"tick dans le futur ({-age_s:.1f} s) : horloge broker incertaine"
+    if max_age_s is not None and age_s > max_age_s:
+        return f"tick périmé ({age_s / 60:.0f} min) : marché fermé ?"
+    return None
+
 
 
 def session_label(now: datetime) -> str:
@@ -120,7 +136,6 @@ class MarketScanner:
         candidates: list[ScanCandidate] = []
         analysed = 0
         archived = 0
-        clock_suspect = 0
         last_market_update_at: datetime | None = None
 
         for member in uni.members:
@@ -140,19 +155,15 @@ class MarketScanner:
                     continue
                 if last_market_update_at is None or tick.time > last_market_update_at:
                     last_market_update_at = tick.time
-                if tick.bid <= 0 or tick.ask <= tick.bid:
-                    rejected[sym] = [f"tick de mauvaise qualité (bid {tick.bid}, ask {tick.ask})"]
-                    continue
                 if spec.point <= 0 or spec.loss_tick_value <= 0 or spec.trade_tick_size <= 0:
                     rejected[sym] = [
                         "spécifications broker inexploitables (tick value/size indisponible) : sizing impossible"
                     ]
                     continue
                 age = (now - tick.time).total_seconds()
-                if age < -600:
-                    clock_suspect += 1
-                elif self.max_tick_age_s is not None and age > self.max_tick_age_s:
-                    rejected[sym] = [f"tick périmé ({age / 60:.0f} min) : marché fermé ?"]
+                quality_error = tick_quality_error(tick.bid, tick.ask, age, self.max_tick_age_s)
+                if quality_error:
+                    rejected[sym] = [quality_error]
                     continue
                 bars = {}
                 for tf in self.timeframes:
@@ -227,10 +238,6 @@ class MarketScanner:
         regimes: dict[str, int] = {}
         for c in candidates:
             regimes[c.regime.value] = regimes.get(c.regime.value, 0) + 1
-        if clock_suspect:
-            notes.append(
-                f"{clock_suspect} tick(s) datés dans le futur : vérifier MT5_SERVER_UTC_OFFSET_HOURS (fraîcheur non contrôlée)"
-            )
         return ScanReport(
             scanned_at=now,
             universe_size=len(uni.members),
