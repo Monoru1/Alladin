@@ -44,3 +44,13 @@ Les simulations couvrent OPEN/CLOSE/PARTIAL_CLOSE/MODIFY_STOP/MODIFY_TARGET/HOLD
 - Ces preuves logicielles n'établissent ni avantage OOS, ni rendement, ni disponibilité 24/7.
 
 Aucune migration de données et aucun changement des modes, des règles RiskEngine, de Jafar ou de SNN-X. Le nettoyage Ruff dans deux fichiers de tests Jafar retire uniquement des imports inutilisés et trie les imports.
+
+## Contraintes de compte (lot 4)
+
+`FirmProfile.constraints` est opt-in et décrit le compte/la devise. `MarketSchedule` exige un scope de symboles et des coupures explicites ; le code ne déduit pas les horaires d'un nom d'instrument ou d'un vendredi. `AccountPolicyState` maintient les high water marks et `advance()` refuse un retour dans le temps ; le mode EOD exige un signal explicite de fin de journée. Les floors sont calculés en devise de compte avec distance basée sur la balance initiale, cap de floor optionnel. Ce modèle ne présume pas la formule d'une firme réelle.
+
+`ExposureSnapshot` exige le scope exact des comptes pilotés pour les limites agrégées, avec risques déjà convertis dans une devise commune et groupes explicites. Il n'est pas un collecteur de corrélations ni une preuve que tous les comptes externes ont été découverts. La concurrence entre deux futures soumissions nécessitera une réservation atomique hors de cette évaluation pure.
+
+Protection et restriction d'annonce sont deux faits distincts : une simple précaution ne retarde pas une sortie protectrice conforme ; un conflit contractuel ou une incertitude exige REVIEW et une alerte. Aucun retrait d'une protection native n'est prévu. En cas de deadline de détention et de news simultanées, une politique peut devenir impossible à satisfaire : pas de transaction autorisée par ce seul gate.
+
+Références officielles relues le 08/10/2026, sans admission d'un compte réel : [FTMO annonces](https://ftmo.com/en/faq/can-i-trade-news/) et [FTMO détention](https://ftmo.com/faq/do-i-have-to-close-my-positions-overnight-or-before-the-weekend/). Les clauses varient par programme/phase/type, et les horaires doivent être fournis par le broker. Les fixtures restent SYNTHÉTIQUES.

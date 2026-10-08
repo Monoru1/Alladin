@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from alladin.challenge.account_policy import AccountConstraints
+
 
 class FirmVerdict(StrEnum):
     ALLOW = "ALLOW"
@@ -28,6 +30,7 @@ class FirmProfile:
     ea_allowed: bool
     max_open_positions: int | None = None
     restrict_news: bool | None = None
+    constraints: AccountConstraints | None = None
 
     def __post_init__(self) -> None:
         if self.verified_at.utcoffset() is None or self.valid_until.utcoffset() is None:

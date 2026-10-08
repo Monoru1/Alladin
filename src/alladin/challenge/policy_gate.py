@@ -10,8 +10,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from alladin.challenge.account_policy import (
+    AccountPolicyState,
+    ExposureSnapshot,
+    MarketSchedule,
+    constraint_reason,
+)
 from alladin.challenge.event_policy import CalendarSnapshot, EventPolicy, EventVerdict
 from alladin.challenge.firm_policy import FirmProfile, FirmVerdict, check_new_entry
+from alladin.core.enums import Side
 
 
 class ProposedAction(StrEnum):
@@ -38,6 +45,14 @@ class PolicyContext:
     firm_profile: FirmProfile | None
     calendar: CalendarSnapshot | None
     restrict_news: bool | None
+    account_state: AccountPolicyState | None = None
+    market_schedule: MarketSchedule | None = None
+    exposures: ExposureSnapshot | None = None
+    proposed_risk_amount: float | None = None
+    exposure_group: str | None = None
+    proposed_side: Side | None = None
+    protective: bool = False
+    native_protection_active: bool = False
 
 
 @dataclass(frozen=True)
@@ -61,7 +76,7 @@ def evaluate_action(
     """
     if not isinstance(action, ProposedAction):
         return PolicyDecision(GateVerdict.BLOCK, "UNKNOWN_ACTION")
-    if action is ProposedAction.HOLD:
+    if action is ProposedAction.HOLD and not context.native_protection_active and (context.firm_profile is None or context.firm_profile.constraints is None):
         return PolicyDecision(GateVerdict.ALLOW, "NO_BROKER_TRANSACTION")
     is_entry = action is ProposedAction.OPEN
     if context.now.utcoffset() is None:
@@ -86,6 +101,13 @@ def evaluate_action(
         return PolicyDecision(
             GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, "AUTOMATION_NOT_PERMITTED"
         )
+    if context.firm_profile.constraints is not None:
+        reason = constraint_reason(context.firm_profile.constraints, action=action.value,
+            now=context.now, symbol=context.symbol, state=context.account_state,
+            schedule=context.market_schedule, exposures=context.exposures,
+            risk_amount=context.proposed_risk_amount, group=context.exposure_group, side=context.proposed_side)
+        if reason:
+            return PolicyDecision(GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW, reason)
     if is_entry:
         firm = check_new_entry(
             context.firm_profile,
@@ -121,8 +143,14 @@ def evaluate_action(
                 GateVerdict.BLOCK if is_entry else GateVerdict.REVIEW,
                 news.reason,
             )
+        if context.protective or (action is ProposedAction.HOLD and context.native_protection_active):
+            return PolicyDecision(GateVerdict.REVIEW, "PROTECTIVE_NEWS_CONFLICT", news.event_ids)
         return PolicyDecision(GateVerdict.BLOCK, news.reason, news.event_ids)
+    if action is ProposedAction.HOLD:
+        return PolicyDecision(GateVerdict.ALLOW, "NO_BROKER_TRANSACTION")
     if news.verdict is EventVerdict.DEFER:
+        if context.protective and action in {ProposedAction.CLOSE, ProposedAction.PARTIAL_CLOSE}:
+            return PolicyDecision(GateVerdict.ALLOW, "PROTECTIVE_EXIT_CLEAR", news.event_ids)
         # Modification d'un SL/TP n'est pas une exécution garantie ; elle mérite
         # une revue de risque plutôt que d'être assimilée à un ordre d'entrée.
         if action in {ProposedAction.MODIFY_STOP, ProposedAction.MODIFY_TARGET}:
