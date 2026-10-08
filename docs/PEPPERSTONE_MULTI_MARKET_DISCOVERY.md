@@ -53,3 +53,9 @@ Diagnostic MT5 Python en lecture seule sur PepperstoneUK-Demo, après symbol_sel
 | EURUSD | 1.12026 | 1.12027 | 100 | -10799 |
 
 Prix non nuls et 100 barres H1 reçues pour chacun. Âge brut négatif d'environ 3 heures : probable décalage du serveur, **non encore prouvé**. Le diagnostic utilisait `datetime.now(UTC) - tick.time` sans compensation. Vérifier la logique de `MT5Broker._detect_server_offset`, `offset_source`, et la fraîcheur après normalisation, sans désactiver les contrôles ; horodatages futurs doivent rester fail-closed si décalage non fiable. Aucun ordre exécuté ; aucune validation de rentabilité ou de fonctionnement continu. Le scanner multi-timeframe exige davantage que 100 barres H1.
+
+## Horloge MT5 validée par l'utilisateur — 2026-10-08
+- `MT5Broker` connecté à `PepperstoneUK-Demo` en DEMO ; `offset_source=auto`, `server_utc_offset_hours=3.0`.
+- Âges normalisés observés : EURUSD 0.94 s, NAS100 0.94 s, XAUUSD 1.94 s.
+- L'anomalie d'âge brut -3 h était donc expliquée pour ces trois symboles par le décalage du serveur. Cela ne prouve pas la fraîcheur de tous les 110 instruments, ni la disponibilité constante de données ou de fills.
+- Prochaine étape : cycle scanner borné OBSERVE, mesurer nombre analysés/rejetés, temps d'exécution, couverture historique multi-timeframe ; aucune exécution d'ordre.
